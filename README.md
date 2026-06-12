@@ -266,10 +266,13 @@ desargues/
 │
 ├── media/videos/                         # Generated videos (gitignored)
 │
+├── doc/                                  # Documentation
+│   ├── ARCHITECTURE.md                   # SOLID/DDD architecture guide
+│   ├── CLEAN_API_GUIDE.md                # Clean API usage guide
+│   ├── EMMY_MANIM_GUIDE.md               # Emmy integration guide
+│   └── ...                               # Additional guides
+│
 ├── README.md                             # This file
-├── ARCHITECTURE.md                       # SOLID/DDD architecture guide
-├── CLEAN_API_GUIDE.md                    # Clean API usage guide
-├── EMMY_MANIM_GUIDE.md                   # Emmy integration guide
 └── project.clj                           # Leiningen project file
 ```
 
@@ -381,10 +384,10 @@ lein run
 
 ## Documentation
 
-- **[ARCHITECTURE.md](ARCHITECTURE.md)**: SOLID/DDD design patterns used in the project
-- **[CLEAN_API_GUIDE.md](CLEAN_API_GUIDE.md)**: Guide to the clean API facade
-- **[EMMY_MANIM_GUIDE.md](EMMY_MANIM_GUIDE.md)**: Emmy integration and LaTeX conversion
-- **[EQUATION_EVALUATION_GUIDE.md](EQUATION_EVALUATION_GUIDE.md)**: Evaluating functions and creating tables
+- **[ARCHITECTURE.md](doc/ARCHITECTURE.md)**: SOLID/DDD design patterns used in the project
+- **[CLEAN_API_GUIDE.md](doc/CLEAN_API_GUIDE.md)**: Guide to the clean API facade
+- **[EMMY_MANIM_GUIDE.md](doc/EMMY_MANIM_GUIDE.md)**: Emmy integration and LaTeX conversion
+- **[EQUATION_EVALUATION_GUIDE.md](doc/EQUATION_EVALUATION_GUIDE.md)**: Evaluating functions and creating tables
 
 ## Resources
 
