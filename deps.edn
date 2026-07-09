@@ -13,9 +13,9 @@
   com.nextjournal/beholder {:mvn/version "1.0.2"}
   io.github.tonsky/clj-reload {:mvn/version "0.7.1"}
 
-  ;; type safety
+  ;; type safety — test.check (generators) + typed.clojure annotation runtime.
+  ;; The checker (typed.clj.checker) is dev-only; it lives in :dev, not here.
   org.clojure/test.check {:mvn/version "1.1.1"}
-  org.typedclojure/typed.clj.checker {:mvn/version "1.3.0"}
   org.typedclojure/typed.clj.runtime {:mvn/version "1.3.0"}
 
   ;; config DI: hive-di defconfig (desargues.config). Dev overrides in local.deps.edn.
@@ -27,6 +27,7 @@
  :aliases
  {:run  {:main-opts ["-m" "desargues.core"]}
   :dev  {:extra-paths ["dev"]
-         :extra-deps {orchestra/orchestra {:mvn/version "2021.01.01-1"}}}
+         :extra-deps {orchestra/orchestra {:mvn/version "2021.01.01-1"}
+                      org.typedclojure/typed.clj.checker {:mvn/version "1.3.0"}}}
   :test {:extra-paths ["test"]
          :jvm-opts ["-Dclojure.spec.check-asserts=true"]}}}
