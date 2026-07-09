@@ -2,46 +2,37 @@
   "Domain services (operations not belonging to specific entities)"
   (:require [desargues.domain.protocols :as p]
             [desargues.domain.math-expression :as expr]
-            [emmy.env :as e]))
+            [typed.clojure :as t]))
 
 ;; ============================================================================
 ;; Mathematical Operations Service
 ;; ============================================================================
 
 (defn differentiate-expression
-  "Service: Compute derivative of an expression"
-  [math-expr]
-  (let [derivative-expr (e/D (:expr math-expr))]
-    (expr/create-expression
-     derivative-expr
-     (assoc (:metadata math-expr) :derived-from (:id math-expr)))))
+  "Service: derivative of a differentiable object. Emmy differentiates
+   functions, so pass a MathFunction; a bare symbolic expression is not
+   differentiable on its own."
+  [math-obj]
+  (p/derivative math-obj))
 
 (defn evaluate-expression
-  "Service: Evaluate expression at a point"
-  [math-expr point]
-  (let [var (:variable point)
-        val (:value point)
-        ;; Just evaluate the expression directly
-        result ((:expr math-expr) val)
-        simplified (e/simplify result)]
-    (expr/evaluation-result point simplified (:expr math-expr))))
+  "Service: Evaluate a math object at a point"
+  [math-obj point]
+  (expr/evaluation-result point (p/evaluate math-obj point) math-obj []))
 
 (defn simplify-expression
   "Service: Simplify an expression"
   [math-expr]
-  (let [simplified (e/simplify (:expr math-expr))]
-    (expr/create-expression
-     simplified
-     (assoc (:metadata math-expr) :simplified-from (:id math-expr)))))
+  (p/simplify math-expr))
 
 ;; ============================================================================
 ;; Conversion Service (Bridge between Emmy and representations)
 ;; ============================================================================
 
 (defn expression-to-latex
-  "Service: Convert expression to LaTeX"
+  "Service: Convert expression to a LaTeX value object"
   [math-expr]
-  (expr/->LaTeX (e/->TeX (:expr math-expr))))
+  (expr/->LaTeX (p/to-latex math-expr)))
 
 (defn expression-to-python
   "Service: Convert expression to Python (requires latex2py integration)"
@@ -104,9 +95,29 @@
 (defn transform-expression
   "Service: Apply a transformation to an expression"
   [math-expr transformation]
-  (let [transformed ((transformation (:expr math-expr)))]
+  (let [transformed (transformation (:expr math-expr))]
     (expr/create-expression
      transformed
      (assoc (:metadata math-expr)
             :transformation transformation
             :source (:id math-expr)))))
+
+(t/ann ^:no-check differentiate-expression [t/Any :-> t/Any])
+
+(t/ann ^:no-check evaluate-expression [t/Any t/Any :-> t/Any])
+
+(t/ann ^:no-check simplify-expression [t/Any :-> t/Any])
+
+(t/ann ^:no-check expression-to-latex [t/Any :-> t/Any])
+
+(t/ann ^:no-check expression-to-python [t/Any t/AnyFunction :-> t/Any])
+
+(t/ann ^:no-check apply-function [t/Any t/Any :-> t/Any])
+
+(t/ann ^:no-check compose-functions [t/Any t/Any :-> t/Any])
+
+(t/ann ^:no-check compare-at-points [t/Any t/Any :-> t/Any])
+
+(t/ann ^:no-check tabulate-function [t/Any t/Any :-> t/Any])
+
+(t/ann ^:no-check transform-expression [t/Any t/Any :-> t/Any])

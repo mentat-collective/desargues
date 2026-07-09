@@ -9,20 +9,22 @@
    - desargues.manim.constants
    - desargues.manim.all (convenience namespace)"
   (:require [libpython-clj2.python :as py]
-            [libpython-clj2.require :refer [require-python]]))
+            [libpython-clj2.require :refer [require-python]]
+            [desargues.config :as config]))
 
 ;; Initialize Python and set up the conda environment
 (defn init-python! []
   ;; Point to your conda manim environment
   ;; Adjust the path if your conda installation is elsewhere
-  (py/initialize!
-   :python-executable "/home/lages/anaconda3/envs/manim/bin/python"
-   :library-path "/home/lages/anaconda3/envs/manim/lib/libpython3.12.so")
+  (let [{:keys [python-exe library-path site-packages]} (config/manim-config)]
+    (py/initialize!
+     :python-executable python-exe
+     :library-path library-path)
 
-  ;; Add conda environment's site-packages to Python path
-  (let [sys (py/import-module "sys")]
-    (py/call-attr (py/get-attr sys "path") "insert" 0
-                  "/home/lages/anaconda3/envs/manim/lib/python3.12/site-packages")))
+    ;; Add conda environment's site-packages to Python path
+    (let [sys (py/import-module "sys")]
+      (py/call-attr (py/get-attr sys "path") "insert" 0
+                    site-packages))))
 
 ;; Import manim dynamically
 (defn import-manim! []

@@ -1,13 +1,15 @@
 (ns desargues.manim-test
   "Simple test to verify manim integration works"
-  (:require [libpython-clj2.python :as py]))
+  (:require [libpython-clj2.python :as py]
+            [desargues.config :as config]))
 
 (defn test-python-init []
   "Test that Python initializes correctly"
   (try
-    (py/initialize!
-     :python-executable "/home/lages/anaconda3/envs/manim/bin/python"
-     :library-path "/home/lages/anaconda3/envs/manim/lib/libpython3.12.so")
+    (let [{:keys [python-exe library-path]} (config/manim-config)]
+      (py/initialize!
+       :python-executable python-exe
+       :library-path library-path))
     (println "✓ Python initialized successfully")
     (println "Python version:" (py/run-simple-string "import sys; print(sys.version)"))
     true

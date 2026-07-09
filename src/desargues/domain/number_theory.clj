@@ -8,7 +8,8 @@
    - FactorizationGroup: A group of elements with color and depth
    - NestedFactorization: Complete factorization with grouping levels
    - VisualizationConfig: Configuration for visualization appearance"
-  (:require [desargues.domain.number-theory-services :as svc]))
+  (:require [desargues.domain.number-theory-services :as svc]
+            [desargues.domain.protocols :as p]))
 
 ;; =============================================================================
 ;; Value Objects (immutable, equality by value)
@@ -193,3 +194,25 @@
   (let [colors (:colors config)
         idx (mod level-num (count colors))]
     (nth colors idx)))
+
+(extend-protocol p/IFactorizable
+  PrimeFactorization
+  (prime-factors [this] (:factors this))
+  (factorization-tree [this]
+    (svc/factorization-to-tree {:n (:n this) :factors (:factors this)})))
+
+(extend-protocol p/IDotArrangement
+  DotGrid2D
+  (to-dots [this] (:positions this))
+  (dimensions [this] [(:rows this) (:cols this)])
+  (arrangement-type [this] :grid-2d)
+  DotGrid3D
+  (to-dots [this] (:positions this))
+  (dimensions [this] (:dims this))
+  (arrangement-type [this] :grid-3d))
+
+(extend-protocol p/INestedGrouping
+  NestedFactorization
+  (nesting-depth [this] (count (:levels this)))
+  (children [this] (:levels this))
+  (grouping-levels [this] (:levels this)))

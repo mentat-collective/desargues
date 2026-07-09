@@ -2,6 +2,7 @@
   "Complete examples of Emmy + Manim integration"
   (:require [emmy.env :as e :refer [->TeX D simplify sin cos square exp log pi]]
             [libpython-clj2.python :as py]
+            [desargues.config :as config]
             [desargues.manim-quickstart :as mq]
             [desargues.emmy-manim :as em]
             [desargues.emmy-python.equations :as eq]))
@@ -14,8 +15,7 @@
   "Render a scene from emmy_manim_scenes.py"
   [scene-name & args]
   ;; Add project directory to path
-  (let [sys (py/import-module "sys")]
-    (py/call-attr (py/get-attr sys "path") "insert" 0 "/home/lages/Physics/desargues"))
+  (config/add-project-to-syspath!)
 
   ;; Import and instantiate the scene
   (let [scenes (py/import-module "emmy_manim_scenes")
@@ -36,8 +36,7 @@
     (println "Derivative:" df-latex)
 
     ;; Add project directory to path
-    (let [sys (py/import-module "sys")]
-      (py/call-attr (py/get-attr sys "path") "insert" 0 "/home/lages/Physics/desargues"))
+    (config/add-project-to-syspath!)
 
     ;; Create and render scene
     (let [scenes (py/import-module "emmy_manim_scenes")

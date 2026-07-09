@@ -3,6 +3,7 @@
   (:require [desargues.domain.protocols :as p]
             [desargues.domain.math-expression :as expr]
             [desargues.domain.services :as svc]
+            [desargues.config :as config]
             [libpython-clj2.python :as py]
             [desargues.manim-quickstart :as mq]))
 
@@ -114,8 +115,7 @@
   "Render a scene using the builder"
   [builder]
   ;; Add project directory to path
-  (let [sys (py/import-module "sys")]
-    (py/call-attr (py/get-attr sys "path") "insert" 0 "/home/lages/Physics/desargues"))
+  (config/add-project-to-syspath!)
 
   ;; Create Python scene dynamically
   (let [manim (py/import-module "manim")
@@ -202,3 +202,20 @@
       (with-wait 1)
       (with-animation (p/animate-transformation from-expr to-expr))
       (with-wait 2)))
+
+;; A MathFunction renders as its symbolic form applied to the canonical
+;; variable x: (f 'x) -> Emmy expression -> reuse the MathExpression path.
+(extend-type desargues.domain.math_expression.MathFunction
+  p/IRenderable
+  (to-mobject [this]
+    (p/to-mobject (expr/create-expression ((:f this) 'x))))
+  (render [this options]
+    (p/render (expr/create-expression ((:f this) 'x)) options))
+
+  p/IAnimatable
+  (create-animation [this animation-type options]
+    (p/create-animation (expr/create-expression ((:f this) 'x)) animation-type options))
+  (animate-creation [this]
+    (p/animate-creation (expr/create-expression ((:f this) 'x))))
+  (animate-transformation [this target]
+    (p/animate-transformation (expr/create-expression ((:f this) 'x)) target)))

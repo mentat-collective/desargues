@@ -1,7 +1,8 @@
 (ns desargues.manim-quickstart
   "Complete quickstart example - reproduces the Manim tutorial"
   (:require [libpython-clj2.python :as py]
-            [libpython-clj2.python.class :as py-class]))
+            [libpython-clj2.python.class :as py-class]
+            [desargues.config :as config]))
 
 ;; ============================================================================
 ;; Setup Functions
@@ -9,18 +10,16 @@
 
 (defn init!
   "Initialize Python with the manim conda environment.
+   Paths come from desargues.config (override via DESARGUES_MANIM_* env vars).
    Call this ONCE at the start of your REPL session."
   []
-  (py/initialize!
-   :python-executable "/home/lages/anaconda3/envs/manim/bin/python"
-   :library-path "/home/lages/anaconda3/envs/manim/lib/libpython3.12.so")
-
-  ;; Add conda environment's site-packages to Python path
-  (let [sys (py/import-module "sys")]
-    (py/call-attr (py/get-attr sys "path") "insert" 0
-                  "/home/lages/anaconda3/envs/manim/lib/python3.12/site-packages"))
-
-  (println "Python initialized!"))
+  (let [{:keys [python-exe library-path site-packages]} (config/manim-config)]
+    (py/initialize!
+     :python-executable python-exe
+     :library-path library-path)
+    (let [sys (py/import-module "sys")]
+      (py/call-attr (py/get-attr sys "path") "insert" 0 site-packages))
+    (println "Python initialized:" python-exe)))
 
 (defn get-manim-module
   "Get the manim module. Call after init!"
@@ -75,8 +74,7 @@
   "Create the CreateCircle scene class by importing from manim_examples.py"
   []
   ;; Add the project directory to Python path
-  (let [sys (py/import-module "sys")]
-    (py/call-attr (py/get-attr sys "path") "insert" 0 "/home/lages/Physics/desargues"))
+  (config/add-project-to-syspath!)
 
   ;; Import the manim_examples module and get CreateCircle class
   (let [examples (py/import-module "manim_examples")]
@@ -118,8 +116,7 @@
   "Create the SquareToCircle scene class by importing from manim_examples.py"
   []
   ;; Add the project directory to Python path
-  (let [sys (py/import-module "sys")]
-    (py/call-attr (py/get-attr sys "path") "insert" 0 "/home/lages/Physics/desargues"))
+  (config/add-project-to-syspath!)
 
   ;; Import the manim_examples module and get SquareToCircle class
   (let [examples (py/import-module "manim_examples")]
@@ -129,8 +126,7 @@
   "Get any scene class from manim_examples.py by name"
   [scene-name]
   ;; Add the project directory to Python path
-  (let [sys (py/import-module "sys")]
-    (py/call-attr (py/get-attr sys "path") "insert" 0 "/home/lages/Physics/desargues"))
+  (config/add-project-to-syspath!)
 
   ;; Import the manim_examples module and get the scene
   (let [examples (py/import-module "manim_examples")]

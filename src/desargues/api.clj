@@ -6,8 +6,11 @@
             [desargues.domain.number-theory :as nt]
             [desargues.domain.number-theory-services :as nts]
             [desargues.infrastructure.manim-adapter :as manim]
+            [desargues.manim.factorization :as fact]
             [desargues.manim-quickstart :as mq]
-            [emmy.env :as e]))
+            [emmy.env :as e]
+            [desargues.layout.core :as layout]
+            [desargues.layout.realize :as realize-be]))
 
 ;; ============================================================================
 ;; Initialization
@@ -46,9 +49,10 @@
 ;; ============================================================================
 
 (defn derivative
-  "Compute derivative of an expression or function"
-  [math-obj]
-  (svc/differentiate-expression math-obj))
+  "Compute the derivative of a MathFunction. Emmy differentiates functions,
+   so pass a function (from `func`); returns a new MathFunction."
+  [math-fn]
+  (svc/differentiate-expression math-fn))
 
 (defn evaluate-at
   "Evaluate at a specific point"
@@ -109,11 +113,12 @@
       (render!)))
 
 (defn animate-derivative
-  "Show function and its derivative"
-  [math-expr]
-  (let [deriv (derivative math-expr)]
+  "Show a MathFunction and its derivative (both rendered via their symbolic
+   form applied to the canonical variable x)."
+  [math-fn]
+  (let [deriv (derivative math-fn)]
     (-> (scene)
-        (show math-expr)
+        (show math-fn)
         (wait 1)
         (show deriv)
         (wait 2)
@@ -182,9 +187,7 @@
    - :color - dot color
    - :radius - dot radius"
   [n & opts]
-  ;; Requires manim.factorization - lazy require to avoid init issues
-  (require '[desargues.manim.factorization :as fact])
-  (apply (resolve 'desargues.manim.factorization/create-dot-array) n opts))
+  (apply fact/create-dot-array n opts))
 
 (defn dot-grid
   "Create a visual grid of dots.
@@ -198,14 +201,7 @@
    - :radius - dot radius
    - :3d - use 3D spheres"
   [& args]
-  (require '[desargues.manim.factorization :as fact])
-  (let [[dims opts] (split-with number? args)
-        opts-map (apply hash-map opts)]
-    (if (:3d opts-map)
-      (apply (resolve 'desargues.manim.factorization/create-dot-grid-3d)
-             (concat dims (mapcat identity (dissoc opts-map :3d))))
-      (apply (resolve 'desargues.manim.factorization/create-dot-grid-2d)
-             (concat dims (mapcat identity opts-map))))))
+  (apply fact/create-dot-grid args))
 
 (defn factorization-visual
   "Create the complete factorization visualization for n.
@@ -221,8 +217,7 @@
              spacing 0.5
              radius 0.1
              prefer-3d false}}]
-  (require '[desargues.manim.factorization :as fact])
-  ((resolve 'desargues.manim.factorization/create-factorization-hierarchy)
+  (fact/create-factorization-hierarchy
    n :colors colors :spacing spacing :radius radius :prefer-3d prefer-3d))
 
 (defn animate-factorization
@@ -239,8 +234,7 @@
              prefer-3d false
              show-title true
              quality "medium_quality"}}]
-  (require '[desargues.manim.factorization :as fact])
-  ((resolve 'desargues.manim.factorization/visualize-factorization!)
+  (fact/visualize-factorization!
    n :colors colors :prefer-3d prefer-3d :show-title show-title :quality quality))
 
 ;; ============================================================================
@@ -412,3 +406,43 @@
   (compare-functions
    [f1 f2]
    [(point 'x 0) (point 'x 1) (point 'x 2)]))
+
+;; ============================================================================
+;; Layout DSL (elm-ui-inspired, frame-bounded, proportional)
+;; ============================================================================
+
+(def ^{:doc "Single-child alignment box (layout DSL)."}     el     layout/el)
+(def ^{:doc "Decorated frame box (layout DSL)."}            box    layout/box)
+(def ^{:doc "Row container, main axis +x (layout DSL)."}    row    layout/row)
+(def ^{:doc "Column container, main axis +y (layout DSL)."} column layout/column)
+(def ^{:doc "Alias for column (layout DSL)."}               col    layout/col)
+(def ^{:doc "Flexible gap (layout DSL)."}                   spacer layout/spacer)
+(def ^{:doc "Single-line text leaf (layout DSL)."}          text   layout/text)
+(def ^{:doc "LaTeX math leaf (layout DSL)."}                math   layout/math)
+(def ^{:doc "Image leaf (layout DSL)."}                     image  layout/image)
+
+(defn realize
+  "Realize a layout tree into a LayoutMobject (impure; requires python init).
+   opts: {:margin 0.5 :frame [fw fh]}."
+  ([tree] (realize tree {}))
+  ([tree opts]
+   (realize-be/realize tree opts)))
+
+(defn by-id
+  "Fetch the raw py mobject registered under {:id id} in a realized layout."
+  [realized id]
+  (realize-be/by-id realized id))
+
+(defn show-layout
+  "Facade sugar: (show builder (realize tree))."
+  [builder tree]
+  (show builder (realize tree)))
+
+(defn render-layout!
+  "Realize `tree` and render it via the whole-scene fade-in path."
+  ([tree] (render-layout! tree {}))
+  ([tree opts]
+   (-> (scene)
+       (show (realize tree opts))
+       (wait 3)
+       (render!))))

@@ -119,6 +119,17 @@
         spheres (mapv #(create-dot-3d % :radius radius :color color) positions)]
     (apply m/vgroup spheres)))
 
+(defn create-dot-grid
+  "Create a grid of dots, dispatching on dimensionality.
+   2D: (create-dot-grid rows cols & opts).
+   3D: (create-dot-grid x y z :3d true & opts)."
+  [& args]
+  (let [[dims opts] (split-with number? args)
+        opts-map (apply hash-map opts)]
+    (if (:3d opts-map)
+      (apply create-dot-grid-3d (concat dims (mapcat identity (dissoc opts-map :3d))))
+      (apply create-dot-grid-2d (concat dims (mapcat identity opts-map))))))
+
 (defn create-dots-for-number
   "Create dots arranged according to the number's factorization.
    
