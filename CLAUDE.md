@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 **Desargues** is a Clojure library that bridges Emmy (symbolic mathematics) with Manim Community Edition (mathematical animation) via libpython-clj. The system computes derivatives symbolically, converts them to LaTeX, and renders beautiful mathematical animations.
 
 **Technology Stack:**
-- Clojure + Leiningen build system
+- Clojure with tools.deps (`deps.edn`); babashka tasks via `bb.edn`. A legacy Leiningen `project.clj` is retained but is not the primary build.
 - Emmy for symbolic mathematics
 - Manim Community (Python) for mathematical animations
 - libpython-clj for Clojure-Python interop
@@ -15,19 +15,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Essential Commands
 
-### Build & Run
+### Build & Run (tools.deps)
 ```bash
 # Run main animation demo (sin(x) derivative)
-lein run
+clojure -M:run
 
-# Start REPL for interactive development
-lein repl
+# Dev REPL (dev/ sources + orchestra + the Typed Clojure checker)
+clojure -A:dev
 
-# Run tests
-lein test
+# Static Typed Clojure gate
+clojure -M:dev -m desargues.typecheck
 
-# Install dependencies
-lein deps
+# Pre-fetch dependencies
+clojure -P
 ```
 
 ### Python Environment
@@ -99,18 +99,22 @@ Infrastructure Layer (External Systems)
 
 ### Python Initialization
 
-**ALWAYS initialize Python before any Manim operations:**
+**ALWAYS initialize Python/Manim before any Manim operations.** Paths are resolved
+by `desargues.config` from the environment (see the Configuration section of
+`README.md`) — never hardcoded in source.
+
 ```clojure
-(require '[desargues.manim-quickstart :as mq])
-(mq/init!)
+(require '[desargues.scene :as s])
+(s/init!)                    ; brings the Manim backend up (idempotent)
+;; or, for the high-level API:
+(require '[desargues.api :as v])
+(v/init!)
 ```
 
-This configures:
-- Python executable path: `/home/lages/anaconda3/envs/manim/bin/python`
-- Library path: `/home/lages/anaconda3/envs/manim/lib/libpython3.12.so`
-- Adds conda site-packages to sys.path
-
-**If paths differ on another system**, update `src/desargues/manim_quickstart.clj:init!` function.
+Configuration is derived from `CONDA_PREFIX` / `DESARGUES_CONDA_PREFIX` plus the
+`DESARGUES_MANIM_*` overrides. Inspect the resolved values with
+`(desargues.config/manim-config)`. If Manim isn't found, activate the conda env or
+set `DESARGUES_CONDA_PREFIX` — do **not** edit source paths.
 
 ### Emmy → LaTeX → Python Pipeline
 
@@ -184,7 +188,7 @@ When defining records that reference each other, use `declare`:
 ## File Organization
 
 ### Entry Points
-- `src/desargues/core.clj`: Main `-main` function (invoked by `lein run`)
+- `src/desargues/core.clj`: Main `-main` function (invoked by `clojure -M:run`)
 - `src/desargues/api.clj`: Primary API for library users
 
 ### Integration Layers
@@ -197,7 +201,7 @@ When defining records that reference each other, use `declare`:
 - `emmy_manim_scenes.py`: Emmy-driven scenes (FunctionAndDerivative, ChainRule, TaylorSeries)
 - `equation_evaluation_scenes.py`: Evaluation and table scenes
 
-Python files must be in project root (`/home/lages/Physics/desargues`) so Clojure can import them via `py/import-module`.
+Python files live in the project root (resolved by `desargues.config`; override with `DESARGUES_PROJECT_ROOT`) so Clojure can import them via `py/import-module`. Call `(desargues.config/add-project-to-syspath!)` to put that root on `sys.path`.
 
 ### Tests
 - `test/desargues/manim_test.clj`: 14 integration tests
@@ -258,8 +262,8 @@ class MyScene(Scene):
 
 2. Import and use from Clojure:
 ```clojure
-(let [sys (py/import-module "sys")]
-  (py/call-attr (py/get-attr sys "path") "insert" 0 "/home/lages/Physics/desargues"))
+(require '[desargues.config :as config])
+(config/add-project-to-syspath!)   ; prepends the resolved project root onto sys.path
 
 (let [scenes (py/import-module "emmy_manim_scenes")
       MyScene (py/get-attr scenes "MyScene")
@@ -302,9 +306,9 @@ To add new mathematical capabilities:
 
 ### Python Import Errors
 If you see `ModuleNotFoundError: No module named 'manim'`:
-- Check conda environment is activated: `conda activate manim`
-- Verify paths in `manim_quickstart.clj:init!` match your system
-- Ensure sys.path includes site-packages directory
+- Check the conda environment is activated: `conda activate manim` (sets `CONDA_PREFIX`)
+- Inspect the resolved config: `(desargues.config/manim-config)`
+- If the manim env isn't the active one, set `DESARGUES_CONDA_PREFIX` (or the `DESARGUES_MANIM_*` overrides)
 
 ### LaTeX Rendering Errors
 If LaTeX fails to render:

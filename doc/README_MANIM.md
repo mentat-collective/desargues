@@ -2,24 +2,23 @@
 
 This project integrates [Manim (Community Edition)](https://www.manim.community/) with Clojure using [libpython-clj](https://github.com/clj-python/libpython-clj), allowing you to create mathematical animations using Clojure!
 
-## ✅ Setup Complete
-
-Your environment is ready to go! All tests passed successfully.
-
 ## 🚀 Quick Start
 
 ### Option 1: One-Command Quickstart
 
-Start a REPL and run:
+Activate your manim conda env and start a REPL with the tools.deps build:
 
-```clojure
-lein repl
+```bash
+conda activate manim
+clojure -M:dev
 ```
+
+(Legacy: the old `lein repl` is no longer the supported build — use `deps.edn` aliases.)
 
 Then:
 
 ```clojure
-(require '[varcalc.manim-quickstart :as mq])
+(require '[desargues.manim-quickstart :as mq])
 (mq/quickstart!)
 ```
 
@@ -29,32 +28,32 @@ This will render the classic Manim quickstart example (a pink circle being creat
 
 ```bash
 conda activate manim
-manim -pql manim_examples.py CreateCircle
+manim -pql py/manim_examples.py CreateCircle
 ```
 
 ## 📁 What's Been Set Up
 
 ### Clojure Namespaces
 
-1. **`varcalc.manim-test`** - Test suite to verify integration
+1. **`desargues.manim-test`** - Test suite to verify integration
    ```clojure
-   (require '[varcalc.manim-test :as mt])
+   (require '[desargues.manim-test :as mt])
    (mt/run-all-tests)  ; Run all tests
    ```
 
-2. **`varcalc.manim-quickstart`** - Main quickstart example (⭐ START HERE)
+2. **`desargues.manim-quickstart`** - Main quickstart example (⭐ START HERE)
    ```clojure
-   (require '[varcalc.manim-quickstart :as mq])
+   (require '[desargues.manim-quickstart :as mq])
    (mq/quickstart!)  ; Create and render the quickstart scene
    ```
 
-3. **`varcalc.manim`** - Basic manim integration helpers
+3. **`desargues.manim`** - Basic manim integration helpers
 
-4. **`varcalc.manim-renderer`** - Advanced rendering utilities
+4. **`desargues.manim-renderer`** - Advanced rendering utilities
 
 ### Python Files
 
-- **`manim_examples.py`** - Traditional Python examples you can render with the CLI
+- **`py/manim_examples.py`** - Traditional Python examples you can render with the CLI
 
 ### Documentation
 
@@ -68,7 +67,7 @@ manim -pql manim_examples.py CreateCircle
 From the [official Manim tutorial](https://docs.manim.community/en/stable/tutorials/quickstart.html):
 
 ```clojure
-(require '[varcalc.manim-quickstart :as mq])
+(require '[desargues.manim-quickstart :as mq])
 
 ;; Initialize (once per REPL session)
 (mq/init!)
@@ -82,7 +81,7 @@ From the [official Manim tutorial](https://docs.manim.community/en/stable/tutori
 ### Example 2: Square to Circle Transformation
 
 ```clojure
-(require '[varcalc.manim-quickstart :as mq])
+(require '[desargues.manim-quickstart :as mq])
 
 (mq/init!)
 
@@ -94,7 +93,7 @@ From the [official Manim tutorial](https://docs.manim.community/en/stable/tutori
 ### Example 3: Custom Scene
 
 ```clojure
-(require '[varcalc.manim-quickstart :as mq])
+(require '[desargues.manim-quickstart :as mq])
 (require '[libpython-clj2.python :as py])
 
 (mq/init!)
@@ -140,28 +139,38 @@ The exact path depends on the quality settings and scene name.
 
 ### Environment Details
 
-- **Conda environment**: `manim`
-- **Python version**: 3.12.12
-- **Manim version**: 0.19.0
-- **Python executable**: `/home/lages/anaconda3/envs/manim/bin/python`
-- **libpython path**: `/home/lages/anaconda3/envs/manim/lib/libpython3.12.so`
+Python/Manim paths are **derived from your environment** by `desargues.config` — they are
+not hardcoded. With your conda env active (`CONDA_PREFIX` set), the code resolves the
+interpreter, `libpython3.x.so`, and `site-packages` automatically. A typical env:
+
+- **Conda environment**: `manim` (activate it, or set `DESARGUES_CONDA_PREFIX`)
+- **Python version**: 3.12+
+- **Manim version**: 0.19+
+- **Interpreter**: `$CONDA_PREFIX/bin/python`
+- **libpython**: `$CONDA_PREFIX/lib/libpython3.x.so`
 
 ### Changing Paths
 
-If your conda is installed elsewhere, update the paths in:
-- `src/varcalc/manim_quickstart.clj` (line 13-14)
-- `src/varcalc/manim_test.clj` (line 8-9)
+There is nothing to edit in source. Override the derived defaults with environment
+variables (they win over auto-detection):
+
+- `DESARGUES_CONDA_PREFIX` — target a specific conda env root
+- `DESARGUES_MANIM_PYTHON` — interpreter path
+- `DESARGUES_MANIM_LIBPYTHON` — `libpython3.x.so` path
+- `DESARGUES_MANIM_SITEPACKAGES` — env `site-packages` path
+- `DESARGUES_PROJECT_ROOT` — project root (for locating `py/` scene files)
 
 ## 🧪 Testing
 
-Verify everything works:
+Verify everything works from the REPL:
 
-```clojure
-lein repl
+```bash
+conda activate manim
+clojure -M:dev
 ```
 
 ```clojure
-(require '[varcalc.manim-test :as mt])
+(require '[desargues.manim-test :as mt])
 (mt/run-all-tests)
 ```
 
@@ -180,6 +189,9 @@ Object Creation: ✓ PASS
 
 All tests passed! 🎉
 ```
+
+The full `clojure.test` suite lives under the `:test` alias (`clojure -M:test` adds the
+`test/` classpath and spec-check assertions).
 
 ## 🎨 Available Manim Objects
 
@@ -211,14 +223,12 @@ Access them like this:
 
 ## 🤝 Integration with Emmy
 
-This project also includes [Emmy](https://github.com/mentat-collective/emmy) (a Clojure library for scientific computing). You can combine Emmy's symbolic math capabilities with Manim's visualization!
-
-Example coming soon...
+This project also includes [Emmy](https://github.com/mentat-collective/emmy) (a Clojure library for scientific computing). You can combine Emmy's symbolic math capabilities with Manim's visualization! See `EMMY_MANIM_GUIDE.md`.
 
 ## 🎯 Next Steps
 
 1. Run the quickstart example: `(mq/quickstart!)`
-2. Explore the examples in `manim_examples.py`
+2. Explore the examples in `py/manim_examples.py`
 3. Browse the [Manim example gallery](https://docs.manim.community/en/stable/examples.html)
 4. Create your own mathematical animations!
 5. Combine with Emmy for symbolic mathematics + visualization
@@ -228,8 +238,10 @@ Example coming soon...
 See `MANIM_SETUP.md` for detailed troubleshooting steps.
 
 Common issues:
-- **Library not found**: Check Python path in init functions
-- **Import errors**: Ensure conda environment is properly set up
+- **Library not found**: Auto-detection failed — set `DESARGUES_MANIM_LIBPYTHON` to the
+  correct `libpython3.x.so`
+- **Import errors**: Ensure the conda environment is active (`CONDA_PREFIX` set) or point
+  `DESARGUES_CONDA_PREFIX` at it
 - **Render failures**: Check `media/` directory permissions
 
 ---
