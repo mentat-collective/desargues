@@ -131,8 +131,8 @@
 
 ;; Mathematical Operations
 (s/fdef api/derivative
-  :args (s/cat :math-obj ::math-object)
-  :ret ::math-expression)
+  :args (s/cat :math-fn ::math-function)
+  :ret ::math-function)
 
 (s/fdef api/evaluate-at
   :args (s/cat :math-obj ::math-object
@@ -178,7 +178,7 @@
   :ret any?)
 
 (s/fdef api/animate-derivative
-  :args (s/cat :math-expr ::math-expression)
+  :args (s/cat :math-fn ::math-function)
   :ret any?)
 
 (s/fdef api/animate-transformation

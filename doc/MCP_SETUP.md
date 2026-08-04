@@ -19,36 +19,49 @@ Claude Code  <-->  clojure-mcp (MCP Server)  <-->  nREPL  <-->  Your Project
 - Java JDK 17+
 - [ripgrep](https://github.com/BurntSushi/ripgrep#installation) (recommended for better search performance)
 - Claude Code CLI installed
+- An `:nrepl` alias in your project's `deps.edn` that starts an nREPL server, e.g.:
+  ```clojure
+  :nrepl {:extra-deps {nrepl/nrepl {:mvn/version "1.3.1"}
+                       cider/cider-nrepl {:mvn/version "0.55.7"}}
+          :main-opts  ["-m" "nrepl.cmdline"
+                       "--middleware" "[cider.nrepl/cider-middleware]"]}
+  ```
+  (clojure-mcp can also attach to an already-running nREPL if you omit `:start-nrepl-cmd`.)
 
 ## Step 1: Install clojure-mcp
 
 Clone the clojure-mcp repository:
 
 ```bash
-git clone https://github.com/bhauman/clojure-mcp.git ~/path/to/clojure-mcp
-cd ~/path/to/clojure-mcp
+git clone https://github.com/bhauman/clojure-mcp.git <clojure-mcp-dir>
+cd <clojure-mcp-dir>
 ```
 
 ## Step 2: Add MCP Server to Claude Code
 
-Use the `claude mcp add` command to register the server:
+Use the `claude mcp add` command to register the server. This project builds with
+**tools.deps** (`deps.edn` + `bb.edn`), so use the tools.deps nREPL command.
 
-### For Leiningen Projects (with auto-start REPL)
+### For tools.deps Projects (recommended, with auto-start REPL)
 
 ```bash
 claude mcp add clojure-mcp \
   /bin/bash \
   -s user \
-  -- -c "cd /path/to/clojure-mcp && clojure -X:mcp :port 7901 :start-nrepl-cmd '[\"lein\" \"repl\" \":headless\" \":port\" \"7901\"]' :project-dir '\"/path/to/your/project\"'"
+  -- -c "cd <clojure-mcp-dir> && clojure -X:mcp :port 7901 :start-nrepl-cmd '[\"clojure\" \"-M:nrepl\"]' :project-dir '\"<project-dir>\"'"
 ```
 
-### For deps.edn Projects (with auto-start REPL)
+`-M:nrepl` runs the `:nrepl` alias described in the Prerequisites.
+
+### For Leiningen Projects (legacy)
+
+If a project still uses Leiningen, the nREPL can be started the old way:
 
 ```bash
 claude mcp add clojure-mcp \
   /bin/bash \
   -s user \
-  -- -c "cd /path/to/clojure-mcp && clojure -X:mcp :port 7901 :start-nrepl-cmd '[\"clojure\" \"-M:nrepl\"]' :project-dir '\"/path/to/your/project\"'"
+  -- -c "cd <clojure-mcp-dir> && clojure -X:mcp :port 7901 :start-nrepl-cmd '[\"lein\" \"repl\" \":headless\" \":port\" \"7901\"]' :project-dir '\"<project-dir>\"'"
 ```
 
 ### Without Auto-Start (manual REPL)
@@ -59,21 +72,24 @@ If you prefer to start the REPL manually:
 claude mcp add clojure-mcp \
   /bin/bash \
   -s user \
-  -- -c "cd /path/to/clojure-mcp && clojure -X:mcp :port 7901 :project-dir '\"/path/to/your/project\"'"
+  -- -c "cd <clojure-mcp-dir> && clojure -X:mcp :port 7901 :project-dir '\"<project-dir>\"'"
 ```
 
-Then start your REPL manually before using Claude Code:
+Then start your nREPL manually before using Claude Code:
 ```bash
-lein repl :headless :port 7901
+clojure -M:nrepl   # tools.deps  (legacy: lein repl :headless :port 7901)
 ```
 
-### Example from this project
+### Example for this project
+
+`<project-dir>` is your local `desargues` checkout; `<clojure-mcp-dir>` is wherever you
+cloned clojure-mcp:
 
 ```bash
 claude mcp add clojure-mcp \
   /bin/bash \
   -s user \
-  -- -c "cd /home/lages/PP/funeraria/clojure-mcp && /usr/local/bin/clojure -X:mcp :port 7901 :start-nrepl-cmd '[\"lein\" \"repl\" \":headless\" \":port\" \"7901\"]' :project-dir '\"/home/lages/Physics/desargues\"'"
+  -- -c "cd <clojure-mcp-dir> && clojure -X:mcp :port 7901 :start-nrepl-cmd '[\"clojure\" \"-M:nrepl\"]' :project-dir '\"<project-dir>\"'"
 ```
 
 ## Step 3: Verify the Setup
@@ -169,7 +185,7 @@ Note: The `clj-paren-repair-claude-hook` command must be installed separately.
 
 1. **Start Claude Code** in your project directory:
    ```bash
-   cd /path/to/your/project
+   cd <project-dir>
    claude
    ```
 
@@ -216,7 +232,7 @@ To switch to a different project:
    claude mcp add clojure-mcp \
      /bin/bash \
      -s user \
-     -- -c "cd /path/to/clojure-mcp && clojure -X:mcp :port 7901 :start-nrepl-cmd '[\"lein\" \"repl\" \":headless\" \":port\" \"7901\"]' :project-dir '\"/path/to/NEW/project\"'"
+     -- -c "cd <clojure-mcp-dir> && clojure -X:mcp :port 7901 :start-nrepl-cmd '[\"clojure\" \"-M:nrepl\"]' :project-dir '\"<new-project-dir>\"'"
    ```
 
 Alternatively, configure multiple servers with different names for different projects.
@@ -239,8 +255,8 @@ claude mcp get clojure-mcp
 
 2. Check if clojure-mcp can start:
    ```bash
-   cd /path/to/clojure-mcp
-   clojure -X:mcp :port 7901 :project-dir '"/path/to/your/project"'
+   cd <clojure-mcp-dir>
+   clojure -X:mcp :port 7901 :project-dir '"<project-dir>"'
    ```
 
 3. Check Claude Code MCP status:
@@ -279,7 +295,7 @@ The `claude mcp add` command writes to `~/.claude/mcp.json`:
       "command": "/bin/bash",
       "args": [
         "-c",
-        "cd /path/to/clojure-mcp && clojure -X:mcp :port 7901 :start-nrepl-cmd '[\"lein\" \"repl\" \":headless\" \":port\" \"7901\"]' :project-dir '\"/path/to/project\"'"
+        "cd <clojure-mcp-dir> && clojure -X:mcp :port 7901 :start-nrepl-cmd '[\"clojure\" \"-M:nrepl\"]' :project-dir '\"<project-dir>\"'"
       ]
     }
   }

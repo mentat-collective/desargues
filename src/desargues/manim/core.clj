@@ -7,7 +7,8 @@
    - Base rendering functionality"
   (:require [libpython-clj2.python :as py]
             [libpython-clj2.python.ffi :as py-ffi]
-            [libpython-clj2.python.class :as py-class]))
+            [libpython-clj2.python.class :as py-class]
+            [desargues.config :as config]))
 
 ;; ============================================================================
 ;; State
@@ -31,9 +32,9 @@
   ([]
    (init! {}))
   ([{:keys [python-executable library-path site-packages]
-     :or {python-executable "/home/lages/anaconda3/envs/manim/bin/python"
-          library-path "/home/lages/anaconda3/envs/manim/lib/libpython3.12.so"
-          site-packages "/home/lages/anaconda3/envs/manim/lib/python3.12/site-packages"}}]
+     :or {python-executable (:python-exe (config/manim-config))
+          library-path (:library-path (config/manim-config))
+          site-packages (:site-packages (config/manim-config))}}]
    (when-not @initialized?
      (py/initialize!
       :python-executable python-executable

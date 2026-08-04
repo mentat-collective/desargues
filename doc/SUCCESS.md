@@ -14,7 +14,7 @@ Creating CreateCircle scene...
 Rendering animation...
 Animation 0: Create(Circle): 100%|##########| 60/60 [00:00<00:00, 75.23it/s]
 
-File ready at '/home/lages/Physics/varcalc/media/videos/1080p60/CreateCircle.mp4'
+File ready at 'media/videos/1080p60/CreateCircle.mp4'
 
 ✓ Rendering complete! Check the media/videos/ directory.
 
@@ -22,12 +22,12 @@ File ready at '/home/lages/Physics/varcalc/media/videos/1080p60/CreateCircle.mp4
 Your video should be in: media/videos/
 ```
 
-**Video created:** `media/videos/1080p60/CreateCircle.mp4` (32KB)
+**Video created:** `media/videos/1080p60/CreateCircle.mp4`
 
 ## 🚀 Quick Start
 
 ```clojure
-(require '[varcalc.manim-quickstart :as mq])
+(require '[desargues.manim-quickstart :as mq])
 (mq/quickstart!)
 ```
 
@@ -35,10 +35,10 @@ That's it! The video will be rendered to `media/videos/`.
 
 ## 📖 Available Examples
 
-All examples from `manim_examples.py` can be rendered:
+All examples from `py/manim_examples.py` can be rendered:
 
 ```clojure
-(require '[varcalc.manim-quickstart :as mq])
+(require '[desargues.manim-quickstart :as mq])
 
 (mq/init!)
 
@@ -52,7 +52,7 @@ All examples from `manim_examples.py` can be rendered:
       scene (SquareToCircle)]
   (mq/render-scene! scene))
 
-;; Example 3: Any scene from manim_examples.py
+;; Example 3: Any scene from py/manim_examples.py
 (let [SquareAndCircle (mq/get-example-scene "SquareAndCircle")
       scene (SquareAndCircle)]
   (mq/render-scene! scene))
@@ -72,17 +72,20 @@ All examples from `manim_examples.py` can be rendered:
 
 ### Issue 1: Python Module Path
 **Problem:** Manim wasn't found even with conda Python
-**Solution:** Added conda's `site-packages` to `sys.path`
+**Solution:** `init!` now inserts the conda env's `site-packages` onto `sys.path`. The path
+is resolved by `desargues.config` from `CONDA_PREFIX` (override with
+`DESARGUES_MANIM_SITEPACKAGES`) — no hardcoded path.
 
 ```clojure
-(let [sys (py/import-module "sys")]
-  (py/call-attr (py/get-attr sys "path") "insert" 0
-                "/home/lages/anaconda3/envs/manim/lib/python3.12/site-packages"))
+;; desargues.manim-quickstart/init! does this for you:
+(let [{:keys [site-packages]} (desargues.config/manim-config)
+      sys (py/import-module "sys")]
+  (py/call-attr (py/get-attr sys "path") "insert" 0 site-packages))
 ```
 
 ### Issue 2: Python Class Creation
 **Problem:** `py/create-class` had issues wrapping Clojure functions as Python methods
-**Solution:** Import pre-defined Python classes from `manim_examples.py`
+**Solution:** Import pre-defined Python classes from `py/manim_examples.py`
 
 ```clojure
 (defn make-create-circle-scene []
@@ -96,17 +99,20 @@ This approach is simpler, more reliable, and follows Python best practices!
 ## 📁 Project Structure
 
 ```
-varcalc/
-├── src/varcalc/
-│   ├── manim_quickstart.clj     ⭐ Main interface (USE THIS)
-│   ├── manim_renderer.clj       Advanced utilities
-│   └── manim.clj                Basic helpers
-├── test/varcalc/
-│   └── manim_test.clj           Unit tests (14 tests, all passing)
-├── manim_examples.py             Python scene definitions
-└── media/videos/                 Rendered videos output here
+desargues/
+├── deps.edn                          # tools.deps build (deps + aliases)
+├── src/desargues/
+│   ├── config.clj                    Environment-driven Python/Manim config
+│   ├── manim_quickstart.clj          ⭐ Main interface (USE THIS)
+│   ├── manim_renderer.clj            Advanced utilities
+│   └── manim.clj                     Basic helpers
+├── test/desargues/
+│   └── manim_test.clj                Integration tests (:test alias)
+├── py/
+│   └── manim_examples.py             Python scene definitions
+└── media/videos/                     Rendered videos output here
     └── 1080p60/
-        └── CreateCircle.mp4     ✅ Your first animation!
+        └── CreateCircle.mp4          ✅ Your first animation!
 ```
 
 ## 📚 Documentation
@@ -121,7 +127,7 @@ varcalc/
 
 ### Recommended Approach: Python Files
 
-1. Add your scene to `manim_examples.py`:
+1. Add your scene to `py/manim_examples.py`:
 
 ```python
 class MyCustomScene(Scene):
@@ -135,7 +141,7 @@ class MyCustomScene(Scene):
 2. Use it from Clojure:
 
 ```clojure
-(require '[varcalc.manim-quickstart :as mq])
+(require '[desargues.manim-quickstart :as mq])
 
 (mq/init!)
 
@@ -162,28 +168,29 @@ Default quality: `1080p60` (high quality, 60fps)
 
 ## ✅ Test Results
 
-All integration tests pass:
+Run the integration checks from a REPL:
 
-```bash
-lein test varcalc.manim-test
-
-Ran 14 tests containing 40 assertions.
-0 failures, 0 errors.
+```clojure
+(require '[desargues.manim-test :as mt])
+(mt/run-all-tests)
 ```
+
+The full `clojure.test` suite lives under the `:test` alias (`clojure -M:test` adds the
+`test/` classpath and spec-check assertions).
 
 ## 🎯 Next Steps
 
 1. **Try the examples:**
    ```clojure
-   (require '[varcalc.manim-quickstart :as mq])
+   (require '[desargues.manim-quickstart :as mq])
    (mq/quickstart!)
    ```
 
-2. **Create your own scenes** in `manim_examples.py`
+2. **Create your own scenes** in `py/manim_examples.py`
 
 3. **Browse the Manim gallery:** https://docs.manim.community/en/stable/examples.html
 
-4. **Combine with Emmy** (already in dependencies) for symbolic math visualizations!
+4. **Combine with Emmy** (already in `deps.edn`) for symbolic math visualizations!
 
 ## 🔗 Resources
 
@@ -198,7 +205,7 @@ Everything is working perfectly. Start creating beautiful mathematical animation
 
 ```clojure
 ;; Your first animation is just one command away:
-(require '[varcalc.manim-quickstart :as mq])
+(require '[desargues.manim-quickstart :as mq])
 (mq/quickstart!)
 ```
 

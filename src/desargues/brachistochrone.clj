@@ -15,6 +15,7 @@
             [emmy.calculus.derivative :refer [D]]
             [emmy.mechanics.lagrange :as lag]
             [libpython-clj2.python :as py]
+            [desargues.config :as config]
             [desargues.manim-quickstart :as mq]
             [desargues.emmy-manim :as em]))
 
@@ -273,8 +274,7 @@
     (println "  " (get-in data [:latex :lagrangian]))
 
     ;; Import and render the Python scene
-    (let [sys (py/import-module "sys")]
-      (py/call-attr (py/get-attr sys "path") "insert" 0 "/home/lages/Physics/desargues/py"))
+    (config/add-project-to-syspath! "py")
 
     (let [scenes (py/import-module "brachistochrone_scene")
           BrachistochroneProblem (py/get-attr scenes "BrachistochroneProblem")
@@ -289,8 +289,7 @@
   []
   (mq/init!)
 
-  (let [sys (py/import-module "sys")]
-    (py/call-attr (py/get-attr sys "path") "insert" 0 "/home/lages/Physics/desargues/py"))
+  (config/add-project-to-syspath! "py")
 
   (let [scenes (py/import-module "brachistochrone_scene")
         BrachistochroneDerivation (py/get-attr scenes "BrachistochroneDerivation")
@@ -302,9 +301,8 @@
   []
   (mq/init!)
 
-  (let [data (create-brachistochrone-data -4.0 2.0 4.0 -2.0)
-        sys (py/import-module "sys")]
-    (py/call-attr (py/get-attr sys "path") "insert" 0 "/home/lages/Physics/desargues/py")
+  (let [data (create-brachistochrone-data -4.0 2.0 4.0 -2.0)]
+    (config/add-project-to-syspath! "py")
 
     (let [scenes (py/import-module "brachistochrone_scene")
           BrachistochroneWithMath (py/get-attr scenes "BrachistochroneWithMath")

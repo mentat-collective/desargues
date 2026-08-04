@@ -66,6 +66,8 @@
    :pink "PINK"
    :teal "TEAL"
    :cyan "BLUE_C"
+   :gold "GOLD"
+   :maroon "MAROON"
    :white "WHITE"
    :black "BLACK"
    :grey "GREY"

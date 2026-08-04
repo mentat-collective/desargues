@@ -6,9 +6,10 @@
    - Entities: MathExpression, MathFunction
    
    Type annotations are provided for compile-time checking with Typed Clojure."
-  (:require [emmy.env :as e]
-            [typed.clojure :as t]
-            [desargues.types :as types]))
+  (:require [typed.clojure :as t]
+            [desargues.types :as types]
+            [desargues.domain.protocols :as p]
+            [desargues.domain.math :as m]))
 
 ;; ============================================================================
 ;; Value Objects (Immutable mathematical values)
@@ -52,15 +53,18 @@
               [types/EmmyExpr (t/Map t/Kw t/Any) :-> MathExpression]))
 
 (defn create-expression
-  "Factory: Create a mathematical expression from Emmy form"
+  "Factory: Create a mathematical expression from Emmy form.
+   Id is derived from the expression's canonical printed form so that
+   value-equal expressions get value-equal ids (Emmy Literals are = but
+   violate the hashCode contract, so we hash the stable string form)."
   ([expr]
    (create-expression expr {}))
   ([expr metadata]
    (->MathExpression
-    (gensym "expr-")
+    (symbol (str "expr-" (Integer/toHexString (hash (str expr)))))
     expr
-    nil ;; Lazy - computed on demand
-    nil ;; Lazy - computed on demand
+    nil
+    nil
     metadata)))
 
 ;; ============================================================================
@@ -70,7 +74,7 @@
 (t/ann-record MathFunction
               [id :- types/FunctionId
                name :- t/Sym
-               f :- t/AnyFunction
+               f :- t/Any
                domain :- (t/U nil (t/Vec t/Num))
                codomain :- (t/U nil (t/Vec t/Num))
                metadata :- (t/Map t/Kw t/Any)])
@@ -80,8 +84,8 @@
   (toString [_] (str "MathFunction[" name "]")))
 
 (t/ann create-function
-       (t/IFn [t/Sym t/AnyFunction :-> MathFunction]
-              [t/Sym t/AnyFunction (t/U nil (t/Vec t/Num)) (t/U nil (t/Vec t/Num)) (t/Map t/Kw t/Any) :-> MathFunction]))
+       (t/IFn [t/Sym t/Any :-> MathFunction]
+              [t/Sym t/Any (t/U nil (t/Vec t/Num)) (t/U nil (t/Vec t/Num)) (t/Map t/Kw t/Any) :-> MathFunction]))
 
 (defn create-function
   "Factory: Create a mathematical function"
@@ -89,7 +93,7 @@
    (create-function name f nil nil {}))
   ([name f domain codomain metadata]
    (->MathFunction
-    (gensym "func-")
+    (symbol (str "func-" (Integer/toHexString (hash [name domain codomain]))))
     name
     f
     domain
@@ -136,3 +140,44 @@
    (evaluation-result input output nil []))
   ([input output expr steps]
    (->EvaluationResult input output expr steps)))
+
+(extend-protocol p/ILatexConvertible
+  MathExpression
+  (to-latex [this]
+    (m/->latex (:expr this))))
+
+(extend-protocol p/ISimplifiable
+  MathExpression
+  (simplify [this]
+    (create-expression
+     (m/simplify (:expr this))
+     (assoc (:metadata this) :simplified-from (:id this)))))
+
+(extend-protocol p/IEvaluable
+  MathExpression
+  (evaluate [this point]
+    (m/evaluate (:expr this) (:variable point) (:value point)))
+  (evaluate-symbolic [this point]
+    (m/substitute (:expr this) (:variable point) (:value point)))
+  MathFunction
+  (evaluate [this point]
+    ((:f this) (:value point)))
+  (evaluate-symbolic [this point]
+    ((:f this) (:value point))))
+
+(extend-protocol p/IDifferentiable
+  MathFunction
+  (derivative [this]
+    (create-function
+     (symbol (str (:name this) "'"))
+     (m/differentiate (:f this))
+     (:domain this) (:codomain this)
+     (assoc (:metadata this) :derived-from (:id this))))
+  (derivative-at [this point]
+    ((m/differentiate (:f this)) (:value point)))
+  (nth-derivative [this n]
+    (create-function
+     (symbol (str (:name this) "^(" n ")"))
+     (reduce (fn [g _] (m/differentiate g)) (:f this) (range n))
+     (:domain this) (:codomain this)
+     (assoc (:metadata this) :derived-from (:id this)))))

@@ -454,19 +454,19 @@ The devx module enables Figwheel-style hot-reload for Manim animations:
 
 ```bash
 # Full brachistochrone derivation (12 steps, high quality)
-lein run -m desargues.videos.render
+clojure -M -m desargues.videos.render
 
 # Just the intro scene
-lein run -m desargues.videos.render intro
+clojure -M -m desargues.videos.render intro
 
 # Specific derivation step (1-12)
-lein run -m desargues.videos.render step 7
+clojure -M -m desargues.videos.render step 7
 
 # Low quality for fast iteration (~4x faster)
-lein run -m desargues.videos.render intro --low
+clojure -M -m desargues.videos.render intro --low
 
 # All steps as separate files (parallelizable)
-lein run -m desargues.videos.render all-steps --low
+clojure -M -m desargues.videos.render all-steps --low
 ```
 
 ### 6. Low-level Manim Bindings (`desargues.manim.*`)
@@ -734,30 +734,30 @@ pip install manim
 manim --version
 ```
 
-**Important**: Update paths in `src/desargues/manim_quickstart.clj:init!` if your conda paths differ:
-```clojure
-:python-executable "/home/lages/anaconda3/envs/manim/bin/python"
-:library-path "/home/lages/anaconda3/envs/manim/lib/libpython3.12.so"
-:site-packages "/home/lages/anaconda3/envs/manim/lib/python3.12/site-packages"
-```
+Paths are **derived from the environment** — no source edits needed. With the
+conda env active, `desargues.config` reads `CONDA_PREFIX` and probes
+`<prefix>/bin/python`, `<prefix>/lib/libpython<abi>.so`, and the env's
+`site-packages`. To target a manim env other than the active one, set
+`DESARGUES_CONDA_PREFIX`; to override a single path, set `DESARGUES_MANIM_PYTHON`,
+`DESARGUES_MANIM_LIBPYTHON`, or `DESARGUES_MANIM_SITEPACKAGES`.
 
 ## Development Workflow
 
 ### Running the Main Demo
 ```bash
-lein run
+clojure -M:run
 ```
 
 ### REPL Development
 ```bash
-lein repl
+clojure -A:dev
 
 ;; In REPL:
 (require '[desargues.api :as v])
 (v/init!)
 (v/animate-derivative (v/expr '(sin x)))
 
-;; With type safety (dev profile):
+;; With type safety (checker via the :dev alias):
 (require '[user :refer :all])
 (require-all!)
 (instrument-all!)
@@ -771,15 +771,13 @@ lein repl
 
 ### Running Tests
 ```bash
-lein test                    # All tests
-lein test-props              # Property-based tests only
-lein test-all                # Typecheck + tests
+clojure -M:dev -m desargues.typecheck   # Typed Clojure gate (static types)
+# clojure.test namespaces (desargues.*-test) run from your editor/REPL
 ```
 
 ### Checking Compilation
 ```bash
-lein check
-lein typecheck               # Static type checking
+clojure -M:dev -m desargues.typecheck   # Static type checking
 ```
 
 ## Extension Points

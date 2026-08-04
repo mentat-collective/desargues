@@ -6,56 +6,55 @@ Your project now has a complete integration between **Manim (Mathematical Animat
 
 ### Test Results
 
-All **14 integration tests** passed successfully:
+The manim integration suite (`desargues.manim-test`) verifies Python init, the Manim
+import, object creation, colors/constants, and animations. Run it from a REPL:
 
-```bash
-lein test varcalc.manim-test
-
-Ran 14 tests containing 40 assertions.
-0 failures, 0 errors.
+```clojure
+(require '[desargues.manim-test :as mt])
+(mt/run-all-tests)
 ```
+
+The full `clojure.test` suite lives under the `:test` alias (`clojure -M:test` adds the
+`test/` classpath and spec-check assertions).
 
 ## Quick Start Guide
 
 ### Run the Quickstart Example
 
 ```bash
-lein repl
+conda activate manim
+clojure -M:dev
 ```
+
+(Legacy: the old `lein repl` is no longer the supported build.)
 
 Then in the REPL:
 
 ```clojure
-(require '[varcalc.manim-quickstart :as mq])
+(require '[desargues.manim-quickstart :as mq])
 (mq/quickstart!)
 ```
 
 This will create the classic Manim "pink circle" animation and save it to `media/videos/`.
 
-### Run Unit Tests
+## Files
 
-```bash
-lein test varcalc.manim-test
-```
+### 1. Test Files (`test/desargues/`)
 
-## Files Created
-
-### 1. Test Files (`test/varcalc/`)
-
-- **`manim_test.clj`** - Comprehensive unit tests (14 tests, 40 assertions)
+- **`manim_test.clj`** - `clojure.test` integration suite
   - Tests Python initialization
   - Tests Manim import
   - Tests object creation (Circle, Square, etc.)
   - Tests colors and constants
   - Tests animations
-  - Run with: `lein test varcalc.manim-test`
+  - Runs under the `:test` alias
 
-### 2. Source Files (`src/varcalc/`)
+### 2. Source Files (`src/desargues/`)
 
 - **`manim_quickstart.clj`** ⭐ **START HERE**
   - Complete quickstart example from Manim tutorial
   - Functions:
-    - `(init!)` - Initialize Python environment
+    - `(init!)` - Initialize Python environment (paths from `desargues.config`)
     - `(quickstart!)` - Run complete example in one command
     - `(make-create-circle-scene)` - Create the CreateCircle scene
     - `(make-square-to-circle-scene)` - Create transformation example
@@ -70,11 +69,14 @@ lein test varcalc.manim-test
 - **`manim.clj`**
   - Basic Manim integration helpers
 
-### 3. Python Files
+- **`config.clj`**
+  - Environment-driven Python/Manim configuration (no hardcoded paths)
+
+### 3. Python Files (`py/`)
 
 - **`manim_examples.py`**
   - Traditional Python examples that work with both:
-    - Manim CLI: `manim -pql manim_examples.py CreateCircle`
+    - Manim CLI: `manim -pql py/manim_examples.py CreateCircle`
     - Clojure (can be imported as a module)
   - Includes 5 example scenes:
     - `CreateCircle` - Basic quickstart
@@ -93,37 +95,44 @@ lein test varcalc.manim-test
 
 ### Environment
 
-- **Conda environment**: `manim` (already created and activated)
-- **Python version**: 3.12.12
-- **Manim version**: 0.19.0
-- **Python executable**: `/home/lages/anaconda3/envs/manim/bin/python`
-- **libpython path**: `/home/lages/anaconda3/envs/manim/lib/libpython3.12.so`
+Python/Manim paths are **derived from the environment** by `desargues.config`; nothing is
+hardcoded to one machine. With the conda env active (`CONDA_PREFIX` set) a typical setup is:
 
-### Project Dependencies (in `project.clj`)
+- **Conda environment**: `manim` (activate it, or set `DESARGUES_CONDA_PREFIX`)
+- **Python version**: 3.12+
+- **Manim version**: 0.19+
+- **Interpreter**: `$CONDA_PREFIX/bin/python`
+- **libpython**: `$CONDA_PREFIX/lib/libpython3.x.so`
+
+Override any of these with `DESARGUES_MANIM_PYTHON`, `DESARGUES_MANIM_LIBPYTHON`,
+`DESARGUES_MANIM_SITEPACKAGES`, `DESARGUES_PROJECT_ROOT`, or `DESARGUES_QUALITY`.
+
+### Project Dependencies (in `deps.edn`)
 
 ```clojure
-:dependencies [[org.clojure/clojure "1.12.3"]
-               [org.mentat/emmy "0.32.0"]
-               [clj-python/libpython-clj "2.026"]]
+:deps {org.clojure/clojure {:mvn/version "1.12.3"}
+       io.github.mentat-collective/emmy {:git/tag "v0.32.0" :git/sha "53fd990"}
+       clj-python/libpython-clj {:mvn/version "2.026"}}
 ```
 
 ## Example Usage
 
 ### Example 1: Quickstart (One Command)
 
-```clojure
-lein repl
+```bash
+conda activate manim
+clojure -M:dev
 ```
 
 ```clojure
-(require '[varcalc.manim-quickstart :as mq])
+(require '[desargues.manim-quickstart :as mq])
 (mq/quickstart!)
 ```
 
 ### Example 2: Step-by-Step
 
 ```clojure
-(require '[varcalc.manim-quickstart :as mq])
+(require '[desargues.manim-quickstart :as mq])
 (require '[libpython-clj2.python :as py])
 
 ;; Initialize Python (once per REPL session)
@@ -138,7 +147,7 @@ lein repl
 ### Example 3: Custom Animation
 
 ```clojure
-(require '[varcalc.manim-quickstart :as mq])
+(require '[desargues.manim-quickstart :as mq])
 (require '[libpython-clj2.python :as py])
 
 (mq/init!)
@@ -175,7 +184,7 @@ lein repl
 
 ```bash
 conda activate manim
-manim -pql manim_examples.py CreateCircle
+manim -pql py/manim_examples.py CreateCircle
 ```
 
 Flags:
@@ -202,7 +211,7 @@ When calling Python functions with keyword arguments, use `call-attr-kw`:
 Python must be initialized once per REPL session:
 
 ```clojure
-(require '[varcalc.manim-quickstart :as mq])
+(require '[desargues.manim-quickstart :as mq])
 (mq/init!)  ;; Do this once
 ```
 
@@ -215,25 +224,11 @@ media/videos/
 
 The exact path depends on quality settings and scene name.
 
-## Testing
-
-Run all integration tests:
-
-```bash
-lein test varcalc.manim-test
-```
-
-Expected output:
-```
-Ran 14 tests containing 40 assertions.
-0 failures, 0 errors.
-```
-
 ## Next Steps
 
 1. ✅ **Try the quickstart**: `(mq/quickstart!)`
 2. Browse the [Manim Example Gallery](https://docs.manim.community/en/stable/examples.html)
-3. Combine with Emmy (already in dependencies) for symbolic math visualizations
+3. Combine with Emmy (already in `deps.edn`) for symbolic math visualizations
 4. Create your own mathematical animations!
 
 ## Resources
@@ -248,17 +243,10 @@ Ran 14 tests containing 40 assertions.
 See `MANIM_SETUP.md` for detailed troubleshooting.
 
 Common issues:
-- **Library not found**: Check paths in `init!` functions
-- **Import errors**: Verify conda environment: `conda activate manim && python -c "import manim"`
+- **Library not found**: Set `DESARGUES_MANIM_LIBPYTHON` to the correct `libpython3.x.so`
+- **Import errors**: Verify the conda environment: `conda activate manim && python -c "import manim"`
 - **Render failures**: Check `media/` directory permissions
 
 ---
 
 **Everything is ready to go! Happy animating!** 🎬✨
-
-Try it now:
-```clojure
-lein repl
-(require '[varcalc.manim-quickstart :as mq])
-(mq/quickstart!)
-```

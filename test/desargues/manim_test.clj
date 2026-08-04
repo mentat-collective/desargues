@@ -1,22 +1,16 @@
 (ns desargues.manim-test
   "Unit tests for Manim integration"
   (:require [clojure.test :refer :all]
-            [libpython-clj2.python :as py]))
+            [libpython-clj2.python :as py]
+            [desargues.manim-quickstart :as mq]))
 
 (def ^:dynamic *python-initialized* false)
 
 (defn init-python-once! []
-  "Initialize Python once for all tests"
+  "Initialize Python once for all tests (config-driven; override via
+   DESARGUES_MANIM_* env vars)."
   (when-not *python-initialized*
-    (py/initialize!
-     :python-executable "/home/lages/anaconda3/envs/manim/bin/python"
-     :library-path "/home/lages/anaconda3/envs/manim/lib/libpython3.12.so")
-
-    ;; Add conda environment's site-packages to Python path
-    (let [sys (py/import-module "sys")]
-      (py/call-attr (py/get-attr sys "path") "insert" 0
-                    "/home/lages/anaconda3/envs/manim/lib/python3.12/site-packages"))
-
+    (mq/init!)
     (alter-var-root #'*python-initialized* (constantly true))))
 
 (use-fixtures :once
@@ -103,13 +97,13 @@
 
 (deftest test-create-scene-instance
   (testing "Should be able to import a Scene from Python module"
-    (let [;; Import the example file as a Python module
-          py-module (py/run-simple-string "
-import sys
-sys.path.insert(0, '/home/lages/Physics/varcalc')
+    (let [;; Put the desargues project root (where manim_examples.py lives) on
+          ;; sys.path via the injected config, then import the example module.
+          py-module (do (config/add-project-to-syspath!)
+                        (py/run-simple-string "
 import manim_examples
 manim_examples
-")
+"))
           ;; The return value should have our examples
           ]
       ;; Just verify we can import without error

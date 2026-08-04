@@ -1,239 +1,99 @@
-# Varcalc: Mathematical Animation Generator
+# desargues
 
-**Emmy + Manim = Beautiful Mathematical Animations**
+**Emmy + Manim — backend-neutral mathematical animation in Clojure**
 
-Varcalc is a Clojure library that combines [Emmy](https://github.com/mentat-collective/emmy) (symbolic mathematics) with [Manim Community Edition](https://www.manim.community/) (mathematical animations) to create beautiful visualizations of mathematical expressions, derivatives, and transformations.
+desargues bridges [Emmy](https://github.com/mentat-collective/emmy) (symbolic
+mathematics) and [Manim Community Edition](https://www.manim.community/)
+(mathematical animation) through [libpython-clj](https://github.com/clj-python/libpython-clj).
+It computes derivatives symbolically, converts them to LaTeX, and renders them —
+and it does so behind a **backend-neutral scene facade**, so the same animation
+code runs under Manim *or* under a pure recording backend that emits plain data.
 
 ## Features
 
-- 🧮 **Symbolic Mathematics**: Use Emmy to define functions, compute derivatives, simplify expressions
-- 🎬 **Mathematical Animations**: Render beautiful animations with Manim
-- 🔄 **Automatic Conversion**: Emmy → LaTeX → Python → Manim pipeline
-- 🏗️ **Clean Architecture**: SOLID principles and Domain-Driven Design
-- 🎨 **Fluent API**: Easy-to-use builder pattern for creating animations
-- ✨ **Pre-built Examples**: Chain rule, product rule, Taylor series, and more
+- 🧮 **Symbolic mathematics** — define functions, differentiate, simplify via Emmy
+- 🎬 **Animation** — the Emmy → LaTeX → Python → Manim pipeline
+- 🔌 **Backend-neutral facade** — `desargues.scene` programs to a protocol, not to
+  Manim; a pure `RecordingBackend` renders the same scene to EDN with no Python
+- 📐 **Layout algebra** — an elm-ui-inspired declarative layout DSL with a pure
+  extent estimator (measure → resolve → realize)
+- 🏗️ **Layered DDD/SOLID design** — pure, Typed-Clojure-annotated domain; the
+  Dependency-Inversion seam sits at `desargues.scene.protocols`
+- ⚙️ **Environment-driven config** — no machine paths baked into source
 
 ## Prerequisites
 
-- **Java**: JDK 8 or higher
-- **Leiningen**: Clojure build tool
-- **Anaconda/Miniconda**: For Python environment management
-- **LaTeX**: For rendering mathematical expressions (usually comes with Manim)
+- **Java** — JDK 11+
+- **Clojure CLI** — the `clojure` / `clj` tools.deps command
+- **Anaconda/Miniconda** — to provide a Python env with Manim
+- **LaTeX** — for rendering math (usually installed alongside Manim)
 
 ## Installation
 
-### 1. Clone the Repository
-
 ```bash
-cd /home/lages/Physics/
-git clone <your-repo-url> desargues  # or use your existing directory
+git clone https://github.com/mentat-collective/desargues
 cd desargues
 ```
-
-### 2. Install Manim with Conda
 
 Create a conda environment with Manim Community Edition:
 
 ```bash
-# Create conda environment
 conda create -n manim python=3.12
-
-# Activate the environment
 conda activate manim
-
-# Install Manim
 conda install -c conda-forge manim
-
-# Install additional dependencies
-pip install latex2py
+manim --version          # e.g. Manim Community v0.18.x
 ```
 
-### 3. Verify Manim Installation
+Clojure dependencies resolve on first use (`clojure -P` to pre-fetch).
+
+## Configuration
+
+Python/Manim paths are **derived from the environment** — nothing is hardcoded in
+source. `desargues.config` resolves them once, at the boundary:
+
+1. It reads `DESARGUES_CONDA_PREFIX`, else `CONDA_PREFIX`, as the conda env root.
+2. From that root it probes `<prefix>/bin/python`,
+   `<prefix>/lib/libpython<abi>.so`, and the env's `site-packages`
+   (abi probed newest-first: 3.13 → 3.10).
+
+So activating the env is usually all you need:
 
 ```bash
-# Test Manim
-manim --version
-
-# Should output something like:
-# Manim Community v0.18.1
+conda activate manim     # sets CONDA_PREFIX; desargues.config picks it up
 ```
 
-### 4. Update Python Paths in Code
+To target a manim env that is *not* the active one, or to override any single
+path, set the corresponding variable:
 
-The project is currently configured for the following paths:
-- Python executable: `/home/lages/anaconda3/envs/manim/bin/python`
-- Library path: `/home/lages/anaconda3/envs/manim/lib/libpython3.12.so`
+| Variable | Purpose |
+|---|---|
+| `DESARGUES_CONDA_PREFIX` | conda env root (wins over `CONDA_PREFIX`) |
+| `DESARGUES_MANIM_PYTHON` | python executable |
+| `DESARGUES_MANIM_LIBPYTHON` | `libpython*.so` |
+| `DESARGUES_MANIM_SITEPACKAGES` | site-packages dir |
+| `DESARGUES_PROJECT_ROOT` | root prepended to Python `sys.path` for `.py` scenes |
+| `DESARGUES_QUALITY` | render quality (default `medium_quality`) |
 
-If your conda installation is in a different location, update these paths in `src/desargues/manim_quickstart.clj`:
+`(desargues.config/manim-config)` returns the resolved map and throws a clear
+error if no env is detected and no overrides are given.
 
-```clojure
-(defn init! []
-  (py/initialize!
-   :python-executable "/YOUR/PATH/TO/anaconda3/envs/manim/bin/python"
-   :library-path "/YOUR/PATH/TO/anaconda3/envs/manim/lib/libpython3.12.so")
-  ...)
-```
+## Quick start
 
-### 5. Install Clojure Dependencies
-
-```bash
-lein deps
-```
-
-## Quick Start
-
-### Run the Main Demo
-
-Generate a derivative animation (sin(x) → cos(x)):
-
-```bash
-lein run
-```
-
-This will:
-1. Initialize Python and Manim
-2. Compute the derivative of sin(x) using Emmy
-3. Generate LaTeX representations
-4. Render a Manim animation
-5. Save the video to `media/videos/1080p60/FunctionAndDerivative.mp4`
-
-**Output:**
-```
-=== Varcalc: Mathematical Animation Generator ===
-
-Initializing Python and Manim...
-Python initialized!
-
-Creating mathematical function: sin(x)
-Computing derivative using Emmy...
-
-LaTeX representations:
-  f(x)  = \sin\left(x\right)
-  f'(x) = \cos\left(x\right)
-
-Rendering animation...
-✓ Animation complete!
-Video saved to: media/videos/1080p60/
-```
-
-### View the Generated Video
-
-```bash
-# On Linux with default video player
-xdg-open media/videos/1080p60/FunctionAndDerivative.mp4
-
-# Or manually browse to:
-cd media/videos/1080p60/
-ls -lh *.mp4
-```
-
-Videos are organized by resolution:
-- `media/videos/1080p60/` - Full HD (default)
-- `media/videos/480p15/` - Low quality (faster rendering)
-
-## Running Tests
-
-Run the test suite to verify everything works:
-
-```bash
-lein test
-```
-
-Expected output:
-```
-Testing desargues.manim-test
-
-Ran 14 tests containing 14 assertions.
-0 failures, 0 errors.
-```
-
-## Usage Examples
-
-### Interactive REPL
-
-Start a REPL session to explore interactively:
-
-```bash
-lein repl
-```
-
-#### Basic Example: Explore a Function
-
-```clojure
-(require '[desargues.emmy-manim-examples :as ex])
-(require '[desargues.manim-quickstart :as mq])
-(require '[emmy.env :as e :refer [sin cos square D pi]])
-
-;; Initialize
-(mq/init!)
-
-;; Explore a function and its derivative
-(ex/explore-function #(square (sin %)))
-;; Returns:
-;; {:function {:expr (expt (sin x) 2)
-;;             :latex "\\sin^{2}\\left(x\\right)"
-;;             :python ...}
-;;  :derivative {:expr (* 2 (sin x) (cos x))
-;;               :latex "2 \\cos\\left(x\\right) \\sin\\left(x\\right)"
-;;               :python ...}}
-```
-
-#### Pre-made Animation Examples
-
-```clojure
-;; Chain rule example: sin²(x + 3)
-(ex/example-chain-rule)
-
-;; Taylor series visualization
-(ex/example-taylor-series)
-
-;; Product rule demonstration
-(ex/example-product-rule)
-
-;; Quadratic function and derivative
-(ex/example-quadratic)
-```
-
-#### Custom Function Animation
-
-```clojure
-(require '[emmy.env :as e])
-
-;; Define your own function
-(defn my-func [x]
-  (* (e/exp x) (e/sin x)))
-
-;; Create derivative animation
-(ex/create-derivative-animation my-func)
-```
-
-#### Using the Clean API (SOLID/DDD)
+### High-level API — symbolic → animation
 
 ```clojure
 (require '[desargues.api :as v])
-(require '[desargues.manim-quickstart :as mq])
+(require '[emmy.env :as e])
 
-;; Initialize
-(mq/init!)
+(v/init!)                          ; bring up Python/Manim (via desargues.config)
 
-;; Create expressions
-(def f (v/expr '(+ (* x x) (* 3 x) 2)))
-(def df (v/derivative f))
+(def f  (v/func "f" #(e/sin %)))   ; a MathFunction
+(def df (v/derivative f))          ; Emmy differentiates functions
 
-;; Get LaTeX
-(v/latex f)    ;; => "x^{2} + 3 x + 2"
-(v/latex df)   ;; => "2 x + 3"
-
-;; Build and render a scene
-(-> (v/scene)
-    (v/show f)
-    (v/wait 1)
-    (v/transform f df)
-    (v/wait 1)
-    (v/render!))
+(v/to-latex f)                     ; => "\\sin\\left(x\\right)"
+(v/to-latex df)                    ; => "\\cos\\left(x\\right)"
+(v/animate-derivative f)           ; render f and f' side by side
 ```
-
-## Project Structure
 
 ```
 desargues/
@@ -276,111 +136,75 @@ desargues/
 └── project.clj                           # Leiningen project file
 ```
 
-## Common Tasks
+### Backend-neutral scene facade — the DIP seam
 
-### Change Video Quality
-
-Edit the quality settings in `src/desargues/manim_quickstart.clj`:
+The *same* construct function renders under Manim or records to pure EDN:
 
 ```clojure
-(defn render-scene!
-  [scene]
-  (py/call-attr scene "render"
-                :quality "low_quality"    ; or "medium_quality", "high_quality"
-                :preview false))
+(require '[desargues.scene :as s])
+(require '[desargues.scene.data :as rec])
+
+(defn construct [stage]
+  (let [t (s/text "Hello")]
+    (s/play! stage (s/appear t))
+    (s/hold! stage 2)))
+
+;; Pure — no Python, returns an EDN scene graph you can assert on
+(s/with-backend (rec/recording-backend)
+  (s/render! "demo" construct {}))
+
+;; The real animation (the Manim backend is the lazy default)
+(s/render! "demo" construct {})
 ```
 
-Quality options:
-- `low_quality`: 480p15 - Fast rendering for testing
-- `medium_quality`: 720p30 - Balanced
-- `high_quality`: 1080p60 - Best quality (default)
-
-### Add Custom Scenes
-
-1. Create a Python scene in a `.py` file:
-
-```python
-from manim import *
-
-class MyScene(Scene):
-    def construct(self):
-        text = Text("Hello from Manim!")
-        self.play(Write(text))
-        self.wait(2)
-```
-
-2. Render from Clojure:
+### Layout algebra
 
 ```clojure
-(require '[desargues.emmy-manim-examples :as ex])
+(require '[desargues.api :as v])
 
-(ex/render-emmy-scene "MyScene")
+(v/render-layout!
+  (v/column {:padding 0.6 :spacing 0.4 :align :center-x}
+    (v/text "Reserves")
+    (v/math "\\Delta M = 1000")))
 ```
 
-### Explore Multiple Derivatives
+## Architecture
 
-```clojure
-(require '[emmy.env :as e])
-(require '[desargues.emmy-manim :as em])
+Layered, with the dependency arrow pointing inward toward the pure domain:
 
-;; Function and its first 3 derivatives
-(let [f #(e/sin %)
-      df1 (e/D f)
-      df2 (e/D df1)
-      df3 (e/D df2)]
-  (map #(em/emmy->latex (% 'x)) [f df1 df2 df3]))
-
-;; => ["\\sin\\left(x\\right)"
-;;     "\\cos\\left(x\\right)"
-;;     "-\\sin\\left(x\\right)"
-;;     "-\\cos\\left(x\\right)"]
+```
+api            desargues.api            high-level facade (symbolic → animation)
+scene facade   desargues.scene          backend-neutral animation API  ── DIP seam
+  ├ backend    desargues.scene.manim    ManimBackend  (draws via libpython-clj)
+  └ backend    desargues.scene.data     RecordingBackend (records EDN, no Python)
+layout         desargues.layout.*       elm-ui layout algebra + pure extent measure
+manim          desargues.manim.*        low-level Manim mobject/animation bindings
+domain         desargues.domain.*       pure Clojure + Emmy, Typed-Clojure-annotated
+config         desargues.config         env-derived settings (the Collect layer)
 ```
 
-## Troubleshooting
+The seam is `desargues.scene.protocols`: both backends implement the same
+protocols, so consumers depend on the abstraction, never on Manim
+(Dependency Inversion). Because the pure `RecordingBackend` and the Manim backend
+are interchangeable behind that facade (Liskov substitution), the neutrality is
+*checkable* — run any scene through the recording backend and assert on the data.
 
-### Python Module Not Found
+## Build & development (tools.deps)
 
-**Error:** `ModuleNotFoundError: No module named 'manim'`
+desargues builds with the Clojure CLI (`deps.edn`); a `bb.edn` is provided for
+babashka. Aliases: `:run`, `:dev`, `:test`.
 
-**Solution:** Ensure the conda environment is activated and paths are correct:
 ```bash
-conda activate manim
-which python  # Should show /path/to/anaconda3/envs/manim/bin/python
+clojure -M:run                                  # render the demo (needs the manim env)
+clojure -A:dev                                  # dev REPL: dev/ sources + orchestra + the checker
+clojure -M:dev -m desargues.typecheck           # static Typed Clojure gate
+clojure -M -m desargues.videos.render intro --low   # render a specific scene, low quality
 ```
 
-Update the paths in `src/desargues/manim_quickstart.clj` to match your system.
-
-### LaTeX Rendering Issues
-
-**Error:** `LaTeX Error: File 'preview.sty' not found`
-
-**Solution:** Install LaTeX packages:
-```bash
-# Ubuntu/Debian
-sudo apt-get install texlive texlive-latex-extra texlive-fonts-extra
-
-# macOS
-brew install --cask mactex
-```
-
-### Video Not Generated
-
-**Issue:** No video file in `media/videos/`
-
-**Solution:**
-1. Check for errors in the console output
-2. Try low quality rendering first: `:quality "low_quality"`
-3. Verify Manim works standalone: `manim --version`
-
-### Memory Issues
-
-**Issue:** Java heap space errors
-
-**Solution:** Increase JVM memory:
-```bash
-export LEIN_JVM_OPTS="-Xmx4g"
-lein run
-```
+Typed Clojure is split across the two classpaths: the annotation runtime
+(`typed.clj.runtime`) is a normal dependency because `desargues.domain.*` carry
+`t/ann`/`t/defalias` annotations, while the checker (`typed.clj.checker`) lives in
+the `:dev` alias — only `desargues.typecheck` needs it.
 
 ## Documentation
 
@@ -391,49 +215,13 @@ lein run
 
 ## Resources
 
-- **Emmy Documentation**: https://github.com/mentat-collective/emmy
-- **Manim Community**: https://www.manim.community/
-- **Manim Quickstart**: https://docs.manim.community/en/stable/tutorials/quickstart.html
-- **libpython-clj**: https://github.com/clj-python/libpython-clj
-
-## Examples Gallery
-
-After running the examples, you'll find videos like:
-
-1. **FunctionAndDerivative.mp4**: Side-by-side function and derivative
-2. **ChainRule.mp4**: Demonstrates chain rule with sin²(x + 3)
-3. **TaylorSeries.mp4**: Taylor series expansion visualization
-4. **ProductRule.mp4**: Product rule for derivatives
-5. **QuadraticFormula.mp4**: Quadratic formula derivation
-
-## Contributing
-
-Contributions welcome! Areas for improvement:
-
-- [ ] More pre-built animation scenes
-- [ ] Support for partial derivatives (multivariate calculus)
-- [ ] 3D plotting with Manim's ThreeDScene
-- [ ] Integration (not just differentiation)
-- [ ] Physics simulations
-- [ ] Better symbolic π rendering (use `'e/pi` for LaTeX)
+- Emmy — https://github.com/mentat-collective/emmy
+- Manim Community — https://www.manim.community/
+- libpython-clj — https://github.com/clj-python/libpython-clj
 
 ## License
 
-Copyright © 2025
-
-This program and the accompanying materials are made available under the
-terms of the Eclipse Public License 2.0 which is available at
-http://www.eclipse.org/legal/epl-2.0.
-
-This Source Code may also be made available under the following Secondary
-Licenses when the conditions for such availability set forth in the Eclipse
-Public License, v. 2.0 are satisfied: GNU General Public License as published by
-the Free Software Foundation, either version 2 of the License, or (at your
-option) any later version, with the GNU Classpath Exception which is available
-at https://www.gnu.org/software/classpath/license.html.
-
-## Acknowledgments
-
-- **Emmy**: Powerful symbolic mathematics in Clojure
-- **Manim Community**: Beautiful mathematical animations
-- **libpython-clj**: Seamless Clojure-Python interop
+This program and the accompanying materials are made available under the terms of
+the Eclipse Public License 2.0 (https://www.eclipse.org/legal/epl-2.0/), or (at
+your option) the GNU General Public License, version 2 or later, with the GNU
+Classpath Exception (https://www.gnu.org/software/classpath/license.html).

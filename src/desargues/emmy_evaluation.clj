@@ -2,6 +2,7 @@
   "Evaluate Emmy expressions at specific values and animate with Manim"
   (:require [emmy.env :as e :refer [->TeX simplify]]
             [libpython-clj2.python :as py]
+            [desargues.config :as config]
             [desargues.manim-quickstart :as mq]
             [desargues.emmy-manim :as em]))
 
@@ -32,8 +33,7 @@
   "Render an equation evaluation scene"
   [scene-name & args]
   ;; Add project directory to path
-  (let [sys (py/import-module "sys")]
-    (py/call-attr (py/get-attr sys "path") "insert" 0 "/home/lages/Physics/desargues"))
+  (config/add-project-to-syspath!)
 
   ;; Import and render
   (let [scenes (py/import-module "equation_evaluation_scenes")
@@ -67,8 +67,7 @@
     (println "Result:" result-latex)
 
     ;; Add project directory to path
-    (let [sys (py/import-module "sys")]
-      (py/call-attr (py/get-attr sys "path") "insert" 0 "/home/lages/Physics/desargues"))
+    (config/add-project-to-syspath!)
 
     ;; Create scene
     (let [scenes (py/import-module "equation_evaluation_scenes")
@@ -102,8 +101,7 @@
       (println (str "  f(" x ") = " result)))
 
     ;; Add project directory to path
-    (let [sys (py/import-module "sys")]
-      (py/call-attr (py/get-attr sys "path") "insert" 0 "/home/lages/Physics/desargues"))
+    (config/add-project-to-syspath!)
 
     ;; Create scene
     (let [scenes (py/import-module "equation_evaluation_scenes")
@@ -128,8 +126,7 @@
                          x-values)]
 
     ;; Add project directory to path
-    (let [sys (py/import-module "sys")]
-      (py/call-attr (py/get-attr sys "path") "insert" 0 "/home/lages/Physics/desargues"))
+    (config/add-project-to-syspath!)
 
     ;; Create scene
     (let [scenes (py/import-module "equation_evaluation_scenes")
@@ -166,8 +163,7 @@
     (println "Derivative:" df-latex "→" df-val-latex "at x =" x-val)
 
     ;; Add project directory to path
-    (let [sys (py/import-module "sys")]
-      (py/call-attr (py/get-attr sys "path") "insert" 0 "/home/lages/Physics/desargues"))
+    (config/add-project-to-syspath!)
 
     ;; Create scene
     (let [scenes (py/import-module "equation_evaluation_scenes")
@@ -203,8 +199,7 @@
                                 func-data)]
 
     ;; Add project directory to path
-    (let [sys (py/import-module "sys")]
-      (py/call-attr (py/get-attr sys "path") "insert" 0 "/home/lages/Physics/desargues"))
+    (config/add-project-to-syspath!)
 
     ;; Create scene
     (let [scenes (py/import-module "equation_evaluation_scenes")

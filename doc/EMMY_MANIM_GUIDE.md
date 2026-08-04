@@ -11,7 +11,7 @@ Emmy Expression → LaTeX → Python Code → Manim Animation
 ## Quick Start
 
 ```clojure
-(require '[varcalc.emmy-manim-examples :as ex])
+(require '[desargues.emmy-manim-examples :as ex])
 
 ;; Example 1: Your original example - sin²(x + 3)
 (ex/example-chain-rule)
@@ -28,7 +28,7 @@ Emmy Expression → LaTeX → Python Code → Manim Animation
 ### 1. Emmy → LaTeX
 
 ```clojure
-(require '[varcalc.emmy-manim :as em])
+(require '[desargues.emmy-manim :as em])
 (require '[emmy.env :refer [sin cos square D]])
 
 ;; Your example
@@ -60,9 +60,9 @@ Emmy Expression → LaTeX → Python Code → Manim Animation
 ### 4. Render in Manim
 
 ```clojure
-(require '[varcalc.manim-quickstart :as mq])
+(require '[desargues.manim-quickstart :as mq])
 
-;; Initialize
+;; Initialize (Python/Manim paths come from desargues.config)
 (mq/init!)
 
 ;; Render a LaTeX equation
@@ -75,7 +75,7 @@ Emmy Expression → LaTeX → Python Code → Manim Animation
 ### Example 1: Your Original Use Case
 
 ```clojure
-(require '[varcalc.emmy-manim-examples :as ex])
+(require '[desargues.emmy-manim-examples :as ex])
 
 ;; Show sin²(x + 3) with chain rule derivation
 (ex/example-chain-rule)
@@ -128,7 +128,7 @@ This will:
 ### Example 4: From Your Code
 
 ```clojure
-(require '[varcalc.emmy-python.equations :as eq])
+(require '[desargues.emmy-python.equations :as eq])
 
 ;; Use the functions you defined
 (em/emmy->latex (eq/expt1 'x))
@@ -143,7 +143,7 @@ This will:
 
 ## Available Manim Scenes
 
-All in `emmy_manim_scenes.py`:
+All in `py/emmy_manim_scenes.py`:
 
 ### FunctionAndDerivative
 Shows a function and its derivative side by side
@@ -198,7 +198,7 @@ Quadratic formula animation
 
 ### Option 1: Add to Python file
 
-Add your scene to `emmy_manim_scenes.py`:
+Add your scene to `py/emmy_manim_scenes.py`:
 
 ```python
 class MyCustom(Scene):
@@ -224,9 +224,9 @@ Use from Clojure:
 Pass Emmy-generated LaTeX to existing scenes:
 
 ```clojure
-;; Add project path
-(let [sys (py/import-module "sys")]
-  (py/call-attr (py/get-attr sys "path") "insert" 0 "/home/lages/Physics/varcalc"))
+;; Add the project's scene dir to Python's sys.path.
+;; Replaces the old hardcoded (sys.path.insert 0 "/abs/path") snippet.
+(desargues.config/add-project-to-syspath!)
 
 ;; Import and use
 (let [scenes (py/import-module "emmy_manim_scenes")
@@ -242,8 +242,8 @@ Pass Emmy-generated LaTeX to existing scenes:
 ## Complete Workflow Example
 
 ```clojure
-(require '[varcalc.emmy-manim-examples :as ex])
-(require '[varcalc.emmy-manim :as em])
+(require '[desargues.emmy-manim-examples :as ex])
+(require '[desargues.emmy-manim :as em])
 (require '[emmy.env :refer [sin cos square exp D pi]])
 
 ;; 1. Define a function
@@ -275,10 +275,10 @@ Pass Emmy-generated LaTeX to existing scenes:
 
 ## Integration with Your Code
 
-Your `varcalc.emmy-python.equations` namespace:
+Your `desargues.emmy-python.equations` namespace:
 
 ```clojure
-(ns varcalc.emmy-python.equations
+(ns desargues.emmy-python.equations
   (:require [emmy.env :as e :refer :all]))
 
 (defn expt1 [x]
@@ -288,8 +288,8 @@ Your `varcalc.emmy-python.equations` namespace:
 Use it:
 
 ```clojure
-(require '[varcalc.emmy-python.equations :as eq])
-(require '[varcalc.emmy-manim-examples :as ex])
+(require '[desargues.emmy-python.equations :as eq])
+(require '[desargues.emmy-manim-examples :as ex])
 
 ;; Animate expt1 and its derivative
 (ex/create-derivative-animation eq/expt1)
@@ -350,7 +350,7 @@ media/videos/1080p60/<SceneName>.mp4
 
 1. Try the examples: `(ex/example-chain-rule)`
 2. Explore your functions: `(ex/explore-function eq/expt1)`
-3. Create custom animations by adding scenes to `emmy_manim_scenes.py`
+3. Create custom animations by adding scenes to `py/emmy_manim_scenes.py`
 4. Combine with symbolic simplification for equation transformations
 
 Happy mathematical animating! 📐✨
