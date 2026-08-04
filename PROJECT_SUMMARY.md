@@ -101,7 +101,7 @@ src/desargues/
 ├── brachistochrone.clj         # Physics example (brachistochrone curve)
 └── brachistochrone_pure.clj    # Pure Clojure physics simulation
 
-docs/
+doc/
 ├── BOUNDED_CONTEXTS.md         # DDD bounded context documentation
 └── ADR_CODE_QUALITY.md         # Architecture Decision Record for code standards
 
@@ -130,7 +130,7 @@ dev/
 
 ## Architecture Decision Record (ADR)
 
-**See `docs/ADR_CODE_QUALITY.md`** for comprehensive code quality standards.
+**See `doc/ADR_CODE_QUALITY.md`** for comprehensive code quality standards.
 
 This codebase follows **SOLID principles** and **GoF design patterns**. Key patterns:
 
@@ -948,5 +948,5 @@ Use `--low` flag or `:quality :low` for fast iteration during development.
 ## Related Documentation
 
 - **`CLAUDE.md`** - Instructions for Claude Code AI assistant
-- **`docs/BOUNDED_CONTEXTS.md`** - DDD bounded context documentation
-- **`docs/ADR_CODE_QUALITY.md`** - Architecture Decision Record for code standards
+- **`doc/BOUNDED_CONTEXTS.md`** - DDD bounded context documentation
+- **`doc/ADR_CODE_QUALITY.md`** - Architecture Decision Record for code standards

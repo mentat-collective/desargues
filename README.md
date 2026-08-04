@@ -92,8 +92,48 @@ error if no env is detected and no overrides are given.
 
 (v/to-latex f)                     ; => "\\sin\\left(x\\right)"
 (v/to-latex df)                    ; => "\\cos\\left(x\\right)"
-
 (v/animate-derivative f)           ; render f and f' side by side
+```
+
+```
+desargues/
+├── src/desargues/
+│   ├── core.clj                          # Main entry point (lein run)
+│   ├── manim_quickstart.clj              # Basic Manim setup
+│   ├── emmy_manim.clj                    # Emmy → LaTeX → Python
+│   ├── emmy_manim_examples.clj           # Complete examples & workflows
+│   ├── emmy_evaluation.clj               # Equation evaluation
+│   ├── api.clj                           # Clean Facade API
+│   │
+│   ├── domain/                           # Domain Layer (DDD)
+│   │   ├── protocols.clj                 # Core protocols/interfaces
+│   │   ├── math_expression.clj           # Domain entities
+│   │   └── services.clj                  # Domain services
+│   │
+│   ├── infrastructure/                   # Infrastructure Layer
+│   │   └── manim_adapter.clj             # Manim integration
+│   │
+│   └── emmy_python/                      # Emmy-Python bridge
+│       └── equations.clj                 # Sample equations
+│
+├── test/desargues/
+│   └── manim_test.clj                    # Integration tests
+│
+├── *.py                                  # Python scene definitions
+│   ├── manim_examples.py                 # Basic scenes
+│   ├── emmy_manim_scenes.py              # Emmy-driven scenes
+│   └── equation_evaluation_scenes.py     # Evaluation scenes
+│
+├── media/videos/                         # Generated videos (gitignored)
+│
+├── doc/                                  # Documentation
+│   ├── ARCHITECTURE.md                   # SOLID/DDD architecture guide
+│   ├── CLEAN_API_GUIDE.md                # Clean API usage guide
+│   ├── EMMY_MANIM_GUIDE.md               # Emmy integration guide
+│   └── ...                               # Additional guides
+│
+├── README.md                             # This file
+└── project.clj                           # Leiningen project file
 ```
 
 ### Backend-neutral scene facade — the DIP seam
@@ -168,10 +208,10 @@ the `:dev` alias — only `desargues.typecheck` needs it.
 
 ## Documentation
 
-- [`PROJECT_SUMMARY.md`](PROJECT_SUMMARY.md) — design overview and module tour
-- [`doc/ARCHITECTURE.md`](doc/ARCHITECTURE.md) — SOLID/DDD design patterns
-- [`docs/BOUNDED_CONTEXTS.md`](docs/BOUNDED_CONTEXTS.md) — domain boundaries
-- [`doc/EMMY_MANIM_GUIDE.md`](doc/EMMY_MANIM_GUIDE.md) — Emmy integration & LaTeX conversion
+- **[ARCHITECTURE.md](doc/ARCHITECTURE.md)**: SOLID/DDD design patterns used in the project
+- **[CLEAN_API_GUIDE.md](doc/CLEAN_API_GUIDE.md)**: Guide to the clean API facade
+- **[EMMY_MANIM_GUIDE.md](doc/EMMY_MANIM_GUIDE.md)**: Emmy integration and LaTeX conversion
+- **[EQUATION_EVALUATION_GUIDE.md](doc/EQUATION_EVALUATION_GUIDE.md)**: Evaluating functions and creating tables
 
 ## Resources
 
