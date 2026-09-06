@@ -37,16 +37,46 @@
 ;; Entity: MathExpression (has identity and behavior)
 ;; ============================================================================
 
-(t/ann-record MathExpression
-              [id :- types/ExpressionId
-               expr :- types/EmmyExpr
-               latex :- (t/U nil types/LaTeXString)
-               python-code :- (t/U nil types/PythonCodeString)
-               metadata :- (t/Map t/Kw t/Any)])
+(t/ann-datatype MathExpression
+                [id :- types/ExpressionId
+                 expr :- types/EmmyExpr
+                 latex :- (t/U nil types/LaTeXString)
+                 python-code :- (t/U nil types/PythonCodeString)
+                 metadata :- (t/Map t/Kw t/Any)])
 
-(defrecord MathExpression [id expr latex python-code metadata]
+(deftype MathExpression [id expr latex python-code metadata]
+  ;; Value semantics: equality is structural over every field; the HASH is
+  ;; computed over every field EXCEPT :expr, whose content is already fixed
+  ;; by the content-derived :id. (A defrecord would hash :expr directly, and
+  ;; engine expressions are = without agreeing on hashCode.)
+  clojure.lang.ILookup
+  (valAt [this k] (.valAt this k nil))
+  (valAt [_ k not-found]
+    (case k
+      :id id
+      :expr expr
+      :latex latex
+      :python-code python-code
+      :metadata metadata
+      not-found))
+  clojure.lang.IHashEq
+  (hasheq [_] (hash [::math-expression id latex python-code metadata]))
   Object
+  (hashCode [this] (.hasheq this))
+  (equals [_ other]
+    (and (instance? MathExpression other)
+         (let [^MathExpression o other]
+           (and (= id (.-id o))
+                (= latex (.-latex o))
+                (= python-code (.-python-code o))
+                (= metadata (.-metadata o))
+                (= expr (.-expr o))))))
   (toString [_] (str "MathExpression[" id "]: " latex)))
+
+(defmethod print-method MathExpression [^MathExpression x ^java.io.Writer w]
+  (.write w (str "#desargues/MathExpression "
+                 (pr-str {:id (.-id x) :expr (.-expr x) :latex (.-latex x)
+                          :python-code (.-python-code x) :metadata (.-metadata x)}))))
 
 (t/ann create-expression
        (t/IFn [types/EmmyExpr :-> MathExpression]
@@ -54,14 +84,14 @@
 
 (defn create-expression
   "Factory: Create a mathematical expression from Emmy form.
-   Id is derived from the expression's canonical printed form so that
-   value-equal expressions get value-equal ids (Emmy Literals are = but
-   violate the hashCode contract, so we hash the stable string form)."
+   Id is derived from the expression's content key (engine kind + printed
+   form), so value-equal expressions get value-equal ids and a bare
+   s-expression never shares an id with the engine expression it prints as."
   ([expr]
    (create-expression expr {}))
   ([expr metadata]
    (->MathExpression
-    (symbol (str "expr-" (Integer/toHexString (hash (str expr)))))
+    (symbol (str "expr-" (Integer/toHexString (hash (m/content-key expr)))))
     expr
     nil
     nil
@@ -87,13 +117,24 @@
        (t/IFn [t/Sym t/Any :-> MathFunction]
               [t/Sym t/Any (t/U nil (t/Vec t/Num)) (t/U nil (t/Vec t/Num)) (t/Map t/Kw t/Any) :-> MathFunction]))
 
+(defn- function-content-key
+  "Content key for a function: its symbolic image at a free variable when it
+   has one, else its identity. Distinguishes (create-function 'f sin) from
+   (create-function 'f cos) under the same name."
+  [f]
+  (try (m/content-key (f 'x))
+       (catch Throwable _ [:opaque (System/identityHashCode f)])))
+
 (defn create-function
-  "Factory: Create a mathematical function"
+  "Factory: Create a mathematical function. Id is derived from name, domain,
+   codomain AND the function's content key, so two functions differing only in
+   :f never share an id."
   ([name f]
    (create-function name f nil nil {}))
   ([name f domain codomain metadata]
    (->MathFunction
-    (symbol (str "func-" (Integer/toHexString (hash [name domain codomain]))))
+    (symbol (str "func-" (Integer/toHexString
+                          (hash [name domain codomain (function-content-key f)]))))
     name
     f
     domain
@@ -176,6 +217,9 @@
   (derivative-at [this point]
     ((m/differentiate (:f this)) (:value point)))
   (nth-derivative [this n]
+    (when-not (nat-int? n)
+      (throw (ex-info "nth-derivative: n must be a non-negative integer"
+                      {:n n :function (:name this)})))
     (create-function
      (symbol (str (:name this) "^(" n ")"))
      (reduce (fn [g _] (m/differentiate g)) (:f this) (range n))
