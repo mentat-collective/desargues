@@ -224,6 +224,20 @@ html, body, #app {
   line-height: 1.45;
   tab-size: 2;
 }
+/* Reveal's stepped line highlights clone the <code> once per step and stack
+   the clones absolutely (.hljs:not(:first-child).fragment). Three things keep
+   the steps from painting over each other as a ghost, worst once the box
+   scrolls or the slide is scaled: the pre is the positioning box, a clone is
+   opaque, and a clone that is no longer the current step is not painted. */
+.reveal .plato-code {
+  position: relative;
+}
+.reveal .plato-code code.fragment {
+  background: var(--plato-panel);
+}
+.reveal .plato-code code.fragment.visible:not(.current-fragment) {
+  visibility: hidden;
+}
 
 /* ── prose: quote, cite, list, kicker ───────────────────────────────────── */
 

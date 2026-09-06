@@ -11,7 +11,9 @@
             [emmy.env :as e]
             [plato.content :as content]
             [plato.deck :as deck]
-            [plato.desargues :as desargues]))
+            [plato.desargues :as desargues]
+            [desargues.videos.physics :as phys]
+            [clojure.string :as str]))
 
 ;; ── scenes, computed by the library ─────────────────────────────────────────
 
@@ -100,6 +102,67 @@
 (def derivative
   (pipe/derivative-spec (fn [x] (e/exp (e/sin x)))))
 
+(def f-sin-exp (fn [x] (e/exp (e/sin x))))
+
+(defn- tex-of [expr] (:content (pipe/promote-latex (e/simplify expr))))
+
+(def derivative-tower
+  "f, f', f'', f''' of e^{sin x}, each differentiated and simplified by Emmy."
+  (mapv (fn [k] (tex-of ((nth (iterate e/D f-sin-exp) k) 'x))) (range 4)))
+
+(def taylor-terms
+  "The first five Taylor terms of e^{sin x} at 0 (the zero term dropped)."
+  (->> ((e/taylor-series f-sin-exp 0) 'x)
+       (take 5)
+       (map e/simplify)
+       (remove #(and (number? %) (zero? %)))
+       (mapv tex-of)))
+
+(def derivatives-source
+  "(def f (fn [x] (e/exp (e/sin x))))
+
+(mapv #(e/->TeX (e/simplify ((nth (iterate e/D f) %) 'x))) (range 4))
+;; f, f', f'', f'''  as LaTeX, ready for KaTeX or for Manim's MathTex
+
+(take 5 ((e/taylor-series f 0) 'x))
+;; => (1 x (* 1/2 (expt x 2)) 0 (* -1/8 (expt x 4)))")
+
+(def curve-f (fn [x] (e/sin x)))
+(def curve-df (e/D curve-f))
+
+(defn derivative-construct
+  "y = sin x drawn as dots; a gold point walks the curve while a seven-dot
+   tangent follows the slope Emmy's D returns and a readout shows f'(x)."
+  [stage]
+  (let [sx 1.0 sy 1.6 oy -0.4
+        P (fn [x] [(* sx x) (+ oy (* sy (curve-f x)))])
+        tangent-pts (fn [x] (let [m (curve-df x)]
+                              (mapv (fn [i] (let [h (* i 0.28)] [(* sx (+ x h)) (+ oy (* sy (+ (curve-f x) (* m h))))]))
+                                    (range -3 4))))
+        title  (-> (s/text "f(x) = sin x, and Emmy's f'(x) = cos x as a slope" :font-size 30 :color :white)
+                   (s/move-to [0 3.3]))
+        curve  (mapv (fn [x] (-> (s/dot :color :grey :radius 0.04) (s/move-to (P x))))
+                     (range -6.0 6.01 0.2))
+        xs     (vec (range -6.0 6.01 0.3))
+        tang   (mapv (fn [p] (-> (s/dot :color :teal :radius 0.06) (s/move-to p))) (tangent-pts (first xs)))
+        point  (-> (s/circle :radius 0.18 :color :gold) (s/move-to (P (first xs))) (s/fill! :gold :opacity 0.9))
+        label  (-> (s/text "f'(x) =" :font-size 30 :color :grey) (s/move-to [4.4 -3.0]))
+        slope  (-> (s/decimal (curve-df (first xs)) :font-size 30 :color :gold :num-decimal-places 2)
+                   (s/move-to [5.7 -3.0]))]
+    (s/play! stage (s/appear title :run-time 0.5))
+    (s/play! stage (s/stagger (map #(s/appear % :run-time 0.2) curve) :lag-ratio 0.02))
+    (s/play! stage (s/together (concat [(s/draw point :run-time 0.4) (s/appear label :run-time 0.4) (s/appear slope :run-time 0.4)]
+                                       (map #(s/appear % :run-time 0.4) tang))))
+    (doseq [x (rest xs)]
+      (s/play! stage (s/together (concat [(s/glide point (P x) :run-time 0.15)
+                                          (s/count-to slope (curve-df x) :run-time 0.15)]
+                                         (map (fn [d p] (s/glide d p :run-time 0.15)) tang (tangent-pts x))))))
+    (s/hold! stage 1)))
+
+(def derivative-graph
+  (s/with-backend (rec/recording-backend)
+    (s/render! "desargues-derivative" derivative-construct)))
+
 (defn- tex [s] (str "\\(" s "\\)"))
 
 ;; ── sources quoted on slides ────────────────────────────────────────────────
@@ -142,6 +205,38 @@ clojure -M:doctor             # JVM ok? Manim env ok? LaTeX? ffmpeg?")
 
 (phys/evolve pendulum {:dt 0.01 :duration 10.0})                          ; RK4 in Clojure
 (phys/evolve pendulum {:dt 0.01 :duration 10.0 :solver (ra/raster-solver :tsit5)}) ; adaptive, resampled onto the dt grid")
+
+(def pendulum
+  (phys/make-pendulum {:length 3.0 :damping 0.12 :initial-theta 1.1 :top-point [0 2.2 0]}))
+
+(defn pendulum-construct
+  "The pendulum integrated by phys/evolve (RK4, dt 0.01), sampled every 0.1 s;
+   each sample is one glide of the bob while a clock counts the seconds."
+  [stage]
+  (let [samples (take-nth 10 (phys/evolve pendulum {:dt 0.01 :duration 8.0}))
+        pts     (mapv (fn [{:keys [state]}]
+                        (let [[x y] (phys/pendulum-position pendulum state)] [x y]))
+                      samples)
+        title   (-> (s/text "Damped pendulum: phys/evolve, RK4 at dt = 0.01" :font-size 30 :color :white)
+                    (s/move-to [0 3.3]))
+        pivot   (-> (s/dot :color :grey) (s/move-to [0 2.2]))
+        bob     (-> (s/circle :radius 0.32 :color :gold)
+                    (s/move-to (first pts))
+                    (s/fill! :gold :opacity 0.7))
+        clock   (-> (s/decimal 0 :font-size 30 :color :grey :num-decimal-places 1)
+                    (s/move-to [5.2 -3.0]))
+        unit    (-> (s/text "s" :font-size 26 :color :grey) (s/move-to [5.9 -3.0]))]
+    (s/play! stage (s/together [(s/appear title :run-time 0.5) (s/appear pivot :run-time 0.5)
+                                (s/draw bob :run-time 0.5) (s/appear clock :run-time 0.5)
+                                (s/appear unit :run-time 0.5)]))
+    (doseq [[i p] (map-indexed vector (rest pts))]
+      (s/play! stage (s/together [(s/glide bob p :run-time 0.1)
+                                  (s/count-to clock (* 0.1 (inc i)) :run-time 0.1)])))
+    (s/hold! stage 1)))
+
+(def pendulum-graph
+  (s/with-backend (rec/recording-backend)
+    (s/render! "desargues-pendulum" pendulum-construct)))
 
 ;; ── the deck ────────────────────────────────────────────────────────────────
 
@@ -240,6 +335,37 @@ clojure -M:doctor             # JVM ok? Manim env ok? LaTeX? ffmpeg?")
       {:overflow :shrink
        :notes "desargues.pipeline.emmy is pure CPPB: Collect, Promote, Pipeline, Boundary. The Python code step is the only boundary."})
 
+     (deck/stack
+      :derivatives
+      [(deck/slide
+        :derivatives-tower
+        [:div
+         [:h3 "Differentiate until it stops being obvious"]
+         [:p "Four derivatives of " (tex "e^{\\sin x}") ", each computed and simplified by Emmy when this page was built:"]
+         (into [:div {:style "text-align:left;font-size:0.95em"}]
+               (map-indexed (fn [k t]
+                              [:p {:class (when (pos? k) "fragment")}
+                               (tex (str "f" (apply str (repeat k "'")) "(x) = " t))])
+                            derivative-tower))]
+        {:overflow :shrink
+         :notes "(iterate e/D f) on the JVM, then ->TeX, then KaTeX in the page. Nothing here is typed by hand."})
+       (deck/slide
+        :derivatives-scene
+        (desargues/scene derivative-graph {:controls? true :autoplay? true})
+        {:transition :fade
+         :notes "The teal dots are the tangent: slope from ((e/D sin) x) at every step, the readout counts the same number."})
+       (deck/slide
+        :derivatives-taylor
+        [:div
+         [:h3 "The Taylor series, term by term"]
+         [:p "Emmy's " [:code "taylor-series"] " is a lazy stream of terms; the deck takes the first five:"]
+         [:p {:style "font-size:1.2em"}
+          (tex (str "e^{\\sin x} = "
+                    (str/replace (str/join " + " taylor-terms) "+ \\frac{-1}" "- \\frac{1}")
+                    " + \\cdots"))]
+         (content/code :clojure derivatives-source)]
+        {:overflow :shrink})])
+
      (deck/slide
       :physics
       [:div
@@ -248,6 +374,12 @@ clojure -M:doctor             # JVM ok? Manim env ok? LaTeX? ffmpeg?")
         [:code ":dynamics"] " alias adds raster's Tsit5 and DP5, resampled onto the frame grid."]
        (content/code :clojure solver-source)]
       {:overflow :shrink})
+
+     (deck/slide
+      :physics-sim
+      (desargues/scene pendulum-graph {:controls? true :autoplay? true})
+      {:transition :fade
+       :notes "phys/evolve with the Clojure RK4 stepper, dt 0.01, sampled every 0.1 s; each sample is one glide of the bob. Same trajectory the Manim backend would draw."})
 
      (deck/stack
       :bench
