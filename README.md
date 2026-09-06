@@ -9,7 +9,7 @@ It computes derivatives symbolically, converts them to LaTeX, and renders them
 behind a **backend-neutral scene facade**: the same scene code writes an mp4
 under Manim, or records a pure EDN scene graph with no Python at all.
 
-**Landing page:** <https://mentat-collective.github.io/desargues/> — a
+**Landing page:** <https://mentat.org/desargues/> — a
 [plato](https://github.com/BuddhiLW/plato) deck built by desargues itself, with
 live scenes and the benchmark charts below.
 
