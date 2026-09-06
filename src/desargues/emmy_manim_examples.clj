@@ -5,7 +5,8 @@
             [desargues.config :as config]
             [desargues.manim-quickstart :as mq]
             [desargues.emmy-manim :as em]
-            [desargues.emmy-python.equations :as eq]))
+            [desargues.emmy-python.equations :as eq]
+            [desargues.pipeline.emmy :as conv]))
 
 ;; ============================================================================
 ;; Helper Functions
@@ -26,23 +27,18 @@
     (mq/render-scene! scene)))
 
 (defn create-derivative-animation
-  "Create an animation showing a function and its derivative"
+  "Boundary: render a function-and-derivative scene. The spec comes from the
+   pure conveyor (desargues.pipeline.emmy/derivative-spec); only the Python
+   scene construction and render below are effects."
   [f]
-  (let [df (D f)
-        f-latex (em/emmy->latex (f 'x))
-        df-latex (em/emmy->latex (df 'x))]
-
-    (println "Function:" f-latex)
-    (println "Derivative:" df-latex)
-
-    ;; Add project directory to path
+  (let [{:keys [func-latex deriv-latex]} (conv/derivative-spec f)]
+    (println "Function:" func-latex)
+    (println "Derivative:" deriv-latex)
     (config/add-project-to-syspath!)
-
-    ;; Create and render scene
     (let [scenes (py/import-module "emmy_manim_scenes")
           FunctionAndDerivative (py/get-attr scenes "FunctionAndDerivative")
-          scene (FunctionAndDerivative :func_latex (str "f(x) = " f-latex)
-                                       :deriv_latex (str "f'(x) = " df-latex))]
+          scene (FunctionAndDerivative :func_latex (str "f(x) = " func-latex)
+                                       :deriv_latex (str "f'(x) = " deriv-latex))]
       (mq/render-scene! scene))))
 
 ;; ============================================================================

@@ -2,16 +2,18 @@
   "Bridge between Emmy (symbolic math) and Manim (animations)"
   (:require [emmy.env :as e :refer [->TeX D simplify sin cos square exp log]]
             [libpython-clj2.python :as py]
-            [desargues.manim-quickstart :as mq]))
+            [desargues.manim-quickstart :as mq]
+            [desargues.pipeline.emmy :as conv]))
 
 ;; ============================================================================
 ;; Emmy to LaTeX
 ;; ============================================================================
 
 (defn emmy->latex
-  "Convert an Emmy expression to LaTeX string"
+  "Convert an Emmy expression to a LaTeX string (the conveyor's Promote stage;
+   kept here as the historical entry point)."
   [expr]
-  (->TeX expr))
+  (:content (conv/promote-latex expr)))
 
 ;; ============================================================================
 ;; LaTeX to Python (using latex2py)
@@ -29,11 +31,11 @@
 ;; ============================================================================
 
 (defn emmy->python
-  "Convert Emmy expression to Python code via LaTeX"
+  "Convert an Emmy expression to Python code via LaTeX: the pure conveyor
+   with this namespace's Python-backed latex->python injected as the
+   boundary converter."
   [expr]
-  (-> expr
-      emmy->latex
-      latex->python))
+  (conv/python-code expr latex->python))
 
 ;; ============================================================================
 ;; Manim Integration
