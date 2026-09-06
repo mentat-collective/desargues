@@ -7,6 +7,11 @@
 
 (def ^:dynamic *python-initialized* false)
 
+(def manim-env?
+  "True when desargues.config resolves a Manim environment."
+  (delay (try (config/manim-config) true
+              (catch Exception _ false))))
+
 (defn init-python-once! []
   "Initialize Python once for all tests (config-driven; override via
    DESARGUES_MANIM_* env vars)."
@@ -16,8 +21,9 @@
 
 (use-fixtures :once
   (fn [f]
-    (init-python-once!)
-    (f)))
+    (if @manim-env?
+      (do (init-python-once!) (f))
+      (println "[manim-test] no Manim env (set CONDA_PREFIX/DESARGUES_CONDA_PREFIX); skipping"))))
 
 (deftest test-python-initialization
   (testing "Python should be initialized"

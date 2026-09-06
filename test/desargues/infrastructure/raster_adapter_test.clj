@@ -79,3 +79,23 @@
              1e-3)
           "adaptive tsit5 lands within its rtol (1e-3) of a fine-grained RK4 reference"))
     (is true)))
+
+(deftest raster-adaptive-resamples-onto-dt-grid
+  (if raster-solver
+    (let [opts {:dt 0.01 :duration 2.0}
+          rk4  (phys/evolve pendulum (assoc opts :solver (raster-solver :rk4)))
+          ada  (phys/evolve pendulum (assoc opts :solver (raster-solver :tsit5)))
+          dp5  (phys/evolve pendulum (assoc opts :solver (raster-solver :dp5)))
+          raw  (phys/evolve pendulum (assoc opts :solver (raster-solver :tsit5 {:resample? false})))
+          same-grid? (fn [a b]
+                       (and (= (count a) (count b))
+                            (every? (fn [[pa pb]] (< (Math/abs (- (:time pa) (:time pb))) 1e-9))
+                                    (map vector a b))))]
+      (is (same-grid? rk4 ada) "resampled tsit5 lands on the fixed-step dt grid")
+      (is (same-grid? rk4 dp5) "resampled dp5 lands on the fixed-step dt grid")
+      (is (< (count raw) (count ada)) "resample? false returns the solver's own accepted steps")
+      (is (every? (fn [[pa pb]]
+                    (< (Math/abs (- (get-in pa [:state :theta]) (get-in pb [:state :theta]))) 1e-3))
+                  (map vector rk4 ada))
+          "interpolated points stay within tsit5's rtol of RK4 at every grid time"))
+    (is true)))
