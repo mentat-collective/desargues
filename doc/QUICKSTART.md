@@ -179,7 +179,7 @@ conda activate manim
 python -c "import manim; print(manim.__version__)"
 ```
 
-Should output: `0.19.0`
+Should output: `0.21.0` (desargues is verified against Manim CE 0.21; 0.19+ also works)
 
 ---
 

@@ -201,11 +201,13 @@ When defining records that reference each other, use `declare`:
 - `emmy_manim_scenes.py`: Emmy-driven scenes (FunctionAndDerivative, ChainRule, TaylorSeries)
 - `equation_evaluation_scenes.py`: Evaluation and table scenes
 
-Python files live in the project root (resolved by `desargues.config`; override with `DESARGUES_PROJECT_ROOT`) so Clojure can import them via `py/import-module`. Call `(desargues.config/add-project-to-syspath!)` to put that root on `sys.path`.
+Python files live in `py/` under the project root (root resolved by `desargues.config`; override with `DESARGUES_PROJECT_ROOT`) so Clojure can import them via `py/import-module`. Call `(desargues.config/add-project-to-syspath!)` to put `<root>/py` on `sys.path` (pass a subdir, or `nil` for the bare root, to add another directory).
 
 ### Tests
-- `test/desargues/manim_test.clj`: 14 integration tests
-- Run with `lein test` (all should pass)
+- Pure suites (no Python): `test/desargues/domain/pure_test.clj`, `test/desargues/pipeline/emmy_test.clj`, `test/desargues/layout/core_test.clj`, `test/desargues/properties/physics_test.clj`, the `devx` suites
+- Python-guarded suites: `test/desargues/manim_test.clj` (Manim integration), `test/desargues/layout/realize_test.clj` (layout backend smoke + low-quality render); both need the conda env (`CONDA_PREFIX` / `DESARGUES_CONDA_PREFIX`), realize_test skips loudly without it
+- `test/desargues/infrastructure/raster_adapter_test.clj`: solver conformance; the raster provider runs only under `-A:dynamics`, otherwise it skips loudly
+- Run with `clojure -M:test` (cognitect test-runner); add `:dynamics` for raster
 
 ## Common Development Workflows
 
@@ -336,10 +338,14 @@ Tests are integration tests that verify:
 
 Run tests before committing:
 ```bash
-lein test
+clojure -M:test                      # every suite (Manim suites need the conda env)
+clojure -M:test:dynamics             # plus the raster TrajectorySolver conformance
+clojure -M:test -n desargues.domain.pure-test   # one namespace
 ```
 
-All 14 tests should pass. If not, check Python environment configuration.
+Pure suites must be green everywhere; the Python-guarded suites must be green with the
+conda env active (verified against Manim CE 0.21.0). A namespace that fails to LOAD
+contributes zero assertions, so read the runner's load output, not only the summary.
 
 ## Important Configuration Files
 
@@ -624,10 +630,8 @@ Combine with ffmpeg:
 
 ```bash
 # Run all devx tests
-lein test desargues.devx.segment-test desargues.devx.graph-test \
-          desargues.devx.renderer-test desargues.devx.hot-reload-test
-
-# 59 tests, 198 assertions, 0 failures
+clojure -M:test -n desargues.devx.segment-test -n desargues.devx.graph-test \
+                -n desargues.devx.renderer-test -n desargues.devx.hot-reload-test
 ```
 
 ### Extension Points

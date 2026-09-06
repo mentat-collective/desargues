@@ -100,7 +100,7 @@ hardcoded to one machine. With the conda env active (`CONDA_PREFIX` set) a typic
 
 - **Conda environment**: `manim` (activate it, or set `DESARGUES_CONDA_PREFIX`)
 - **Python version**: 3.12+
-- **Manim version**: 0.19+
+- **Manim version**: 0.21 (verified; 0.19+ works)
 - **Interpreter**: `$CONDA_PREFIX/bin/python`
 - **libpython**: `$CONDA_PREFIX/lib/libpython3.x.so`
 
