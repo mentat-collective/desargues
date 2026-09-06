@@ -108,12 +108,16 @@
   [n & {:keys [spacing prefer-3d]}]
   (let [factorization (create-factorization n)
         fact-map (svc/prime-factorize n)
-        tree (svc/factorization-to-tree fact-map)
-        arrangement-type (if prefer-3d
-                           :grid-3d
-                           (svc/optimal-arrangement fact-map))
-        arrangement (assoc (:arrangement tree) :type arrangement-type)
-        positions (vec (svc/compute-dot-positions tree :spacing (or spacing 0.5)))
+        optimal (svc/optimal-arrangement fact-map)
+        ;; The ONE arrangement every consumer (positions here, mobjects at the
+        ;; render boundary) reads: optimal, or forced 3D with the tree's dims.
+        arrangement (if prefer-3d
+                      {:type :grid-3d
+                       :dims (:dims (:arrangement (svc/factorization-to-tree fact-map)))}
+                      optimal)
+        positions (vec (svc/compute-dot-positions
+                        {:n n :arrangement arrangement}
+                        :spacing (or spacing (if (= :grid-3d (:type arrangement)) 0.6 0.5))))
         raw-levels (svc/build-grouping-levels fact-map)
         levels (vec (map-indexed create-grouping-level raw-levels))]
     (->NestedFactorization n factorization positions levels arrangement)))

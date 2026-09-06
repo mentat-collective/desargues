@@ -130,40 +130,38 @@
       (apply create-dot-grid-3d (concat dims (mapcat identity (dissoc opts-map :3d))))
       (apply create-dot-grid-2d (concat dims (mapcat identity opts-map))))))
 
+(defn create-dots-from-nested
+  "Boundary: realize the dots of a NestedFactorization as a VGroup, one
+   mobject per domain position, in index order. 3D arrangements get spheres.
+   The domain record is the single source of positions and arrangement.
+
+   Options:
+   - :color - dot color
+   - :radius - dot/sphere radius (default 0.1 for dots, 0.08 for spheres)"
+  [nested-fact & {:keys [color radius]}]
+  (let [three-d? (nt/is-3d? nested-fact)
+        make (if three-d?
+               #(create-dot-3d % :radius (or radius 0.08) :color color)
+               #(create-dot % :radius (or radius 0.1) :color color))]
+    (apply m/vgroup (mapv make (:positions nested-fact)))))
+
 (defn create-dots-for-number
   "Create dots arranged according to the number's factorization.
-   
+
    - Primes: single horizontal line (no natural grouping)
    - Prime powers: 2D grid with p columns (shows grouping by p)
    - Multiple primes: 2D grid with dimensions based on factors
-   
+
    Options:
    - :spacing - dot spacing
    - :color - dot color
    - :radius - dot radius
    - :prefer-3d - force 3D arrangement"
   [n & {:keys [spacing color radius prefer-3d]
-        :or {spacing 0.5 radius 0.1 prefer-3d false}}]
-  (let [fact (nts/prime-factorize n)
-        arrangement (nts/optimal-arrangement fact)
-        arr-type (if prefer-3d :grid-3d (:type arrangement))
-        dims (:dims arrangement)]
-    (case arr-type
-      :linear
-      (create-dot-array n :spacing spacing :color color :radius radius)
-
-      :grid-2d
-      (let [[rows cols] dims]
-        (create-dot-grid-2d rows cols :spacing spacing :color color :radius radius))
-
-      :grid-3d
-      (let [[x y z] (take 3 (concat dims (repeat 1)))]
-        (create-dot-grid-3d x y z
-                            :spacing (or spacing 0.6)
-                            :color color
-                            :radius (or radius 0.08)))
-      ;; Default fallback
-      (create-dot-array n :spacing spacing :color color :radius radius))))
+        :or {prefer-3d false}}]
+  (create-dots-from-nested
+   (nt/create-nested-factorization n :spacing spacing :prefer-3d prefer-3d)
+   :color color :radius radius))
 
 ;; =============================================================================
 ;; Grouping with Rectangles
@@ -246,7 +244,7 @@
              radius 0.1
              prefer-3d false}}]
   (let [nested-fact (nt/create-nested-factorization n :spacing spacing :prefer-3d prefer-3d)
-        dots (create-dots-for-number n :spacing spacing :radius radius :prefer-3d prefer-3d)
+        dots (create-dots-from-nested nested-fact :radius radius)
         levels (mapv
                 (fn [level-record idx]
                   (let [groups (:groups level-record)
