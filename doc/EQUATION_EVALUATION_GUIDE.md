@@ -14,9 +14,9 @@ This feature lets you:
 ## Quick Start
 
 ```clojure
-(require '[varcalc.emmy-evaluation :as ev])
+(require '[desargues.emmy-evaluation :as ev])
 (require '[emmy.env :refer [sin cos square pi D]])
-(require '[varcalc.manim-quickstart :as mq])
+(require '[desargues.manim-quickstart :as mq])
 
 (mq/init!)
 
@@ -137,7 +137,7 @@ f(x) = sin(x)    g(x) = cos(x)
 ### Example 1: Your Quadratic from equations.clj
 
 ```clojure
-(require '[varcalc.emmy-python.equations :as eq])
+(require '[desargues.emmy-python.equations :as eq])
 
 ;; expt2: 2x² + 3x + 1
 (ev/create-evaluation-table
@@ -201,7 +201,7 @@ f'(2) = 5  (slope of tangent line)
 From your example code:
 
 ```clojure
-(require '[varcalc.emmy-python.equations :as eq])
+(require '[desargues.emmy-python.equations :as eq])
 
 ;; expt1: sin(x + π)
 ;; Evaluate at several points
@@ -348,10 +348,10 @@ All videos saved to: `media/videos/1080p60/`
 ## Full Example: Complete Workflow
 
 ```clojure
-(require '[varcalc.emmy-evaluation :as ev])
-(require '[varcalc.emmy-python.equations :as eq])
+(require '[desargues.emmy-evaluation :as ev])
+(require '[desargues.emmy-python.equations :as eq])
 (require '[emmy.env :refer [sin cos square exp pi D ->TeX]])
-(require '[varcalc.manim-quickstart :as mq])
+(require '[desargues.manim-quickstart :as mq])
 
 ;; Initialize
 (mq/init!)

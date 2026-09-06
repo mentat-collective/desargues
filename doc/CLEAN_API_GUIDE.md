@@ -5,7 +5,7 @@ Simple, powerful API for mathematical animations.
 ## Quick Start
 
 ```clojure
-(require '[varcalc.api :as api])
+(require '[desargues.api :as api])
 
 ;; 1. Initialize
 (api/init!)
@@ -129,7 +129,7 @@ Pre-built workflows for common cases:
 ### Example 1: Basic Animation
 
 ```clojure
-(require '[varcalc.api :as api])
+(require '[desargues.api :as api])
 
 (api/init!)
 
@@ -197,8 +197,8 @@ Pre-built workflows for common cases:
 From your `equations.clj`:
 
 ```clojure
-(require '[varcalc.emmy-python.equations :as eq])
-(require '[varcalc.api :as api])
+(require '[desargues.emmy-python.equations :as eq])
+(require '[desargues.api :as api])
 
 (api/init!)
 
@@ -277,7 +277,7 @@ From your `equations.clj`:
 ### User-Facing API
 
 ```clojure
-(require '[varcalc.api :as api])  ;; ← You use this
+(require '[desargues.api :as api])  ;; ← You use this
 ```
 
 ### Domain Layer (Advanced)
@@ -285,9 +285,9 @@ From your `equations.clj`:
 Direct access to domain models and services:
 
 ```clojure
-(require '[varcalc.domain.math-expression :as expr])
-(require '[varcalc.domain.protocols :as p])
-(require '[varcalc.domain.services :as svc])
+(require '[desargues.domain.math-expression :as expr])
+(require '[desargues.domain.protocols :as p])
+(require '[desargues.domain.services :as svc])
 
 ;; Create expression
 (def e (expr/create-expression '(sin x)))
@@ -305,7 +305,7 @@ Direct access to domain models and services:
 Direct Manim access:
 
 ```clojure
-(require '[varcalc.infrastructure.manim-adapter :as manim])
+(require '[desargues.infrastructure.manim-adapter :as manim])
 
 ;; Build scene manually
 (def builder (manim/create-scene-builder))
@@ -316,7 +316,7 @@ Direct Manim access:
 ## Complete Workflow
 
 ```clojure
-(require '[varcalc.api :as api])
+(require '[desargues.api :as api])
 (require '[emmy.env :refer [sin cos square pi D]])
 
 ;; Initialize
@@ -391,7 +391,7 @@ You only interact with the API layer!
 
 ```clojure
 (require '[emmy.env :refer [->TeX sin]])
-(require '[varcalc.manim-quickstart :as mq])
+(require '[desargues.manim-quickstart :as mq])
 
 (mq/init!)
 (let [latex (->TeX (sin 'x))]
@@ -402,7 +402,7 @@ You only interact with the API layer!
 ### After (Clean API)
 
 ```clojure
-(require '[varcalc.api :as api])
+(require '[desargues.api :as api])
 
 (api/init!)
 (api/animate-expression (api/expr '(sin x)))

@@ -12,9 +12,8 @@
             [desargues.scene :as scene]))
 
 (def manim-env?
-  "True when desargues.config resolves a Manim environment."
-  (delay (try (config/manim-config) true
-              (catch Exception _ false))))
+  "True when the resolved python can import manim (desargues.config/manim-ready?)."
+  (delay (config/manim-ready?)))
 
 (use-fixtures :once
   (fn [f]

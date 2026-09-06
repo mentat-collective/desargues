@@ -12,7 +12,7 @@ This roadmap transforms Desargues from a "render everything on every change" wor
 
 2. **Content-Addressable Caching**: Manim computes hashes per `play()` call. If hash matches cached output, it can be reused. We'll extend this to Clojure-side segments.
 
-3. **Existing DSL Foundation**: The `varcalc.dsl.core` and `varcalc.videos.timeline` namespaces already model animations as DATA. This is perfect for change detection and incremental rendering.
+3. **Existing DSL Foundation**: The `desargues.dsl.core` and `desargues.videos.timeline` namespaces already model animations as DATA. This is perfect for change detection and incremental rendering.
 
 4. **OpenGL Live Preview**: Manim's OpenGL renderer supports `force_window=true` for realtime preview - ideal for figwheel-style feedback.
 
@@ -500,7 +500,7 @@ Phase 6 (Polish) comes last
 
 1. **Low-quality iteration mode**: Add `--low` flag (already exists!)
 2. **Single segment rendering**: `render-step` function exists
-3. **Manual parallel**: Run multiple `lein run` in separate terminals
+3. **Manual parallel**: Run multiple `clojure -M:run` in separate terminals
 
 ## Research Sources
 

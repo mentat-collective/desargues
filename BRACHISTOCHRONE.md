@@ -56,7 +56,7 @@ Manim (Python)          →  Beautiful animations
 ## Files
 
 ### Clojure Code
-- **`src/varcalc/brachistochrone.clj`** - Main implementation
+- **`src/desargues/brachistochrone.clj`** - Main implementation
   - Physics calculations (Lagrangian, action, descent time)
   - Curve definitions (straight, parabola, cycloid)
   - LaTeX generation from Emmy expressions
@@ -77,10 +77,10 @@ Manim (Python)          →  Beautiful animations
 
 ```clojure
 ;; Start a REPL
-lein repl
+clojure -A:dev
 
 ;; Load the namespace
-(require '[varcalc.brachistochrone :as brach])
+(require '[desargues.brachistochrone :as brach])
 
 ;; Compute physics for the three paths
 (brach/compare-paths -4.0 2.0 4.0 -2.0)

@@ -7,7 +7,7 @@ Clean architecture for mathematical animations using SOLID principles and Domain
 ```
 ┌─────────────────────────────────────────────────────┐
 │              API Layer (Facade)                     │
-│         varcalc.api - Clean, simple interface       │
+│         desargues.api - Clean, simple interface       │
 └──────────────────┬──────────────────────────────────┘
                    │
 ┌──────────────────┴──────────────────────────────────┐
@@ -219,7 +219,7 @@ Create complex objects:
 
 ```clojure
 ;; Simple facade
-(require '[varcalc.api :as api])
+(require '[desargues.api :as api])
 
 (api/init!)
 (def e (api/expr '(sin x)))
@@ -364,7 +364,7 @@ Fluent API for step-by-step construction.
 ### Basic Usage (Facade)
 
 ```clojure
-(require '[varcalc.api :as api])
+(require '[desargues.api :as api])
 
 ;; Simple workflow
 (api/init!)
@@ -375,7 +375,7 @@ Fluent API for step-by-step construction.
 ### Advanced Usage (Builder)
 
 ```clojure
-(require '[varcalc.api :as api])
+(require '[desargues.api :as api])
 
 (api/init!)
 
@@ -395,9 +395,9 @@ Fluent API for step-by-step construction.
 ### Expert Usage (Direct Protocol Use)
 
 ```clojure
-(require '[varcalc.domain.math-expression :as expr])
-(require '[varcalc.domain.protocols :as p])
-(require '[varcalc.domain.services :as svc])
+(require '[desargues.domain.math-expression :as expr])
+(require '[desargues.domain.protocols :as p])
+(require '[desargues.domain.services :as svc])
 
 ;; Create expression
 (def e (expr/create-expression '(sin x)))

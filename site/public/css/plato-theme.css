@@ -1,0 +1,36 @@
+/* Plato Midnight — GENERATED from theme/plato.tokens.edn, do not edit.
+   Regenerate: plato theme theme/plato.tokens.edn */
+:root {
+  --plato-accent: #f0ac5f;
+  --plato-bg: #0b0e13;
+  --plato-black: #000000;
+  --plato-blue: #58C4DD;
+  --plato-fg: #edf2f7;
+  --plato-gold: #F0AC5F;
+  --plato-gray: #8A8F98;
+  --plato-green: #83C167;
+  --plato-grey: #8A8F98;
+  --plato-info: #5fb4f0;
+  --plato-line: #273140;
+  --plato-line-strong: #2a3544;
+  --plato-muted: #9aa7b5;
+  --plato-ok: #5fd39a;
+  --plato-orange: #FF862F;
+  --plato-panel: #141a22;
+  --plato-pink: #FF69B4;
+  --plato-purple: #9A72AC;
+  --plato-red: #FC6255;
+  --plato-row-alt: rgba(255, 255, 255, 0.028);
+  --plato-teal: #5CD0B3;
+  --plato-warn: #f0ac5f;
+  --plato-white: #FFFFFF;
+  --plato-yellow: #FFFF3B;
+  --plato-code-max: 356px;
+  --plato-gap: 1rem;
+  --plato-media-max: 400px;
+  --plato-radius: 0.65rem;
+  --plato-radius-lg: 0.75rem;
+  --plato-scene-max: 440px;
+  --plato-mono: ui-monospace, SFMono-Regular, "JetBrains Mono", Menlo, monospace;
+  --plato-sans: Inter, ui-sans-serif, system-ui, sans-serif;
+}

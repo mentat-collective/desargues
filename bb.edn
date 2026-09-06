@@ -1,1 +1,24 @@
-{:paths ["src"]}
+{:paths ["src"]
+ :tasks
+ {:requires ([babashka.fs :as fs]
+             [babashka.process :refer [shell]])
+
+  doctor        {:doc "Check the JVM, the Manim env, LaTeX and ffmpeg"
+                 :task (shell "clojure -M:doctor")}
+  test          {:doc "Every suite (the Manim suites need the conda env)"
+                 :task (shell "clojure -M:test")}
+  test:dynamics {:doc "Every suite plus the raster solver conformance"
+                 :task (shell "clojure -M:test:dynamics")}
+  typecheck     {:doc "Static Typed Clojure gate"
+                 :task (shell "clojure -M:dev -m desargues.typecheck")}
+  bench         {:doc "Micro-benchmarks -> bench/results/latest.edn + doc/bench/*.svg"
+                 :task (apply shell "clojure -M:bench:dynamics" *command-line-args*)}
+  site          {:doc "Landing page -> dist/site (plato deck under site/, live scenes, bench charts)"
+                 :task (do (fs/create-dirs "dist/site/assets")
+                           (shell "clojure -M:site build --deck desargues.site.deck/model"
+                                  "-o" "dist/site/index.html"
+                                  "--assets" "site/public" "--live-scenes" "--math")
+                           (fs/copy-tree "site/public/fonts" "dist/site/fonts" {:replace-existing true})
+                           (fs/copy-tree "doc/bench" "dist/site/assets/bench" {:replace-existing true}))}
+  serve         {:doc "Serve dist/site on http://localhost:8087"
+                 :task (shell "python3 -m http.server 8087 --directory dist/site")}}}

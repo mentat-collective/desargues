@@ -93,6 +93,8 @@
             :prime-trees {p {:exponent e :tree tree-structure}}
             :arrangement {:type :grid-2d/:grid-3d :dims [...]}}
    
+   A :grid-3d arrangement has exactly three dims whose product is n.
+   
    Example for 12 = 2^2 × 3:
    - 4 dots for 2^2, grouped as 2 pairs
    - 3 columns of these groups (for factor of 3)
@@ -111,14 +113,13 @@
                       (= num-primes 1) (let [[p e] (first factors)]
                                          (if (<= e 2)
                                            {:type :grid-2d :dims [(long (Math/pow p e)) 1]}
-                                           {:type :grid-3d :dims (repeat e p)}))
+                                           {:type :grid-3d :dims [p p (long (Math/pow p (- e 2)))]}))
                       (= num-primes 2) (let [[[p1 e1] [p2 e2]] (vec sorted-factors)]
                                          {:type :grid-2d
                                           :dims [(long (Math/pow p1 e1))
                                                  (long (Math/pow p2 e2))]})
-                      :else {:type :grid-3d
-                             :dims (mapv (fn [[p e]] (long (Math/pow p e)))
-                                         (take 3 sorted-factors))})]
+                      :else (let [[a b & more] (mapv (fn [[p e]] (long (Math/pow p e))) sorted-factors)]
+                              {:type :grid-3d :dims [a b (reduce * more)]}))]
     {:n n
      :factors factors
      :total-dots n
@@ -250,19 +251,25 @@
 (defn optimal-arrangement
   "Determine optimal arrangement based on factorization.
    
+   - 1 (no prime factors): a single dot
    - Primes: linear (a 2D grid would imply grouping that doesn't exist)
    - Prime powers: 2D grid showing the grouping structure
    - Multiple primes: 2D or 3D grid based on factors
    
    For 2D grids with multiple primes, the smallest prime's power goes in columns
-   so that row-major grouping by 2 creates horizontal pairs.
+   so that row-major grouping by 2 creates horizontal pairs. A 3D grid's third
+   dimension carries every remaining prime power, so the dims always multiply
+   to n.
    
-   Returns {:type :linear/:grid-2d/:grid-3d :dims [rows cols ...]}"
+   Returns {:type :single/:linear/:grid-2d/:grid-3d :dims [rows cols ...]}"
   [{:keys [factors n] :as factorization}]
   (let [num-primes (count factors)
         total-factors (apply + (vals factors))
         sorted-factors (sort-by key factors)]
     (cond
+      (zero? num-primes)
+      {:type :single :dims [1]}
+
       ;; Prime number - must be linear (no natural grouping)
       (and (= num-primes 1) (= (first (vals factors)) 1))
       {:type :linear :dims [n]}
@@ -285,11 +292,10 @@
             rows (long (Math/pow p2 e2))]
         {:type :grid-2d :dims [rows cols]})
 
-      ;; Three or more primes - 3D arrangement
+      ;; Three or more primes - 3D arrangement; the rest fold into the last axis
       :else
-      (let [dims (mapv (fn [[p e]] (long (Math/pow p e)))
-                       (take 3 sorted-factors))]
-        {:type :grid-3d :dims dims}))))
+      (let [[a b & more] (mapv (fn [[p e]] (long (Math/pow p e))) sorted-factors)]
+        {:type :grid-3d :dims [a b (reduce * more)]}))))
 
 ;; =============================================================================
 ;; Utility Functions

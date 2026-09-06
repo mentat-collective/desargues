@@ -1,0 +1,439 @@
+/* Tokens first: every --plato-* custom property is generated from
+   theme/plato.tokens.edn. Swap the theme by linking another generated file
+   after this one (see public/acme.html). */
+/* Plato Midnight — GENERATED from theme/plato.tokens.edn, do not edit.
+   Regenerate: plato theme theme/plato.tokens.edn */
+:root {
+  --plato-accent: #f0ac5f;
+  --plato-bg: #0b0e13;
+  --plato-black: #000000;
+  --plato-blue: #58C4DD;
+  --plato-fg: #edf2f7;
+  --plato-gold: #F0AC5F;
+  --plato-gray: #8A8F98;
+  --plato-green: #83C167;
+  --plato-grey: #8A8F98;
+  --plato-info: #5fb4f0;
+  --plato-line: #273140;
+  --plato-line-strong: #2a3544;
+  --plato-muted: #9aa7b5;
+  --plato-ok: #5fd39a;
+  --plato-orange: #FF862F;
+  --plato-panel: #141a22;
+  --plato-pink: #FF69B4;
+  --plato-purple: #9A72AC;
+  --plato-red: #FC6255;
+  --plato-row-alt: rgba(255, 255, 255, 0.028);
+  --plato-teal: #5CD0B3;
+  --plato-warn: #f0ac5f;
+  --plato-white: #FFFFFF;
+  --plato-yellow: #FFFF3B;
+  --plato-code-max: 356px;
+  --plato-gap: 1rem;
+  --plato-media-max: 400px;
+  --plato-radius: 0.65rem;
+  --plato-radius-lg: 0.75rem;
+  --plato-scene-max: 440px;
+  --plato-mono: ui-monospace, SFMono-Regular, "JetBrains Mono", Menlo, monospace;
+  --plato-sans: Inter, ui-sans-serif, system-ui, sans-serif;
+}
+
+
+/* Self-hosted faces (public/fonts, OFL 1.1): the Reveal theme's --r-main-font
+   and --r-heading-font families, served from this origin with font-display:
+   swap so text paints in a fallback face before the file lands. `bb assets`
+   strips the theme's Google Fonts @import, which was a chained, render-
+   blocking request on every visit. */
+@font-face {
+  font-family: "Montserrat";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("../fonts/montserrat-700.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Open Sans";
+  font-style: normal;
+  font-weight: 300 800;
+  font-display: swap;
+  src: url("../fonts/open-sans.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Open Sans";
+  font-style: italic;
+  font-weight: 300 800;
+  font-display: swap;
+  src: url("../fonts/open-sans-italic.woff2") format("woff2");
+}
+
+
+/* plato.css — presentation styles for the plato content model. Loaded after
+   reveal.css + theme, so `.reveal`-prefixed rules outrank the theme's element
+   rules (0,2,0 beats 0,1,1) without !important. */
+
+/* ── shell ──────────────────────────────────────────────────────────────── */
+
+/* Every plato component sizes as a border box. Under the default content-box a
+   rule as ordinary as `width: 100%` plus horizontal padding renders wider than
+   its parent — .plato-quote at 960px + 44px of padding came out 1051px and
+   pushed its slide 91px past the slide box. Scoped to plato's own classes so
+   reveal's elements keep the sizing reveal.css assumes for them. */
+[class*="plato-"] { box-sizing: border-box; }
+
+/* A slide that declares {:overflow :shrink} is painted at whatever scale
+   plato.fit measured it needs. `scale` rather than `transform`: Reveal writes
+   `transform` on the section for slide transitions, and the two would clobber
+   each other — the individual property composes with it instead. The property
+   name is plato.fit/scale-property; fit_test.clj asserts the two agree. */
+.reveal .slides section[data-plato-overflow="shrink"] {
+  scale: var(--plato-fit-scale, 1);
+}
+
+html, body, #app {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  background: var(--plato-bg);
+}
+.reveal {
+  color: var(--plato-fg);
+  font-family: var(--plato-sans);
+}
+.reveal .slides section { text-align: left; }
+.reveal a { color: var(--plato-accent); }
+.reveal h1, .reveal h2, .reveal h3 { letter-spacing: -0.035em; text-transform: none; }
+
+/* ── scene + transport (plato.scene-view) ───────────────────────────────── */
+
+.plato-scene {
+  display: grid;
+  gap: 0.55rem;
+  width: min(100%, 1100px);
+  margin-inline: auto;
+}
+.plato-scene svg {
+  width: 100%;
+  max-height: var(--plato-scene-max);
+  background: var(--plato-bg);
+  border: 1px solid var(--plato-line);
+  border-radius: var(--plato-radius);
+}
+.plato-transport {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  font-size: 0.45em;
+}
+.plato-transport button {
+  border: 0;
+  border-radius: 999px;
+  padding: 0.4rem 0.8rem;
+  background: var(--plato-accent);
+  color: #111;
+  cursor: pointer;
+  transition: filter 0.15s ease;
+}
+.plato-transport button:hover { filter: brightness(1.12); }
+.plato-transport input {
+  flex: 1;
+  accent-color: var(--plato-accent);
+}
+.plato-transport output {
+  min-width: 7.5rem;
+  color: var(--plato-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── media: figure, image, video, audio, embed ──────────────────────────── */
+
+.plato-figure {
+  display: grid;
+  gap: 0.5rem;
+  justify-items: center;
+  width: 100%;
+  margin: 0 0 0.6em;
+}
+.reveal .plato-figure img,
+.reveal .plato-figure video,
+.reveal .plato-figure .plato-video {
+  max-width: 100%;
+  max-height: var(--plato-media-max);
+  height: auto;
+  margin: 0;
+  object-fit: contain;
+  background: var(--plato-bg);
+  border: 1px solid var(--plato-line);
+  border-radius: var(--plato-radius);
+}
+.reveal .plato-figure .plato-video { width: 100%; }
+.plato-audio { display: block; width: min(100%, 32rem); }
+.plato-caption {
+  max-width: 52ch;
+  color: var(--plato-muted);
+  font-size: 0.42em;
+  line-height: 1.4;
+  text-align: center;
+}
+.plato-embed {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  max-height: var(--plato-media-max);
+  overflow: hidden;
+  background: var(--plato-bg);
+  border: 1px solid var(--plato-line);
+  border-radius: var(--plato-radius);
+}
+.reveal .plato-embed iframe {
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  border: 0;
+}
+
+/* ── code ───────────────────────────────────────────────────────────────── */
+
+.reveal .plato-code {
+  width: 100%;
+  margin: 0;
+  /* overflow:hidden rounds the corners over the code's background, but it also
+     gives this box an automatic minimum size of 0 as a grid item — inside
+     .plato-figure that let the row size below the code and cut a line off the
+     bottom. min-height restores the content-based floor the overflow removed. */
+  overflow: hidden;
+  min-height: fit-content;
+  font-size: 0.5em;
+  background: var(--plato-panel);
+  border: 1px solid var(--plato-line);
+  border-radius: var(--plato-radius);
+  box-shadow: none;
+}
+.reveal .plato-code code {
+  display: block;
+  /* border-box so max-height and the intrinsic size both count the padding.
+     Under content-box the grid row above sized to the content height and left
+     the 18px of padding out on each side — the missing 36px. */
+  box-sizing: border-box;
+  max-height: var(--plato-code-max);
+  padding: 0.9em 1.1em;
+  overflow: auto;
+  scrollbar-gutter: stable;
+  background: transparent;
+  font-family: var(--plato-mono);
+  line-height: 1.45;
+  tab-size: 2;
+}
+
+/* ── prose: quote, cite, list, kicker ───────────────────────────────────── */
+
+.reveal .plato-quote {
+  display: block;
+  width: 100%;
+  margin: 0 0 0.6em;
+  padding: 0.8em 1.1em;
+  background: var(--plato-panel);
+  border-left: 3px solid var(--plato-accent);
+  border-radius: 0 var(--plato-radius) var(--plato-radius) 0;
+  box-shadow: none;
+  font-style: normal;
+}
+.plato-cite {
+  margin-top: 0.6em;
+  color: var(--plato-muted);
+  font-size: 0.5em;
+  font-style: normal;
+}
+.plato-cite::before { content: "— "; }
+.reveal .plato-list {
+  display: block;
+  margin: 0 0 0.6em 1.1em;
+  padding: 0;
+  text-align: left;
+}
+.reveal .plato-list > li {
+  margin-block: 0.35em;
+  padding-left: 0.25em;
+  line-height: 1.35;
+}
+.reveal .plato-list > li::marker { color: var(--plato-accent); }
+.plato-kicker {
+  color: var(--plato-accent);
+  font-size: 0.45em;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+/* ── tables ─────────────────────────────────────────────────────────────── */
+
+.reveal .plato-table {
+  display: block;
+  width: max-content;
+  max-width: 100%;
+  margin: 0 0 0.6em;
+  overflow-x: auto;
+  border-collapse: collapse;
+  font-size: 0.55em;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+.reveal .plato-table > caption {
+  display: block;
+  margin-bottom: 0.5em;
+  color: var(--plato-muted);
+  font-size: 0.85em;
+  text-align: left;
+}
+.reveal .plato-table th,
+.reveal .plato-table td {
+  padding: 0.45em 0.85em;
+  border-bottom: 1px solid var(--plato-line);
+  text-align: left;
+  vertical-align: top;
+  white-space: nowrap;
+}
+.reveal .plato-table thead th {
+  color: var(--plato-fg);
+  font-weight: 700;
+  font-size: 0.86em;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border-bottom: 2px solid var(--plato-line-strong);
+}
+.reveal .plato-table tbody tr:nth-child(even) { background: var(--plato-row-alt); }
+.reveal .plato-table tbody tr:last-child td { border-bottom: 0; }
+
+/* ── layout: columns, cards, group ──────────────────────────────────────── */
+
+.plato-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: 1.25rem;
+  align-items: start;
+  width: 100%;
+}
+.plato-column > :first-child,
+.plato-group > :first-child { margin-top: 0; }
+
+/* Every direct child of a plato flex or grid container gets an explicit size
+   floor, declared once here rather than remembered per component.
+
+   The rule this exists to disarm: a flex or grid item is normally floored at
+   its CONTENT size, but the moment its `overflow` is anything other than
+   `visible` that floor silently becomes 0. So a component that merely hides
+   its own overflow stops reserving room for what it holds, and the content is
+   cut off by a box that had no reason to be that small. That is what put
+   .plato-code inside .plato-figure at zero height on 2026-08-27, and the
+   component it broke was not the one carrying the overflow.
+
+   min-width: 0 is the floor we WANT horizontally — it lets long text and code
+   wrap instead of forcing the track wider than the slide. Vertically the floor
+   has to be restored, not removed: min-content is the height below which
+   content is lost. Overflowing is now a build failure rather than a silent
+   crop, so a floor that is occasionally too tall is the safe direction to
+   err. */
+.plato-columns > *,
+.plato-grid > *,
+.plato-group > *,
+.plato-column > *,
+.plato-card > * {
+  min-width: 0;
+  min-height: min-content;
+}
+.plato-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--plato-gap);
+}
+.plato-card {
+  display: flex;
+  flex-direction: column;
+  min-height: 8rem;
+  min-width: 0;
+  padding: 1rem;
+  border: 1px solid var(--plato-line-strong);
+  border-radius: var(--plato-radius-lg);
+  background: var(--plato-panel);
+  transition: border-color 0.18s ease;
+}
+.plato-card:hover { border-color: var(--plato-accent); }
+.plato-card-icon {
+  margin-bottom: 0.4rem;
+  color: var(--plato-accent);
+  font-size: 1.5em;
+  line-height: 1;
+}
+.plato-card > h3 {
+  margin: 0 0 0.35em;
+  font-size: 0.7em;
+}
+.plato-card > p {
+  margin: 0;
+  color: var(--plato-muted);
+  font-size: 0.52em;
+  line-height: 1.45;
+}
+.plato-group { display: grid; gap: var(--plato-gap); align-content: start; width: 100%; }
+
+/* ── callouts ───────────────────────────────────────────────────────────── */
+
+.plato-note {
+  --plato-tone: var(--plato-muted);
+  margin: 0 0 0.6em;
+  padding: 0.85em 1.1em;
+  background: var(--plato-panel);
+  border: 1px solid var(--plato-line-strong);
+  border-left: 4px solid var(--plato-tone);
+  border-radius: var(--plato-radius);
+  font-size: 0.6em;
+  line-height: 1.45;
+  text-align: left;
+}
+.plato-note > :first-child { margin-top: 0; }
+.plato-note > :last-child { margin-bottom: 0; }
+.plato-note-title {
+  margin-bottom: 0.35em;
+  color: var(--plato-tone);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.plato-note-info { --plato-tone: var(--plato-info); }
+.plato-note-warn { --plato-tone: var(--plato-warn); }
+.plato-note-ok { --plato-tone: var(--plato-ok); }
+
+/* ── escape hatches ─────────────────────────────────────────────────────── */
+
+.plato-html { width: 100%; }
+.reveal .plato-html img,
+.reveal .plato-html video,
+.reveal .plato-html iframe {
+  max-width: 100%;
+  max-height: var(--plato-media-max);
+}
+.plato-unknown {
+  padding: 0.6em 0.9em;
+  color: var(--plato-warn);
+  background: var(--plato-panel);
+  border: 1px dashed var(--plato-warn);
+  border-radius: var(--plato-radius);
+  font-family: var(--plato-mono);
+  font-size: 0.45em;
+}
+.plato-unknown::before { content: "unrenderable content: " attr(data-content-type); }
+
+/* ── responsive ─────────────────────────────────────────────────────────── */
+
+@media (max-width: 760px) {
+  .plato-grid,
+  .plato-columns { grid-template-columns: 1fr !important; }
+  .reveal .plato-table th,
+  .reveal .plato-table td { white-space: normal; }
+}
+
+/* ── motion ─────────────────────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  .plato-transport button,
+  .plato-card,
+  .reveal .fragment { transition: none; }
+}

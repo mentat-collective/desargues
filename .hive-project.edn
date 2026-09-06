@@ -10,10 +10,10 @@
  :watch-dirs ["src" "test"]
  :hot-reload true
 
- :tags ["clojure" "leiningen" "emmy" "manim" "animation" "video"
+ :tags ["clojure" "tools-deps" "emmy" "manim" "animation" "video"
         "libpython-clj" "presentation"]
 
  ;; Role in the pipeline: renders the model output (T-accounts, balance-sheet
  ;; flows, money-multiplier expansion) into short videos & interactive scenes.
  :notes "Needs conda `manim` env; init via desargues.manim-quickstart/init!" 
- :carto {:source-roots ["dev" "src" "test"]}}
+ :carto {:source-roots ["bench" "dev" "site" "src" "test"]}}

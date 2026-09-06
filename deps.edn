@@ -26,12 +26,25 @@
 
  :aliases
  {:run  {:main-opts ["-m" "desargues.core"]}
+  ;; `clojure -M:doctor` — is the JVM enough (yes, for the recording backend)
+  ;; and is a Manim env reachable (conda prefix, manim import, latex, ffmpeg)?
+  :doctor {:extra-deps {org.slf4j/slf4j-nop {:mvn/version "1.7.36"}}
+           :main-opts ["-m" "desargues.doctor"]}
+  ;; `clojure -M:bench:dynamics` — micro-benchmarks of the pure pipeline ->
+  ;; bench/results/latest.edn + doc/bench/*.svg. Add --manim for render timings.
+  :bench {:extra-paths ["bench"]
+          :extra-deps {org.slf4j/slf4j-nop {:mvn/version "1.7.36"}}
+          :main-opts ["-m" "desargues.bench"]}
+  ;; `bb site` — the landing page: a plato deck (site/) prerendered to dist/site.
+  :site {:extra-paths ["site"]
+         :extra-deps {io.github.BuddhiLW/plato {:git/sha "41d1f5f74071dad5e682a9bed12b194b310d8ae3"}}
+         :main-opts ["-m" "plato.cli"]}
   :dev  {:extra-paths ["dev"]
          :extra-deps {orchestra/orchestra {:mvn/version "2021.01.01-1"}
                       org.typedclojure/typed.clj.checker {:mvn/version "1.3.0"}}}
   ;; `clojure -M:test` runs every suite (cognitect test-runner; -n ns / -v var to
   ;; narrow). The Manim suites need the conda env; realize_test skips without it.
-  :test {:extra-paths ["test"]
+  :test {:extra-paths ["test" "bench"]
          :extra-deps {io.github.cognitect-labs/test-runner {:git/tag "v0.5.1" :git/sha "dfb30dd"}}
          :jvm-opts ["-Dclojure.spec.check-asserts=true"]
          :main-opts ["-m" "cognitect.test-runner"]}

@@ -158,3 +158,12 @@
     (let [nf (nt/create-nested-factorization 12 :prefer-3d true)]
       (is (nt/is-3d? nf))
       (is (= 12 (count (:positions nf)))))))
+
+(deftest four-distinct-primes-keep-every-dot
+  (testing "210 = 2*3*5*7: the 3D grid folds the fourth prime into its last axis"
+    (let [nf (nt/create-nested-factorization 210)]
+      (is (= :grid-3d (get-in nf [:arrangement :type])))
+      (is (= 210 (reduce * (get-in nf [:arrangement :dims]))))
+      (is (= 210 (count (:positions nf))))))
+  (testing "the same holds under :prefer-3d"
+    (is (= 210 (count (:positions (nt/create-nested-factorization 210 :prefer-3d true)))))))

@@ -1,0 +1,68 @@
+/* Acme Print — GENERATED from theme/acme-print.tokens.edn, do not edit.
+   Regenerate: plato theme theme/acme-print.tokens.edn */
+:root {
+  --plato-accent: #f59e0b;
+  --plato-bg: #ffffff;
+  --plato-black: #000000;
+  --plato-blue: #5AA9E6;
+  --plato-fg: #1a1714;
+  --plato-gold: #F59E0B;
+  --plato-gray: #8A8F98;
+  --plato-green: #7FC79A;
+  --plato-grey: #8A8F98;
+  --plato-info: #7dc4e4;
+  --plato-line: #e2dbd1;
+  --plato-line-strong: #cdc3b6;
+  --plato-muted: #6b6257;
+  --plato-ok: #7fc79a;
+  --plato-orange: #FF7A1A;
+  --plato-panel: #f4f1ec;
+  --plato-pink: #E77FA3;
+  --plato-purple: #A07CC5;
+  --plato-red: #E0553F;
+  --plato-row-alt: rgba(245, 158, 11, 0.08);
+  --plato-teal: #35C1A0;
+  --plato-warn: #f59e0b;
+  --plato-white: #FFFFFF;
+  --plato-yellow: #FFD24A;
+  --plato-code-max: 356px;
+  --plato-gap: 1.1rem;
+  --plato-media-max: 420px;
+  --plato-radius: 0.5rem;
+  --plato-radius-lg: 0.9rem;
+  --plato-scene-max: 460px;
+  --plato-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --plato-sans: "Söhne", Inter, ui-sans-serif, system-ui, sans-serif;
+}
+
+.reveal {
+  background: var(--plato-bg);
+  color: var(--plato-fg);
+}
+
+.reveal h1 {
+  color: var(--plato-fg);
+}
+
+.reveal .plato-kicker {
+  color: var(--plato-accent);
+  letter-spacing: 0.08em;
+}
+
+.reveal .plato-note {
+  border-color: var(--plato-line-strong);
+}
+
+@media print {
+  .reveal {
+    font-size: 11pt;
+  }
+
+  .reveal .plato-transport {
+    display: none;
+  }
+
+  .reveal .plato-video {
+    display: none;
+  }
+}

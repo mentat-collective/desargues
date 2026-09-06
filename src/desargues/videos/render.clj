@@ -1,15 +1,11 @@
 (ns desargues.videos.render
-  "Video rendering entry point.
-
-   This namespace provides the main entry point for rendering videos.
-   It's designed to be used with lein run or as a hot-reload target.
+  "Brachistochrone video rendering entry point (needs the Manim env).
 
    Usage:
-     lein run -m desargues.videos.render              ; Full brachistochrone
-     lein run -m desargues.videos.render intro        ; Just intro
-     lein run -m desargues.videos.render step 7       ; Specific step
-
-   Future: Will support figwheel-style hot-reload for rapid iteration."
+     clojure -M -m desargues.videos.render              ; Full brachistochrone
+     clojure -M -m desargues.videos.render intro        ; Just intro
+     clojure -M -m desargues.videos.render step 7       ; Specific step
+     clojure -M -m desargues.videos.render --low        ; Low quality, fast"
   (:require [libpython-clj2.python :as py]
             [libpython-clj2.python.class :as py-class]
             [desargues.manim.core :as manim]
@@ -702,12 +698,12 @@
   "Render brachistochrone videos.
 
    Usage:
-     lein run -m desargues.videos.render                    ; Full derivation (high quality)
-     lein run -m desargues.videos.render intro              ; Just intro
-     lein run -m desargues.videos.render step 7             ; Specific step (1-12)
-     lein run -m desargues.videos.render --low              ; Full derivation (low quality, fast)
-     lein run -m desargues.videos.render intro --low        ; Intro (low quality)
-     lein run -m desargues.videos.render all-steps          ; All steps as separate files (parallelizable)"
+     clojure -M -m desargues.videos.render                  ; Full derivation (high quality)
+     clojure -M -m desargues.videos.render intro            ; Just intro
+     clojure -M -m desargues.videos.render step 7           ; Specific step (1-12)
+     clojure -M -m desargues.videos.render --low            ; Full derivation (low quality, fast)
+     clojure -M -m desargues.videos.render intro --low      ; Intro (low quality)
+     clojure -M -m desargues.videos.render all-steps        ; All steps as separate files (parallelizable)"
   [& args]
   (println "=== Brachistochrone Video Renderer ===\n")
 
@@ -734,6 +730,6 @@
                     (doseq [n (range 1 13)]
                       (println (str "\n--- Step " n " of 12 ---"))
                       (render-step n)))
-      (println (str "Unknown command: " cmd "\nUsage: lein run -m desargues.videos.render [intro|step N|all-steps] [--low]"))))
+      (println (str "Unknown command: " cmd "\nUsage: clojure -M -m desargues.videos.render [intro|step N|all-steps] [--low]"))))
 
   (println "\n=== Done! ==="))

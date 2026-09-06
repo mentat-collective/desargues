@@ -3,10 +3,10 @@
 ## Setup
 
 ```clojure
-(require '[varcalc.emmy-manim-examples :as ex])
-(require '[varcalc.emmy-manim :as em])
+(require '[desargues.emmy-manim-examples :as ex])
+(require '[desargues.emmy-manim :as em])
 (require '[emmy.env :refer [sin cos square exp D pi ->TeX]])
-(require '[varcalc.manim-quickstart :as mq])
+(require '[desargues.manim-quickstart :as mq])
 
 (mq/init!)  ;; Do this once
 ```
@@ -123,7 +123,7 @@
 ### Example 3: From Your Code
 
 ```clojure
-(require '[varcalc.emmy-python.equations :as eq])
+(require '[desargues.emmy-python.equations :as eq])
 
 ;; Use your expt1 function
 (ex/create-derivative-animation eq/expt1)
@@ -158,7 +158,7 @@ All videos saved to: `media/videos/1080p60/`
 ### Example 1: Your Use Case
 
 ```clojure
-(require '[varcalc.emmy-python.equations :as eq])
+(require '[desargues.emmy-python.equations :as eq])
 
 ;; Your expt1: sin(x + π)
 (->TeX (eq/expt1 'x))

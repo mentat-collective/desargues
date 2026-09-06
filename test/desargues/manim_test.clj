@@ -8,9 +8,8 @@
 (def ^:dynamic *python-initialized* false)
 
 (def manim-env?
-  "True when desargues.config resolves a Manim environment."
-  (delay (try (config/manim-config) true
-              (catch Exception _ false))))
+  "True when the resolved python can import manim (desargues.config/manim-ready?)."
+  (delay (config/manim-ready?)))
 
 (defn init-python-once! []
   "Initialize Python once for all tests (config-driven; override via

@@ -11,7 +11,9 @@
    directory here is a bug that only reproduces on someone else's box."
   (:require [clojure.java.io :as io]
             [hive-di.core :refer [defconfig env]]
-            [libpython-clj2.python :as py]))
+            [libpython-clj2.python :as py]
+            [clojure.java.shell :as sh]
+            [clojure.string :as str]))
 
 (def ^:private python-abis
   "Probed newest-first. A manim env pins exactly one of these."
@@ -82,6 +84,25 @@
                      "DESARGUES_MANIM_SITEPACKAGES / DESARGUES_PROJECT_ROOT individually.")
                 {:result       result
                  :conda-prefix (conda-prefix)})))))
+
+(defn probe-manim-import
+  "Run `import manim` in the resolved python.
+   {:ok? true :version s :python-exe p} or {:ok? false :error s :python-exe p|nil};
+   a config that does not resolve is :ok? false with the resolver's message."
+  []
+  (try
+    (let [{:keys [python-exe]} (manim-config)
+          {:keys [exit out err]} (sh/sh python-exe "-c" "import manim, sys; print(manim.__version__)")]
+      (if (zero? exit)
+        {:ok? true :version (str/trim out) :python-exe python-exe}
+        {:ok? false :error (or (last (str/split-lines (str err))) "import failed") :python-exe python-exe}))
+    (catch Throwable t
+      {:ok? false :error (ex-message t) :python-exe nil})))
+
+(defn manim-ready?
+  "True when the resolved python can import manim (the guard for Manim suites)."
+  []
+  (:ok? (probe-manim-import)))
 
 (defn add-project-to-syspath!
   "Prepend the directory holding the desargues Python scene modules onto

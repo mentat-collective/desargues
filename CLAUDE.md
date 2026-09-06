@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 **Desargues** is a Clojure library that bridges Emmy (symbolic mathematics) with Manim Community Edition (mathematical animation) via libpython-clj. The system computes derivatives symbolically, converts them to LaTeX, and renders beautiful mathematical animations.
 
 **Technology Stack:**
-- Clojure with tools.deps (`deps.edn`); babashka tasks via `bb.edn`. A legacy Leiningen `project.clj` is retained but is not the primary build.
+- Clojure with tools.deps (`deps.edn`); babashka tasks via `bb.edn` (`bb tasks` lists them). No Leiningen.
 - Emmy for symbolic mathematics
 - Manim Community (Python) for mathematical animations
 - libpython-clj for Clojure-Python interop
@@ -207,6 +207,7 @@ Python files live in `py/` under the project root (root resolved by `desargues.c
 - Pure suites (no Python): `test/desargues/domain/pure_test.clj`, `test/desargues/pipeline/emmy_test.clj`, `test/desargues/layout/core_test.clj`, `test/desargues/properties/physics_test.clj`, the `devx` suites
 - Python-guarded suites: `test/desargues/manim_test.clj` (Manim integration), `test/desargues/layout/realize_test.clj` (layout backend smoke + low-quality render); both need the conda env (`CONDA_PREFIX` / `DESARGUES_CONDA_PREFIX`), realize_test skips loudly without it
 - `test/desargues/infrastructure/raster_adapter_test.clj`: solver conformance; the raster provider runs only under `-A:dynamics`, otherwise it skips loudly
+- `test/desargues/doctor_test.clj` (the `clojure -M:doctor` report, pure) and `test/desargues/bench/chart_test.clj` (bench charts, pure; `bench/` is on the `:test` classpath)
 - Run with `clojure -M:test` (cognitect test-runner); add `:dynamics` for raster
 
 ## Common Development Workflows
@@ -349,8 +350,9 @@ contributes zero assertions, so read the runner's load output, not only the summ
 
 ## Important Configuration Files
 
-- `project.clj`: Leiningen dependencies and build config
-- `.gitignore`: Excludes `media/`, `target/`, Python `__pycache__`
+- `deps.edn`: dependencies and aliases (`:run` `:dev` `:test` `:dynamics` `:doctor` `:bench` `:site`)
+- `bb.edn`: babashka tasks (`doctor` `test` `test:dynamics` `typecheck` `bench` `site`)
+- `.gitignore`: Excludes `media/`, `target/`, `dist/`, Python `__pycache__`
 - Python scene files must be in project root for `py/import-module` to work
 
 ## Video Quality Settings
