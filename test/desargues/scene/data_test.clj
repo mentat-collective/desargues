@@ -4,7 +4,8 @@
    graph of the same shape -render! does, not a raw-tree stub."
   (:require [clojure.test :refer [deftest testing is]]
             [desargues.layout.core :as l]
-            [desargues.scene.data :as data]))
+            [desargues.scene.data :as data]
+            [desargues.scene :as s]))
 
 (def frame {:x 0 :y 0 :w 14.222222 :h 8.0})
 
@@ -26,6 +27,25 @@
       (is (= "s" (:scene g)))
       (is (map? (:nodes g)))
       (is (vector? (:steps g))))))
+
+(deftest line-and-connect-record-endpoints
+  (testing "a rod: a line node with endpoints, and connect moving them"
+    (let [g (s/with-backend (data/recording-backend)
+              (s/render! "rod"
+                         (fn [stage]
+                           (let [rod (s/line [0 2] [1 0] :color :gold :width 4)
+                                 bob (-> (s/circle :radius 0.3) (s/move-to [1 0]))]
+                             (s/play! stage (s/draw rod))
+                             (s/play! stage (s/together [(s/connect rod [0 2] [-1 0] :run-time 0.5)
+                                                         (s/glide bob [-1 0] :run-time 0.5)]))))))
+          rod (get-in g [:nodes 1])
+          [step1 step2] (:steps g)]
+      (is (= :line (:node rod)))
+      (is (= [[0 2] [1 0]] [(:from rod) (:to rod)]))
+      (is (= {:color :gold :width 4} (:opts rod)))
+      (is (= :draw (get-in step1 [:anims 0 :anim])))
+      (is (= {:anim :connect :target 1 :from [0 2] :to [-1 0] :opts {:run-time 0.5}}
+             (get-in step2 [:anims 0 :children 0]))))))
 
 (deftest render-layout-is-not-a-stub
   (testing "the old stub echoed the raw tree and realized nothing; now it realizes"

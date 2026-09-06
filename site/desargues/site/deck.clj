@@ -13,7 +13,8 @@
             [plato.deck :as deck]
             [plato.desargues :as desargues]
             [desargues.videos.physics :as phys]
-            [clojure.string :as str]))
+            [clojure.string :as str]
+            [desargues.videos.lagrangian :as lag]))
 
 ;; ── scenes, computed by the library ─────────────────────────────────────────
 
@@ -211,15 +212,17 @@ clojure -M:doctor             # JVM ok? Manim env ok? LaTeX? ffmpeg?")
 
 (defn pendulum-construct
   "The pendulum integrated by phys/evolve (RK4, dt 0.01), sampled every 0.1 s;
-   each sample is one glide of the bob while a clock counts the seconds."
+   each sample is one glide of the bob, the rod following, while a clock counts."
   [stage]
   (let [samples (take-nth 10 (phys/evolve pendulum {:dt 0.01 :duration 8.0}))
         pts     (mapv (fn [{:keys [state]}]
                         (let [[x y] (phys/pendulum-position pendulum state)] [x y]))
                       samples)
+        top     [0 2.2]
         title   (-> (s/text "Damped pendulum: phys/evolve, RK4 at dt = 0.01" :font-size 30 :color :white)
                     (s/move-to [0 3.3]))
-        pivot   (-> (s/dot :color :grey) (s/move-to [0 2.2]))
+        pivot   (-> (s/dot :color :grey) (s/move-to top))
+        rod     (s/line top (first pts) :color :grey :width 4)
         bob     (-> (s/circle :radius 0.32 :color :gold)
                     (s/move-to (first pts))
                     (s/fill! :gold :opacity 0.7))
@@ -227,16 +230,83 @@ clojure -M:doctor             # JVM ok? Manim env ok? LaTeX? ffmpeg?")
                     (s/move-to [5.2 -3.0]))
         unit    (-> (s/text "s" :font-size 26 :color :grey) (s/move-to [5.9 -3.0]))]
     (s/play! stage (s/together [(s/appear title :run-time 0.5) (s/appear pivot :run-time 0.5)
-                                (s/draw bob :run-time 0.5) (s/appear clock :run-time 0.5)
-                                (s/appear unit :run-time 0.5)]))
+                                (s/draw rod :run-time 0.5) (s/draw bob :run-time 0.5)
+                                (s/appear clock :run-time 0.5) (s/appear unit :run-time 0.5)]))
     (doseq [[i p] (map-indexed vector (rest pts))]
-      (s/play! stage (s/together [(s/glide bob p :run-time 0.1)
+      (s/play! stage (s/together [(s/connect rod top p :run-time 0.1)
+                                  (s/glide bob p :run-time 0.1)
                                   (s/count-to clock (* 0.1 (inc i)) :run-time 0.1)])))
     (s/hold! stage 1)))
 
 (def pendulum-graph
   (s/with-backend (rec/recording-backend)
     (s/render! "desargues-pendulum" pendulum-construct)))
+
+(def spherical
+  "Two chained spherical pendulums; Emmy derives the equations of motion from
+   L = T - V, desargues integrates them with RK4. Initial conditions keep both
+   polar angles away from the coordinate poles for the whole 8 s."
+  (lag/spherical-double-pendulum {:l1 1.4 :l2 1.2 :theta1 1.3 :phi1 0.0 :theta2 1.6 :phi2 0.8
+                                  :phi1-dot 1.4 :phi2-dot 0.9}))
+
+(defn project
+  "Orthographic view of [x y z] (z up) from azimuth az and elevation el, scaled
+   and hung from `origin`: [X Y depth], depth positive towards the viewer."
+  [[x y z] az el scale [ox oy]]
+  (let [ca (Math/cos az) sa (Math/sin az) ce (Math/cos el) se (Math/sin el)
+        xr (- (* x ca) (* y sa))
+        yr (+ (* x sa) (* y ca))]
+    [(+ ox (* scale xr))
+     (+ oy (* scale (+ (* z ce) (* yr se))))
+     (- (* z se) (* yr ce))]))
+
+(defn double-pendulum-construct
+  "The 3D double pendulum seen from an oblique camera: two rods, two bobs, the
+   second bob leaving a trail, one glide per 0.1 s sample."
+  [stage]
+  (let [az 0.7 el 0.45 scale 1.15 origin [0 2.3]
+        view    (fn [p] (let [[X Y _] (project p az el scale origin)] [X Y]))
+        samples (take-nth 10 (phys/evolve spherical {:dt 0.01 :duration 8.0}))
+        frames  (mapv (fn [{:keys [state]}] (mapv view (lag/positions-at spherical state))) samples)
+        [b1 b2] (first frames)
+        title   (-> (s/text "3D double pendulum: Emmy derives the equations, RK4 integrates" :font-size 28 :color :white)
+                    (s/move-to [0 3.4]))
+        pivot   (-> (s/dot :color :grey) (s/move-to origin))
+        rod1    (s/line origin b1 :color :grey :width 4)
+        rod2    (s/line b1 b2 :color :grey :width 4)
+        bob1    (-> (s/circle :radius 0.22 :color :teal) (s/move-to b1) (s/fill! :teal :opacity 0.8))
+        bob2    (-> (s/circle :radius 0.26 :color :gold) (s/move-to b2) (s/fill! :gold :opacity 0.8))
+        trail   (mapv (fn [[_ p2]] (-> (s/dot :color :gold :radius 0.035) (s/move-to p2))) (rest frames))
+        clock   (-> (s/decimal 0 :font-size 30 :color :grey :num-decimal-places 1) (s/move-to [5.2 -3.2]))
+        unit    (-> (s/text "s" :font-size 26 :color :grey) (s/move-to [5.9 -3.2]))]
+    (s/play! stage (s/together [(s/appear title :run-time 0.5) (s/appear pivot :run-time 0.5)
+                                (s/draw rod1 :run-time 0.5) (s/draw rod2 :run-time 0.5)
+                                (s/draw bob1 :run-time 0.5) (s/draw bob2 :run-time 0.5)
+                                (s/appear clock :run-time 0.5) (s/appear unit :run-time 0.5)]))
+    (doseq [[i [[p1 p2] dot]] (map-indexed vector (map vector (rest frames) trail))]
+      (s/play! stage (s/together [(s/connect rod1 origin p1 :run-time 0.1)
+                                  (s/glide bob1 p1 :run-time 0.1)
+                                  (s/connect rod2 p1 p2 :run-time 0.1)
+                                  (s/glide bob2 p2 :run-time 0.1)
+                                  (s/appear dot :run-time 0.1)
+                                  (s/count-to clock (* 0.1 (inc i)) :run-time 0.1)])))
+    (s/hold! stage 1)))
+
+(def double-pendulum-graph
+  (s/with-backend (rec/recording-backend)
+    (s/render! "desargues-double-pendulum" double-pendulum-construct)))
+
+(def lagrangian-source
+  "(require '[desargues.videos.lagrangian :as lag])
+
+;; Cartesian positions of the two bobs as functions of q = [th1 ph1 th2 ph2]
+(def sys (lag/spherical-double-pendulum {:l1 1.4 :l2 1.2 :theta1 1.2 :theta2 2.2}))
+
+;; L = T - V is built from those positions; Emmy's
+;; Lagrangian->state-derivative turns it into q'' and the compiler makes
+;; it fast. Then it is just another PhysicalSystem:
+(phys/evolve sys {:dt 0.01 :duration 8.0})
+(lag/positions-at sys (:state (last *1)))   ; => [[x1 y1 z1] [x2 y2 z2]]")
 
 ;; ── the deck ────────────────────────────────────────────────────────────────
 
@@ -380,6 +450,21 @@ clojure -M:doctor             # JVM ok? Manim env ok? LaTeX? ffmpeg?")
       (desargues/scene pendulum-graph {:controls? true :autoplay? true})
       {:transition :fade
        :notes "phys/evolve with the Clojure RK4 stepper, dt 0.01, sampled every 0.1 s; each sample is one glide of the bob. Same trajectory the Manim backend would draw."})
+
+     (deck/slide
+      :physics-3d
+      (desargues/scene double-pendulum-graph {:controls? true :autoplay? true})
+      {:transition :fade
+       :notes "Spherical double pendulum: q = [theta1 phi1 theta2 phi2]. Emmy builds L = T - V from the bob positions, derives q'' and compiles it; RK4 at dt 0.01; an oblique orthographic camera projects it. The gold trail is the second bob."})
+
+     (deck/slide
+      :physics-lagrangian
+      [:div
+       [:h3 "Emmy derives the equations of motion"]
+       [:p "Write the bob positions as functions of the coordinates; Emmy differentiates the Lagrangian for you. "
+        "The scene you just saw is this system, integrated."]
+       (content/code :clojure lagrangian-source)]
+      {:overflow :shrink})
 
      (deck/stack
       :bench

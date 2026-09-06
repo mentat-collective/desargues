@@ -36,6 +36,7 @@
   (-rectangle [backend opts]           "A rectangle.")
   (-rounded-rectangle [backend opts]   "A rounded rectangle.")
   (-decimal [backend value opts]       "A live decimal-number readout.")
+  (-line [backend from to opts]        "A straight segment between two points (:color :width).")
   (-place-at [backend obj point]       "Move obj's center to point [x y (z)]. Returns obj.")
   (-place-next-to [backend obj ref direction opts]
     "Position obj beside ref along a direction keyword. Returns obj.")
@@ -55,6 +56,8 @@
   (-glide [backend obj point opts]
     "Animate obj travelling to point. Encapsulates the target idiom so the
      consumer never sees generate-target/move-to-target.")
+  (-connect [backend line from to opts]
+    "Animate a line's endpoints to from/to (a rod following its bob).")
   (-together [backend anims opts]      "Play a seq of anims as one group (:lag-ratio).")
   (-stagger [backend anims opts]       "Play a seq of anims staggered (:lag-ratio)."))
 

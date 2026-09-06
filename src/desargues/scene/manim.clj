@@ -90,6 +90,11 @@
   (-rectangle [_ opts]           (kw-apply man-mob/rectangle         []      (resolve-opts opts)))
   (-rounded-rectangle [_ opts]   (kw-apply man-mob/rounded-rectangle []      (resolve-opts opts)))
   (-decimal [_ value opts]       (kw-apply man-mob/decimal-number    [value] (resolve-opts opts)))
+  (-line [_ from to opts]
+    ;; the facade's :width is Manim's stroke_width
+    (let [opts (cond-> (dissoc opts :width)
+                 (:width opts) (assoc :stroke_width (:width opts)))]
+      (kw-apply man-mob/line [(pad3 from) (pad3 to)] (resolve-opts opts))))
   (-place-at [_ obj point]       (man-mob/move-to obj (pad3 point)))
   (-place-next-to [_ obj ref direction opts]
     (kw-apply man-mob/next-to [obj ref (resolve-const direction)] (resolve-opts opts)))
@@ -110,6 +115,8 @@
     (man-anim/generate-target! obj)
     (man-mob/move-to (man-anim/get-target obj) (pad3 point))
     (kw-apply man-anim/move-to-target [obj] (resolve-opts opts)))
+  (-connect [_ line from to opts]
+    (kw-apply man-anim/move-endpoints [line (pad3 from) (pad3 to)] (resolve-opts opts)))
   (-together [_ anims opts]
     (apply man-anim/animation-group (concat anims (mapcat identity (resolve-opts opts)))))
   (-stagger [_ anims opts]

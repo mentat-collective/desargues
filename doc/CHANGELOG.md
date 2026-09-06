@@ -7,6 +7,16 @@ All notable changes to desargues. The format follows
 ## [Unreleased]
 
 ### Added
+- `desargues.scene/line` and `desargues.scene/connect`: a straight segment
+  mobject and the animation that moves its endpoints (a rod following a bob),
+  implemented by the Manim backend (`Line`, `animate.put_start_and_end_on`) and
+  the recording backend (`:line` node, `:connect` anim); plato plays them.
+- `desargues.videos.lagrangian`: `PhysicalSystem`s whose equations of motion
+  Emmy derives from a Lagrangian built from the masses' Cartesian positions,
+  compiled with Emmy's compiler (simplification off); the planar and the
+  spherical (3D) double pendulum ship as constructors.
+- Landing page: the pendulum draws its rod, a projected 3D double pendulum with
+  a trail, an Emmy-derived equations-of-motion slide.
 - `desargues.pipeline.emmy`: a pure Collect/Promote/Pipeline/Boundary conveyor
   Emmy → LaTeX → Python code; `desargues.emmy-manim` delegates to it.
 - `TrajectorySolver` port in `desargues.videos.physics` with a raster adapter

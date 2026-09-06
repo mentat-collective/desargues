@@ -141,6 +141,15 @@
   (let [cls (core/get-class "Transform")]
     (py/call-attr-kw cls "__call__" [mobject target] (or kwargs {}))))
 
+(defn move-endpoints
+  "Animate a Line's endpoints to start/end (line.animate.put_start_and_end_on).
+
+   Options: :run_time :rate_func"
+  [line start end & {:as kwargs}]
+  (let [builder (py/call-attr-kw (py/get-attr line "animate") "__call__" [] (or kwargs {}))]
+    (py/call-attr builder "put_start_and_end_on"
+                  (core/->py-list start) (core/->py-list end))))
+
 (defn replacement-transform
   "Transform, replacing source with target in scene.
    

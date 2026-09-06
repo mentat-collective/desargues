@@ -135,6 +135,7 @@
   (-rectangle [b opts]           (node b :rectangle {:opts opts}))
   (-rounded-rectangle [b opts]   (node b :rounded-rectangle {:opts opts}))
   (-decimal [b value opts]       (node b :decimal {:value value :opts opts}))
+  (-line [b from to opts]        (node b :line {:from (vec from) :to (vec to) :opts opts}))
   (-place-at [b obj point]       (register! b (assoc obj :at (vec point))))
   (-place-next-to [b obj ref direction opts]
     (register! b (assoc obj :next-to {:ref (ref-id ref) :direction direction :opts opts})))
@@ -150,6 +151,7 @@
   (-recolor [_ obj color opts]   {:anim :recolor   :target (ref-id obj) :color color :opts opts})
   (-count-to [_ decimal value opts] {:anim :count-to :target (ref-id decimal) :value value :opts opts})
   (-glide [_ obj point opts]     {:anim :glide     :target (ref-id obj) :to (vec point) :opts opts})
+  (-connect [_ line from to opts] {:anim :connect  :target (ref-id line) :from (vec from) :to (vec to) :opts opts})
   (-together [_ anims opts]      {:anim :group     :children (vec anims) :opts opts})
   (-stagger [_ anims opts]       {:anim :stagger   :children (vec anims) :opts opts})
 

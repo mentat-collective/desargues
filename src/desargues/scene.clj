@@ -75,6 +75,11 @@
 (defn rounded-rectangle [& {:as opts}] (p/-rounded-rectangle (backend) opts))
 (defn decimal  [value & {:as opts}] (p/-decimal (backend) value opts))
 
+(defn line
+  "A straight segment between two points [x y (z)]. opts: :color :width."
+  [from to & {:as opts}]
+  (p/-line (backend) from to opts))
+
 (defn move-to
   "Move obj's center to point [x y] or [x y z]. Returns obj."
   [obj point]
@@ -111,6 +116,11 @@
   "Animate obj travelling to point [x y (z)]. Hides the target idiom."
   [obj point & {:as opts}]
   (p/-glide (backend) obj point opts))
+
+(defn connect
+  "Animate a line's endpoints to from/to (a rod following its bob)."
+  [line from to & {:as opts}]
+  (p/-connect (backend) line from to opts))
 
 (defn together
   "Play a seq of animations as one group. opts: {:lag-ratio n}."

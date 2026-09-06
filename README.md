@@ -180,6 +180,7 @@ scene facade   desargues.scene          backend-neutral animation API  ── DI
 layout         desargues.layout.*       elm-ui layout algebra + pure extent measure
 pipeline       desargues.pipeline.emmy  Emmy → LaTeX → Python, pure CPPB conveyor
 physics        desargues.videos.physics TrajectorySolver port (+ raster adapter)
+lagrangian     desargues.videos.lagrangian  Emmy derives q'' from L = T − V (double pendulums)
 manim          desargues.manim.*        low-level Manim mobject/animation bindings
 domain         desargues.domain.*       pure Clojure + Emmy, Typed-Clojure-annotated
 config         desargues.config         env-derived settings (the Collect layer)

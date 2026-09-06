@@ -207,6 +207,7 @@ Python files live in `py/` under the project root (root resolved by `desargues.c
 - Pure suites (no Python): `test/desargues/domain/pure_test.clj`, `test/desargues/pipeline/emmy_test.clj`, `test/desargues/layout/core_test.clj`, `test/desargues/properties/physics_test.clj`, the `devx` suites
 - Python-guarded suites: `test/desargues/manim_test.clj` (Manim integration), `test/desargues/layout/realize_test.clj` (layout backend smoke + low-quality render); both need the conda env (`CONDA_PREFIX` / `DESARGUES_CONDA_PREFIX`), realize_test skips loudly without it
 - `test/desargues/infrastructure/raster_adapter_test.clj`: solver conformance; the raster provider runs only under `-A:dynamics`, otherwise it skips loudly
+- `test/desargues/videos/lagrangian_test.clj`: Emmy-derived double pendulums (energy conservation, rod lengths, compiled = uncompiled derivative)
 - `test/desargues/doctor_test.clj` (the `clojure -M:doctor` report, pure) and `test/desargues/bench/chart_test.clj` (bench charts, pure; `bench/` is on the `:test` classpath)
 - Run with `clojure -M:test` (cognitect test-runner); add `:dynamics` for raster
 
