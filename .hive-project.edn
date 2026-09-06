@@ -15,4 +15,5 @@
 
  ;; Role in the pipeline: renders the model output (T-accounts, balance-sheet
  ;; flows, money-multiplier expansion) into short videos & interactive scenes.
- :notes "Needs conda `manim` env; init via desargues.manim-quickstart/init!"}
+ :notes "Needs conda `manim` env; init via desargues.manim-quickstart/init!" 
+ :carto {:source-roots ["dev" "src" "test"]}}
