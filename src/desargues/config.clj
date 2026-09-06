@@ -84,11 +84,12 @@
                  :conda-prefix (conda-prefix)})))))
 
 (defn add-project-to-syspath!
-  "Prepend the desargues project root onto Python sys.path so py/import-module
-   can load the .py scene files. Replaces the hardcoded (sys.path.insert 0 ...)
-   sites that previously baked in an absolute machine path. Pass a subdir
-   (e.g. \"py\") to append it to the resolved project root. Returns the dir added."
-  ([] (add-project-to-syspath! nil))
+  "Prepend the directory holding the desargues Python scene modules onto
+   Python sys.path so py/import-module can load them. The scene files
+   (manim_examples.py, emmy_manim_scenes.py, ...) live under `<root>/py`, so
+   the no-arg form adds that directory; pass a subdir (or nil for the bare
+   project root) to add a different one. Returns the dir added."
+  ([] (add-project-to-syspath! "py"))
   ([subdir]
    (let [root (:project-root (manim-config))
          dir  (if subdir (str root "/" subdir) root)
