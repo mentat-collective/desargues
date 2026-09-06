@@ -2,7 +2,8 @@
   "Unit tests for Manim integration"
   (:require [clojure.test :refer :all]
             [libpython-clj2.python :as py]
-            [desargues.manim-quickstart :as mq]))
+            [desargues.manim-quickstart :as mq]
+            [desargues.config :as config]))
 
 (def ^:dynamic *python-initialized* false)
 
