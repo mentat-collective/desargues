@@ -44,17 +44,52 @@
        trajectory))
 
 (defn relative-error
-  "Compute relative error between computed and expected values."
+  "Relative error of computed against expected, with an absolute floor: below
+   |expected| = 1e-9 the error is measured absolutely (scaled by 1e-9), so an
+   expected value of 0 or of floating-point-noise size (a pendulum at rest,
+   energy ~1e-14) does not turn round-off into an infinite error."
   [computed expected]
-  (if (zero? expected)
-    (if (zero? computed) 0.0 Double/POSITIVE_INFINITY)
-    (Math/abs (/ (- computed expected) expected))))
+  (let [scale (max (Math/abs (double expected)) 1e-9)]
+    (/ (Math/abs (- computed expected)) scale)))
 
 (defn monotonic-decreasing?
   "Check if sequence is monotonically decreasing (with tolerance)."
   [xs tolerance]
   (every? (fn [[a b]] (<= b (+ a tolerance)))
           (partition 2 1 xs)))
+
+;; =============================================================================
+;; TrajectorySolver seam (DIP): evolve dispatches through the solver port
+;; =============================================================================
+
+(deftest evolve-default-is-the-rk4-stepper
+  (let [sys (phys/make-pendulum {:length 2.0 :damping 0.05 :initial-theta 0.2})
+        opts {:dt 0.01 :duration 1.0}]
+    (is (= (phys/evolve sys opts)
+           (phys/evolve sys (assoc opts :solver (phys/stepper-solver phys/rk4)))))
+    (is (= (phys/evolve sys (assoc opts :integrator phys/euler))
+           (phys/evolve sys (assoc opts :solver (phys/stepper-solver phys/euler)))))))
+
+(deftest evolve-honors-an-injected-solver
+  (let [sys (phys/make-pendulum {})
+        recorded (atom nil)
+        stub (reify phys/TrajectorySolver
+               (solve-trajectory [_ system opts]
+                 (reset! recorded [system opts])
+                 [{:time 0.0 :state (phys/get-state system)}]))]
+    (is (= [{:time 0.0 :state {:theta 0.3 :omega 0.0}}]
+           (phys/evolve sys {:solver stub :dt 0.5 :duration 3.0})))
+    (is (= [sys {:dt 0.5 :duration 3.0}] @recorded))))
+
+(deftest evolve-rejects-non-finite-steps
+  ;; A NaN dt never satisfies (>= t duration): before 2026-09-06 this spun the
+  ;; stepper forever (and hung this suite through gen/double* NaNs).
+  (let [sys (phys/make-pendulum {})]
+    (is (thrown? clojure.lang.ExceptionInfo (phys/evolve sys {:dt ##NaN})))
+    (is (thrown? clojure.lang.ExceptionInfo (phys/evolve sys {:dt 0.0})))
+    (is (thrown? clojure.lang.ExceptionInfo (phys/evolve sys {:dt ##Inf})))
+    (is (thrown? clojure.lang.ExceptionInfo (phys/evolve sys {:duration ##NaN})))
+    (is (thrown? clojure.lang.ExceptionInfo (phys/evolve sys {:duration -1.0})))))
 
 ;; =============================================================================
 ;; Pendulum Property Tests

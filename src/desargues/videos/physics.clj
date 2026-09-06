@@ -102,6 +102,32 @@
 (def euler (->EulerIntegrator))
 (def rk4 (->RK4Integrator))
 
+(defprotocol TrajectorySolver
+  "Contract for anything that turns a PhysicalSystem into a Trajectory
+   (a seq of {:time t :state state}) over a time span. Providers: the
+   built-in fixed-step Integrator loop (StepperSolver) and external ODE
+   engines (see desargues.infrastructure.raster-adapter)."
+  (solve-trajectory [this system opts]
+    "Evolve `system` per opts {:dt :duration}. Returns a Trajectory whose
+     first point is {:time 0.0 :state (get-state system)}."))
+
+(defrecord StepperSolver [integrator]
+  TrajectorySolver
+  (solve-trajectory [_ system {:keys [dt duration] :or {dt 0.01 duration 10.0}}]
+    (loop [sys system
+           t 0.0
+           trajectory [{:time 0.0 :state (get-state system)}]]
+      (if (>= t duration)
+        trajectory
+        (let [new-sys (step integrator sys dt)
+              new-t (+ t dt)]
+          (recur new-sys new-t (conj trajectory {:time new-t :state (get-state new-sys)})))))))
+
+(defn stepper-solver
+  "A TrajectorySolver that drives a step-based Integrator (default rk4)."
+  ([] (stepper-solver rk4))
+  ([integrator] (->StepperSolver integrator)))
+
 (defn step-euler
   "Single Euler integration step for state evolution.
    state: current state map
@@ -237,20 +263,24 @@
 
    Arguments:
    - system: Any PhysicalSystem
-   - opts: Map with :dt (time step), :duration (total time), :integrator
+   - opts: Map with :dt (time step), :duration (total time), and either
+     :integrator (a step-based Integrator, wrapped in a StepperSolver; default
+     rk4) or :solver (any TrajectorySolver, which takes precedence).
+
+   :dt must be a finite positive number and :duration a finite non-negative
+   number; anything else (NaN in particular) is rejected up front, because a
+   NaN step never reaches the duration and would spin forever.
 
    Returns a sequence of {:time t :state state} maps."
-  [system {:keys [dt duration integrator]
+  [system {:keys [dt duration integrator solver]
            :or {dt 0.01 duration 10.0 integrator rk4}}]
-  (let [n-steps (int (/ duration dt))]
-    (loop [sys system
-           t 0.0
-           trajectory [{:time 0.0 :state (get-state system)}]]
-      (if (>= t duration)
-        trajectory
-        (let [new-sys (step integrator sys dt)
-              new-t (+ t dt)]
-          (recur new-sys new-t (conj trajectory {:time new-t :state (get-state new-sys)})))))))
+  (when-not (and (number? dt) (Double/isFinite (double dt)) (pos? dt))
+    (throw (ex-info "evolve: :dt must be a finite positive number" {:dt dt})))
+  (when-not (and (number? duration) (Double/isFinite (double duration)) (not (neg? duration)))
+    (throw (ex-info "evolve: :duration must be a finite non-negative number" {:duration duration})))
+  (solve-trajectory (or solver (stepper-solver integrator))
+                    system
+                    {:dt dt :duration duration}))
 
 (defn phase-portrait
   "Extract phase portrait data from trajectory.
@@ -263,11 +293,11 @@
          trajectory)))
 
 (defn sample-trajectory
-  "Sample trajectory at regular intervals.
-   Useful for creating discrete animation keyframes."
+  "Sample trajectory at regular intervals, returning AT MOST n-samples points
+   (the first point always included). Useful for discrete animation keyframes."
   [trajectory n-samples]
   (let [total (count trajectory)
-        step (max 1 (int (/ total n-samples)))]
+        step (max 1 (long (Math/ceil (/ total (double (max 1 n-samples))))))]
     (take-nth step trajectory)))
 
 ;; =============================================================================

@@ -174,10 +174,12 @@
    :integrator (gen/elements [phys/euler phys/rk4])))
 
 (def gen-short-evolve-opts
-  "Generate evolution options for short simulations (faster tests)"
+  "Generate evolution options for short simulations (faster tests).
+   NaN/infinite are excluded: a NaN dt never satisfies (>= t duration), so the
+   stepper would loop forever (this hung the suite before 2026-09-06)."
   (gen/hash-map
-   :dt (gen/double* {:min 0.01 :max 0.05})
-   :duration (gen/double* {:min 0.1 :max 2.0})
+   :dt (gen/double* {:min 0.01 :max 0.05 :NaN? false :infinite? false})
+   :duration (gen/double* {:min 0.1 :max 2.0 :NaN? false :infinite? false})
    :integrator (gen/elements [phys/euler phys/rk4])))
 
 ;; =============================================================================
