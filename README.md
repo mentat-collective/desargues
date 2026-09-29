@@ -21,6 +21,11 @@ live scenes and the benchmark charts below.
   estimator (measure → resolve → realize)
 - 🧭 **Trajectories behind a port** — `TrajectorySolver` with Clojure RK4 built in
   and raster's adaptive solvers one alias away
+- 📐 **Projective geometry layer** — `desargues.geometry.*`: emmy-generic
+  projective primitives (join/meet duality, cross ratio, homographies, conics,
+  symbolic Desargues/Pappus proofs), a clp(FD) + Nelder-Mead disposition
+  solver that chooses scene layouts, display-homography fitting, and emission
+  of solved configurations as facade scenes
 - ⚙️ **Environment-driven config** — no machine paths baked into source
 
 ## Install

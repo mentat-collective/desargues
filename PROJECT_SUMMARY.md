@@ -8,6 +8,9 @@ The project provides multiple API layers:
 1. **Original DDD/SOLID API** (`desargues.api`) - Domain-driven design with protocols
 2. **DSL Layer** (`desargues.dsl.*`) - High-level declarative DSL inspired by 3Blue1Brown videos
 3. **DevX Layer** (`desargues.devx.*`) - Hot-reload and incremental rendering system
+4. **Geometry Layer** (`desargues.geometry.*`) - Projective geometry on Emmy's generic arithmetic, with a constraint solver for scene dispositions
+
+The geometry layer writes projective geometry once, generically: `projective` (homogeneous coordinates, join/meet duality, cross ratio, homography families, conics, the Desargues and Pappus configurations, and their symbolic proofs) runs on doubles to place vertices and on symbols to prove theorems at build time. On top of it, `disposition` solves WHERE a construction's free parameters sit — a core.logic clp(FD) tier over discretized domains finds a feasible disposition under hard constraints (within-frame, min-spacing, non-degeneracy), an Emmy Nelder-Mead tier polishes it for maximum spacing, and param-lerp trajectory checks guarantee every interpolated frame stays feasible; `fit` chooses the display homography (the PGL(3) representative) that lands a figure optimally in the screen frame, with a degeneracy guard against sending points to infinity; `scene` emits solved configurations as ordinary facade scenes (RecordingBackend EDN, no new mobject kinds). Solvers are dev/build-time only — decks consume solved parameters as literals.
 
 ## Technology Stack
 
