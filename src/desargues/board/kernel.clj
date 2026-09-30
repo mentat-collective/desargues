@@ -7,6 +7,8 @@
      :layers   what plato draws by default, as data (plato.board.layer)
      :probes   where the draggable probes start
      :labels   the math as text: :f :df as S-expressions, :f-tex :df-tex
+     :math     optional; the board's mathematics as TeX display lines,
+               kind-neutral, typeset by plato beside the board
 
    The split of labour: Emmy does the algebra (desargues.board.algebra),
    raster does every number. A plan asks the algebra for its expressions and
@@ -67,7 +69,10 @@
 
 (defmethod plan :calculus [{:keys [var] :or {var 'x} :as spec}]
   (let [f (algebra/expression spec)
-        df (algebra/derivative spec)]
+        df (algebra/derivative spec)
+        f-tex (algebra/realize :tex f)
+        df-tex (algebra/realize :tex df)
+        v (name var)]
     {:outputs [:xs :ys :dys :iys]
      :form (fn [kname]
              (sweep-form kname spec [:xs :ys :dys :iys]
@@ -82,4 +87,6 @@
               {:layer :integral :of :iys :probe :area}]
      :probes {:tangent 0.8 :area [-1.5 1.5]}
      :labels {:f (pr-str (algebra/realize :sexp f)) :df (pr-str (algebra/realize :sexp df))
-              :f-tex (algebra/realize :tex f) :df-tex (algebra/realize :tex df)}}))
+              :f-tex f-tex :df-tex df-tex}
+     :math [(str "f(" v ") = " f-tex)
+            (str "f'(" v ") = " df-tex)]}))

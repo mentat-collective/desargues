@@ -57,17 +57,18 @@
   "The Board plato renders, from the conformed spec, its plan, where the
    page will find the kernel, and the sampled frame. Pure."
   [{:keys [id kind label window params]} plan kernel-ref frame]
-  {:board/id id
-   :board/kind kind
-   :board/kernel kernel-ref
-   :board/label (or label (get-in plan [:labels :f]) (name id))
-   :board/labels (:labels plan)
-   :board/window window
-   :board/params (mapv #(update % :id keyword) params)
-   :board/outputs (:outputs plan)
-   :board/layers (:layers plan)
-   :board/probes (:probes plan)
-   :board/frame frame})
+  (cond-> {:board/id id
+           :board/kind kind
+           :board/kernel kernel-ref
+           :board/label (or label (get-in plan [:labels :f]) (name id))
+           :board/labels (:labels plan)
+           :board/window window
+           :board/params (mapv #(update % :id keyword) params)
+           :board/outputs (:outputs plan)
+           :board/layers (:layers plan)
+           :board/probes (:probes plan)
+           :board/frame frame}
+    (seq (:math plan)) (assoc :board/math (vec (:math plan)))))
 
 ;; ---------------------------------------------------------------------------
 ;; Boundary

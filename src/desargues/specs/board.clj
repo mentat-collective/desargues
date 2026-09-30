@@ -52,10 +52,15 @@
 (s/def :board/probes map?)
 (s/def :board/frame (s/map-of keyword? (s/coll-of number? :kind vector?)))
 (s/def :board/label string?)
+;; The board's mathematics as TeX, one display line each, in reading order.
+;; Kind-neutral on purpose: a renderer typesets the lines without knowing
+;; which kind of board wrote them.
+(s/def :board/math (s/coll-of string? :kind vector?))
 
 (s/def ::board
   (s/and (s/keys :req [:board/id :board/kind :board/kernel :board/window
                        :board/params :board/outputs :board/layers :board/probes
-                       :board/frame :board/label])
+                       :board/frame :board/label]
+                 :opt [:board/math])
          (fn [{:board/keys [outputs frame window]}]
            (every? #(= (:n window) (count (get frame %))) outputs))))

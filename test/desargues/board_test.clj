@@ -68,6 +68,10 @@
       (is (= {:wasm "./b/wave-test.wasm" :export "wave-test"} (:board/kernel b)))
       (is (= [:xs :ys :dys :iys] (:board/outputs b)))
       (is (= [:a :b :c] (mapv :id (:board/params b)))))
+    (testing "the math as TeX display lines, Emmy's f and f'"
+      (is (= ["f(x) = c\\,{x}^{2} + a\\,\\sin\\left(b\\,x\\right)"
+              "f'(x) = a\\,b\\,\\cos\\left(b\\,x\\right) + 2\\,c\\,x"]
+             (:board/math b))))
     (testing "the frame is raster's kernel on the JVM at :init (a=1 b=1 c=0: f = sin)"
       (is (= 401 (count xs)))
       (is (< (max-err ys #(Math/sin %) xs) 1e-12))
