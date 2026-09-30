@@ -1,18 +1,19 @@
 (ns desargues.board-test
-  "Boards, layer by layer: the pure plan, the compiler port, the Board value,
-   and the acceptance test of the design, that a new board kind is a
-   registration and never an edit.
+  "Boards, layer by layer: Emmy's algebra and its realisations, the pure plan,
+   the compiler port, the Board value, and the acceptance test of the design,
+   that a new board kind is a registration and never an edit.
    Needs raster: `clojure -M:test:dynamics -n desargues.board-test`."
   (:require [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
             [clojure.test :refer [deftest is testing]]
             [desargues.board :as board]
+            [desargues.board.algebra :as algebra]
             [desargues.board.kernel :as kernel]
             [desargues.specs.board :as spec]))
 
 (def wave
   {:id :wave-test :kind :calculus
-   :f '(+ (* a (sin (* b x))) (* c (* x x))) :var 'x
+   :f '(+ (* a (sin (* b x))) (* c (expt x 2))) :var 'x
    :params [{:id 'a :min -2 :max 2 :step 0.01 :init 1}
             {:id 'b :min 0.1 :max 4 :step 0.01 :init 1}
             {:id 'c :min -0.5 :max 0.5 :step 0.005 :init 0}]})
@@ -22,14 +23,30 @@
 (defn- max-err [actual f xs]
   (reduce max (map #(Math/abs (- (double %1) (f %2))) actual xs)))
 
+(deftest emmy-does-the-algebra
+  (testing "f' is Emmy's D, simplified"
+    (is (= '(+ (* a b (cos (* b x))) (* 2 c x))
+           (algebra/realize :sexp (algebra/derivative wave)))))
+  (testing "the same expression, realised for TeX"
+    (is (= "a\\,b\\,\\cos\\left(b\\,x\\right) + 2\\,c\\,x"
+           (algebra/realize :tex (algebra/derivative wave))))))
+
+(deftest raster-realisation
+  (testing "binary ops, raster.math transcendentals, double literals"
+    (is (= '(+ (* (* a b) (raster.math/cos (* b x))) (* (* 2.0 c) x))
+           (algebra/realize :raster (algebra/derivative wave)))))
+  (testing "integer powers become products; raster's wasm pow is undefined for x < 0"
+    (is (= '(* (* x x) x)
+           (algebra/realize :raster (algebra/expression {:f '(expt x 3) :var 'x :params []}))))
+    (is (= '(/ 1.0 (* x x))
+           (algebra/realize :raster (algebra/expression {:f '(expt x -2) :var 'x :params []}))))))
+
 (deftest pure-plan
-  (testing "raster differentiates f symbolically"
-    (is (= '(+ (* a (* (cos (* b x)) b)) (* c (+ x x))) (kernel/derivative wave))))
-  (testing "the :calculus plan is data: outputs, layers, probes, and a form builder"
-    (let [p (kernel/plan wave)]
-      (is (= [:xs :ys :dys :iys] (:outputs p)))
-      (is (every? :layer (:layers p)))
-      (is (= 'raster.core/deftm (first ((:form p) 'k!))))))
+  (let [p (kernel/plan wave)]
+    (is (= [:xs :ys :dys :iys] (:outputs p)))
+    (is (every? :layer (:layers p)))
+    (is (= 'raster.core/deftm (first ((:form p) 'k!))))
+    (is (string? (get-in p [:labels :df-tex]))))
   (testing "an unknown kind says how to register one"
     (is (thrown-with-msg? clojure.lang.ExceptionInfo #"register one"
                           (kernel/plan (assoc wave :kind :no-such-kind))))))
@@ -51,7 +68,7 @@
       (is (= {:wasm "./b/wave-test.wasm" :export "wave-test"} (:board/kernel b)))
       (is (= [:xs :ys :dys :iys] (:board/outputs b)))
       (is (= [:a :b :c] (mapv :id (:board/params b)))))
-    (testing "the frame is the kernel run on the JVM at :init (a=1 b=1 c=0: f = sin)"
+    (testing "the frame is raster's kernel on the JVM at :init (a=1 b=1 c=0: f = sin)"
       (is (= 401 (count xs)))
       (is (< (max-err ys #(Math/sin %) xs) 1e-12))
       (is (< (max-err dys #(Math/cos %) xs) 1e-12))
@@ -60,18 +77,20 @@
 ;; ---- OCP acceptance: a new kind is a defmethod, nothing else ---------------
 
 (defmethod kernel/plan ::parabola-test [spec]
-  {:outputs [:xs :ys]
-   :form (fn [kname]
-           (kernel/sweep-form kname spec [:xs :ys]
-                              [['y '(* k (* x x))]]
-                              ['x 'y]
-                              []))
-   :layers [{:layer :curve :of :ys}]
-   :probes {}
-   :labels {:f "k·x²"}})
+  (let [f (algebra/expression spec)]
+    {:outputs [:xs :ys]
+     :form (fn [kname]
+             (kernel/sweep-form kname spec [:xs :ys]
+                                [['y (algebra/realize :raster f)]]
+                                ['x 'y]
+                                []))
+     :layers [{:layer :curve :of :ys}]
+     :probes {}
+     :labels {:f-tex (algebra/realize :tex f)}}))
 
 (deftest a-new-kind-is-a-registration
   (let [b (board/compile-board! {:id :parabola-test :kind ::parabola-test
+                                 :f '(* k (expt x 2)) :var 'x
                                  :params [{:id 'k :min 0 :max 2 :init 0.5}]
                                  :window {:x [-2 2] :y [0 3] :n 5}}
                                 {:out-dir (.getPath (tmp-dir))})]

@@ -6,7 +6,11 @@
      :form     (fn [kname] deftm-source), the kernel as data
      :layers   what plato draws by default, as data (plato.board.layer)
      :probes   where the draggable probes start
-     :labels   strings derived from the math, for the page
+     :labels   the math as text: :f :df as S-expressions, :f-tex :df-tex
+
+   The split of labour: Emmy does the algebra (desargues.board.algebra),
+   raster does every number. A plan asks the algebra for its expressions and
+   realises them twice, :raster for the kernel body and :tex for the labels.
 
    `plan` is OPEN: a new board kind is a new `defmethod`, never an edit here.
    Every kind shares one kernel ABI, which plato's island calls without
@@ -19,26 +23,9 @@
    - no Long*Double arithmetic (`(* i h)` emits f64.convert_i32_s on an f64
      operand, an invalid module), so the variable is carried through the loop
      as a Double and h is a parameter; the Long index is only compared and
-     incremented;
+     incremented; algebra's :raster realisation makes every literal a double;
    - no type for a bare nil, so a kernel returns the sample count, not Void."
-  (:require [clojure.walk :as walk]
-            [raster.sym.diff :as diff]))
-
-;; ---------------------------------------------------------------------------
-;; Shared vocabulary for kernel bodies
-
-(def ^:private math-ops
-  "Bare transcendentals, qualified so deftm dispatches them through
-   raster.math, which the wasm backend lowers to inline polynomials."
-  {'sin 'raster.math/sin 'cos 'raster.math/cos 'tan 'raster.math/tan
-   'exp 'raster.math/exp 'log 'raster.math/log 'pow 'raster.math/pow
-   'sqrt 'raster.math/sqrt 'sinh 'raster.math/sinh 'cosh 'raster.math/cosh
-   'tanh 'raster.math/tanh})
-
-(defn lower
-  "An author's S-expression in the vocabulary deftm compiles."
-  [expr]
-  (walk/postwalk #(get math-ops % %) expr))
+  (:require [desargues.board.algebra :as algebra]))
 
 (defn param-syms [{:keys [params]}]
   (mapv (comp symbol name :id) params))
@@ -46,8 +33,9 @@
 (defn sweep-form
   "The deftm source every kind shares: sweep `var` over n samples from x0 in
    steps of h, binding `bindings` (a vector of [sym expr]) at each sample,
-   then storing each output's expression. `carry` threads extra loop state:
-   a vector of [sym init next-expr]."
+   then storing `stores` (one expression per output). `carry` threads extra
+   loop state: a vector of [sym init next-expr]. Expressions must already be
+   in raster's vocabulary (algebra/realize :raster)."
   [kname {:keys [var] :or {var 'x} :as spec} outputs bindings stores carry]
   (let [ps (param-syms spec)
         arrays (mapv (comp symbol name) outputs)]
@@ -75,26 +63,23 @@
                        "; register one with (defmethod desargues.board.kernel/plan " (:kind spec) " ...)")
                   {:kind (:kind spec) :known (keys (methods plan))})))
 
-;; ---- :calculus: f, f' (raster's symbolic derivative), running integral ----
+;; ---- :calculus: f, f' (Emmy's D), and the running integral (raster) -------
 
-(defn derivative
-  "f' as raster's simplified S-expression."
-  [{:keys [f var] :or {var 'x}}]
-  (diff/differentiate f var))
-
-(defmethod plan :calculus [{:keys [f] :as spec}]
-  (let [df (derivative spec)]
+(defmethod plan :calculus [{:keys [var] :or {var 'x} :as spec}]
+  (let [f (algebra/expression spec)
+        df (algebra/derivative spec)]
     {:outputs [:xs :ys :dys :iys]
      :form (fn [kname]
              (sweep-form kname spec [:xs :ys :dys :iys]
-                         [['y (lower f)]
-                          ['acc '(if (> i 0) (+ acc (* 0.5 h (+ prev y))) 0.0)]]
-                         [(or (:var spec) 'x) 'y (lower df) 'acc]
+                         [['y (algebra/realize :raster f)]
+                          ['acc '(if (> i 0) (+ acc (* 0.5 (* h (+ prev y)))) 0.0)]]
+                         [var 'y (algebra/realize :raster df) 'acc]
                          [['acc 0.0 'acc] ['prev 0.0 'y]]))
      :layers [{:layer :area :of :ys :probe :area}
               {:layer :curve :of :dys :style :dashed :color :pink :name "f′"}
               {:layer :curve :of :ys :color :blue :name "f"}
-              {:layer :tangent :of :ys :slope :dys :probe :tangent}
+              {:layer :tangent :of :ys :slope :dys :probe :tangent :name "f′"}
               {:layer :integral :of :iys :probe :area}]
      :probes {:tangent 0.8 :area [-1.5 1.5]}
-     :labels {:f (pr-str f) :df (pr-str df)}}))
+     :labels {:f (pr-str (algebra/realize :sexp f)) :df (pr-str (algebra/realize :sexp df))
+              :f-tex (algebra/realize :tex f) :df-tex (algebra/realize :tex df)}}))
