@@ -38,6 +38,12 @@
   [{:keys [f var] :or {var 'x} :as spec}]
   (eval `(fn [~@(param-syms spec) ~var] ~(->emmy-form f))))
 
+(defn symbolic
+  "An author's S-expression as an Emmy expression, with `syms` (its params)
+   held symbolic. A literal stays a number."
+  [expr syms]
+  (apply (eval `(fn [~@syms] ~(->emmy-form expr))) syms))
+
 (defn- symbolic-args [{:keys [var] :or {var 'x} :as spec}]
   (conj (param-syms spec) var))
 
@@ -65,11 +71,13 @@
 (defmethod realize :tex [_ expr] (e/->TeX expr))
 
 (def ^:private raster-fns
+  ;; raster.math has no sqrt or abs: those are JVM intrinsics raster lowers
+  ;; to f64.sqrt / f64.abs, and pow lives in raster.numeric.
   '{sin raster.math/sin cos raster.math/cos tan raster.math/tan
-    exp raster.math/exp log raster.math/log sqrt raster.math/sqrt
+    exp raster.math/exp log raster.math/log sqrt Math/sqrt
     sinh raster.math/sinh cosh raster.math/cosh tanh raster.math/tanh
     asin raster.math/asin acos raster.math/acos atan raster.math/atan
-    abs raster.math/abs})
+    abs Math/abs})
 
 (defn- binary
   "A variadic application as nested binary ones: raster's typed dispatch
@@ -79,13 +87,13 @@
 
 (defn- power
   "x^k: integer k becomes multiplication (raster's wasm pow is exp(k log x),
-   undefined for x < 0), any other k goes to raster.math/pow."
+   undefined for x < 0), any other k goes to raster.numeric/pow."
   [base k]
   (cond
     (and (integer? k) (zero? k)) 1.0
     (and (integer? k) (pos? k)) (binary '* (repeat k base))
     (integer? k) (list '/ 1.0 (power base (- k)))
-    :else (list 'raster.math/pow base (double k))))
+    :else (list 'raster.numeric/pow base (double k))))
 
 (defn- lower-raster [x]
   (cond

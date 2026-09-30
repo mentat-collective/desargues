@@ -101,3 +101,53 @@
     (is (s/valid? ::spec/board b))
     (is (= [:xs :ys] (:board/outputs b)))
     (is (= [2.0 0.5 0.0 0.5 2.0] (get-in b [:board/frame :ys])) "k x² at k = 0.5")))
+
+;; ---- :construction: geometry as data -------------------------------------
+
+(def figure
+  {:id :figure-test :kind :construction
+   :params [{:id 't :min 0 :max 1 :init 0.25 :label "turn"}]
+   :maps {:R '[[(cos t) (- (sin t)) 0] [(sin t) (cos t) 0] [0 0 1]]}
+   :points [{:id :A :at [0 0]} {:id :B :at [1 1]} {:id :C :at [0 1]} {:id :D :at [1 0] :fixed? true}
+            {:id :P :op :meet :lines [[:A :B] [:C :D]]}
+            {:id :M :op :mid :of [:A :B]}
+            {:id :X :op :on :line [:A :B] :s 0.25}
+            {:id :B' :op :map :by [:R] :of :B}]
+   :draw [[:segment :A :B] [:line :C :D] [:point :P]]
+   :checks [{:distance [:A :B] :label "|AB|"} {:collinear [:A :M :B]}
+            {:distance [:A :B'] :label "|AB'|"} {:angle [:A :C :B]}]})
+
+(defn- at-point [b id]
+  (let [{[kx ky] :at} (first (filter #(and (= :handle (:layer %)) (= (name id) (:label %)))
+                                     (:board/layers b)))]
+    [(first (get-in b [:board/frame kx])) (first (get-in b [:board/frame ky]))]))
+
+(deftest a-construction-is-one-kernel-call
+  (let [b (board/compile-board! figure {:out-dir (.getPath (tmp-dir))})
+        v (fn [k] (first (get-in b [:board/frame k])))]
+    (is (s/valid? ::spec/board b))
+    (is (= 1 (get-in b [:board/window :n])) "one configuration per call")
+    (testing "the meet of y = x and y = 1 - x, a midpoint, a point on AB"
+      (is (= [0.5 0.5] [(v :o-pt4x) (v :o-pt4y)]))
+      (is (= [0.5 0.5] [(v :o-pt5x) (v :o-pt5y)]))
+      (is (= [0.25 0.25] (at-point b :X))))
+    (testing "the map R(t) acts; distance survives it, and the checks read out"
+      (is (< (Math/abs (- (v :o-pt7x) (- (Math/cos 0.25) (Math/sin 0.25)))) 1e-12))
+      (is (< (Math/abs (- (v :o-ck0) (Math/sqrt 2))) 1e-12))
+      (is (< (Math/abs (- (v :o-ck2) (Math/sqrt 2))) 1e-12))
+      (is (== 0.0 (v :o-ck1)))
+      (is (< (Math/abs (- (v :o-ck3) 90.0)) 1e-9)))
+    (testing "free points own their coordinates as params; a pinned one has no handle"
+      (is (= [:t :inpt0x :inpt0y] (take 3 (map :id (:board/params b)))))
+      (is (= :point (:control (second (:board/params b)))))
+      (is (= #{"A" "B" "C" "X"} (set (keep #(when (= :handle (:layer %)) (:label %)) (:board/layers b))))))))
+
+;; OCP acceptance: a new point operation is a defmethod, nothing else.
+(defmethod desargues.board.construction/point ::reflect-test [{:keys [of]} env]
+  (let [{:keys [x y]} (get-in env [:points of])] {:xy [(list '- x) y]}))
+
+(deftest a-new-point-op-is-a-registration
+  (let [b (board/compile-board! {:id :reflect-test :kind :construction
+                                 :points [{:id :A :at [2 1]} {:id :A* :op ::reflect-test :of :A}]}
+                                {:out-dir (.getPath (tmp-dir))})]
+    (is (= [-2.0 1.0] [(first (get-in b [:board/frame :o-pt1x])) (first (get-in b [:board/frame :o-pt1y]))]))))

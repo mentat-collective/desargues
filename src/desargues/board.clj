@@ -28,15 +28,17 @@
             [clojure.spec.alpha :as s]
             [desargues.board.compiler :as compiler]
             [desargues.board.kernel :as kernel]
-            [desargues.specs.board :as spec]))
-
-(def default-window {:x [-4 4] :y [-3 3] :n 401})
+            [desargues.specs.board :as spec]
+            [desargues.board.construction]))
 
 (defn- conform!
-  "The spec with defaults, or an ex-info naming what is wrong."
+  "The spec with its kind's defaults (kernel/defaults), or an ex-info naming
+   what is wrong."
   [board-spec]
-  (let [spec* (-> (merge {:kind :calculus} board-spec)
-                  (update :window #(merge default-window %)))]
+  (let [spec* (merge {:kind :calculus} board-spec)
+        dflt (kernel/defaults spec*)
+        spec* (-> (merge (dissoc dflt :window) spec*)
+                  (update :window #(merge (:window dflt) %)))]
     (when-not (s/valid? ::spec/board-spec spec*)
       (throw (ex-info "Invalid board spec" {:explain (s/explain-data ::spec/board-spec spec*)})))
     spec*))
@@ -46,10 +48,10 @@
 
 (defn sample-frame
   "Run `kernel` on this host over the window at the params' :init values:
-   {output [numbers]} for every output of the plan."
+   {output [numbers]} for every output of the plan. n = 1 is one call at x0."
   [kernel {:keys [params] {[x0 x1] :x n :n} :window} outputs]
   (let [arrays (mapv (fn [_] (double-array n)) outputs)
-        h (/ (- (double x1) (double x0)) (dec n))]
+        h (if (> n 1) (/ (- (double x1) (double x0)) (dec n)) 0.0)]
     (apply kernel (concat arrays [(long n) (double x0) h] (map (comp double :init) params)))
     (zipmap outputs (map vec arrays))))
 
@@ -94,6 +96,9 @@
                 :as opts}]
    (let [spec* (conform! board-spec)
          plan (kernel/plan spec*)
+         ;; A kind may own params beyond the author's (a construction's free
+         ;; points own their coordinates); the plan's list is then the ABI's.
+         spec* (assoc spec* :params (vec (or (:params plan) (:params spec*))))
          export (name (:id spec*))
          kc (or (:compiler opts) (compiler/raster-compiler))
          kvar (compiler/define-kernel kc (symbol (str export "-kernel!")) ((:form plan) (symbol (str export "-kernel!"))))

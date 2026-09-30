@@ -35,5 +35,5 @@
    (create-ns ns-sym)
    (binding [*ns* (the-ns ns-sym)]
      (refer-clojure)
-     (require '[raster.core] '[raster.math]))
+     (require '[raster.core] '[raster.math] '[raster.numeric]))
    (->RasterCompiler ns-sym)))

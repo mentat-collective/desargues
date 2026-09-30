@@ -1,0 +1,304 @@
+(ns desargues.board.construction
+  "Pure layer of boards: the :construction kind, geometry you can drag.
+
+   A construction is a figure given as data. Its points are built in order,
+   each from earlier ones, by an open set of operations; its maps are the
+   group elements that act on it, 3x3 matrices whose entries are
+   expressions of the board's slider params; its checks are the quantities
+   the figure is about, read out live, so an invariant can be watched
+   staying put while everything else moves.
+
+     {:id :ladder :kind :construction
+      :params [{:id 't :min 0 :max 1 :init 0 :label \"rotate\"}]
+      :maps   {:R [[(cos t) (- (sin t)) 0] [(sin t) (cos t) 0] [0 0 1]]}
+      :points [{:id :A :at [-1 0]}                     ; free: drag it
+               {:id :B :at [1 0] :fixed? true}         ; free, pinned
+               {:id :X :op :on :line [:A :B] :s 0.3}   ; drag it along AB
+               {:id :M :op :mid :of [:A :B]}
+               {:id :P :op :meet :lines [[:A :B] [:C :D]]}
+               {:id :A' :op :map :by [:R] :of :A}      ; R applied to A
+               {:id :Q :op :expr :x '(+ (x A) t) :y '(y B)}]
+      :draw   [[:polygon [:A :B :C]] [:segment :A :B] [:line :P :Q]
+               [:point :A {:label \"A\"}]]
+      :checks [{:distance [:A :B] :label \"|AB|\"}
+               {:collinear [:P :Q :R] :label \"P, Q, R collinear\"}]}
+
+   Emmy writes every formula (a meet is a cross product of homogeneous
+   lines, a map a matrix product); raster compiles the whole figure into one
+   kernel that runs once per call (n = 1): its params are the slider values,
+   the free points' coordinates and the on-line points' positions; its
+   outputs are every point's x and y and every check's value. A drag in the
+   page is a param change and one kernel call.
+
+   `point` and `check` are OPEN: a new operation or a new invariant is a
+   defmethod, never an edit here."
+  (:require [clojure.walk :as walk]
+            [desargues.board.algebra :as algebra]
+            [desargues.board.kernel :as kernel]
+            [emmy.env :as e]))
+
+;; ---------------------------------------------------------------------------
+;; Names: every point gets kernel symbols from its position, so an author's
+;; ids (:A', :X_1) never have to be legal raster identifiers.
+
+(defn- sym [& parts] (symbol (apply str parts)))
+
+(defn- point-syms [i] {:x (sym "pt" i "x") :y (sym "pt" i "y")})
+
+(defn- out-key
+  "The output (and kernel array) named for symbol s. Arrays must be named
+   apart from the values stored in them: a binding pt0x would shadow an
+   array pt0x inside the loop."
+  [s] (keyword (str "o-" (name s))))
+
+(defn- param-key "The Board param id of kernel param s." [s] (keyword (name s)))
+
+;; ---------------------------------------------------------------------------
+;; Homogeneous algebra, over Emmy's generics (numbers or symbols)
+
+(defn- h [[x y]] [x y 1])
+
+(defn- cross [[a b c] [d f g]]
+  [(e/- (e/* b g) (e/* c f)) (e/- (e/* c d) (e/* a g)) (e/- (e/* a f) (e/* b d))])
+
+(defn- mat* [A B]
+  (vec (for [i (range 3)]
+         (vec (for [j (range 3)]
+                (reduce e/+ (for [k (range 3)] (e/* (get-in A [i k]) (get-in B [k j])))))))))
+
+(defn- apply-mat [H [x y]]
+  (let [[X Y W] (for [i (range 3)]
+                  (e/+ (e/* (get-in H [i 0]) x) (e/* (get-in H [i 1]) y) (get-in H [i 2])))]
+    [(e/divide X W) (e/divide Y W)]))
+
+(defn- author-expr
+  "An author's expression as Emmy: params held symbolic, and (x P) / (y P)
+   read as point P's coordinates."
+  [expr {:keys [points param-syms]}]
+  (let [expr (walk/postwalk
+              (fn [f]
+                (if (and (seq? f) ('#{x y} (first f)) (= 2 (count f)))
+                  (get-in points [(keyword (second f)) (keyword (name (first f)))])
+                  f))
+              expr)]
+    (algebra/symbolic expr param-syms)))
+
+;; ---------------------------------------------------------------------------
+;; Points, open by :op
+
+(defmulti point
+  "point spec, env -> {:xy [x y] :params [Param ...] :handle layer-or-nil}.
+   x and y are Emmy expressions over env's symbols (earlier points' kernel
+   symbols, params). A point that owns params (a free point owns its
+   coordinates) returns them, and the handle plato drags them by."
+  (fn [p _env] (:op p :free)))
+
+(defmethod point :default [p _]
+  (throw (ex-info (str "No point operation " (pr-str (:op p))
+                       "; register one with (defmethod desargues.board.construction/point "
+                       (:op p) " ...)")
+                  {:point p :known (keys (methods point))})))
+
+(defn- xy-of [env id]
+  (let [{:keys [x y]} (get-in env [:points id])]
+    (when-not x (throw (ex-info (str "Point " id " is used before it is built") {:id id})))
+    [x y]))
+
+(defmethod point :free [{:keys [at fixed?]} {:keys [self window]}]
+  ;; The params are named apart from the point's own symbols: the kernel
+  ;; binds pt<i>x from its param, and raster will not rebind a typed param.
+  (let [[px py] [(sym "in" (:x self)) (sym "in" (:y self))]
+        [[x0 x1] [y0 y1]] [(:x window) (:y window)]
+        ps [{:id px :min x0 :max x1 :init (first at) :control :point}
+            {:id py :min y0 :max y1 :init (second at) :control :point}]]
+    {:xy [px py]
+     :params ps
+     :handle (when-not fixed? {:layer :handle :drives {:x (param-key px) :y (param-key py)}})}))
+
+(defmethod point :on [{:keys [line s] :or {s 0.5}} {:keys [self] :as env}]
+  ;; X = A + s (B - A): s is the param, dragged along AB.
+  (let [[a b] line
+        [ax ay] (xy-of env a) [bx by] (xy-of env b)
+        s-sym (sym (:x self) "s")]
+    {:xy [(e/+ ax (e/* s-sym (e/- bx ax))) (e/+ ay (e/* s-sym (e/- by ay)))]
+     :params [{:id s-sym :min -1e6 :max 1e6 :init s :control :point}]
+     :handle {:layer :handle :drives {:s (param-key s-sym)} :along [a b]}}))
+
+(defmethod point :meet [{:keys [lines]} env]
+  (let [[[a b] [c d]] lines
+        l (cross (h (xy-of env a)) (h (xy-of env b)))
+        m (cross (h (xy-of env c)) (h (xy-of env d)))
+        [X Y W] (cross l m)]
+    {:xy [(e/divide X W) (e/divide Y W)]}))
+
+(defmethod point :mid [{[a b] :of} env]
+  (let [[ax ay] (xy-of env a) [bx by] (xy-of env b)]
+    {:xy [(e/divide (e/+ ax bx) 2) (e/divide (e/+ ay by) 2)]}))
+
+(defmethod point :map [{:keys [by of]} env]
+  ;; :by names maps, composed right to left: [:P :E] is P after E.
+  (let [H (reduce mat* (map #(get-in env [:maps %]) by))]
+    {:xy (apply-mat H (xy-of env of))}))
+
+(defmethod point :expr [{:keys [x y]} env]
+  {:xy [(author-expr x env) (author-expr y env)]})
+
+;; ---------------------------------------------------------------------------
+;; Checks, open by the key that names them
+
+(def ^:private check-kinds
+  [:distance :angle :ratio :collinear :concurrent :cross-ratio :value])
+
+(defn check-kind [c] (or (:check c) (some #(when (contains? c %) %) check-kinds)))
+
+(defmulti check
+  "check spec, env -> an Emmy expression for its value."
+  (fn [c _env] (check-kind c)))
+
+(defmethod check :default [c _]
+  (throw (ex-info (str "No check for " (pr-str c)
+                       "; register one with (defmethod desargues.board.construction/check ...)")
+                  {:check c :known (keys (methods check))})))
+
+(defn- dist [[ax ay] [bx by]]
+  (e/sqrt (e/+ (e/square (e/- bx ax)) (e/square (e/- by ay)))))
+
+(defmethod check :distance [{[a b] :distance} env]
+  (dist (xy-of env a) (xy-of env b)))
+
+(defmethod check :ratio [{[[a b] [c d]] :ratio} env]
+  (e/divide (dist (xy-of env a) (xy-of env b)) (dist (xy-of env c) (xy-of env d))))
+
+(defmethod check :angle [{[a o b] :angle} env]
+  ;; the angle AOB, in degrees
+  (let [[ax ay] (xy-of env a) [ox oy] (xy-of env o) [bx by] (xy-of env b)
+        [ux uy vx vy] [(e/- ax ox) (e/- ay oy) (e/- bx ox) (e/- by oy)]]
+    (e/* (e/divide 180 Math/PI)
+         (e/acos (e/divide (e/+ (e/* ux vx) (e/* uy vy))
+                           (e/* (e/sqrt (e/+ (e/square ux) (e/square uy)))
+                                (e/sqrt (e/+ (e/square vx) (e/square vy)))))))))
+
+(defmethod check :collinear [{[a b c] :collinear} env]
+  ;; det [a 1; b 1; c 1]: twice the signed area of abc, zero when collinear
+  (let [[ax ay] (xy-of env a) [bx by] (xy-of env b) [cx cy] (xy-of env c)]
+    (e/- (e/* (e/- bx ax) (e/- cy ay)) (e/* (e/- by ay) (e/- cx ax)))))
+
+(defmethod check :concurrent [{lines :concurrent} env]
+  ;; det of three homogeneous lines, each normalised: zero when they concur
+  (let [[l m n] (for [[a b] lines]
+                  (let [[p q r] (cross (h (xy-of env a)) (h (xy-of env b)))]
+                    (mapv #(e/divide % (e/sqrt (e/+ (e/square p) (e/square q)))) [p q r])))]
+    (reduce e/+ (map e/* l (cross m n)))))
+
+(defmethod check :cross-ratio [{[a b c d] :cross-ratio} env]
+  ;; (A,B;C,D) = (AC·BD)/(AD·BC), signed along the line AB
+  (let [[ax ay] (xy-of env a) [bx by] (xy-of env b)
+        [ux uy] [(e/- bx ax) (e/- by ay)]
+        s (fn [id] (let [[px py] (xy-of env id)] (e/+ (e/* (e/- px ax) ux) (e/* (e/- py ay) uy))))
+        [sa sb sc sd] (map s [a b c d])]
+    (e/divide (e/* (e/- sc sa) (e/- sd sb)) (e/* (e/- sd sa) (e/- sc sb)))))
+
+(defmethod check :value [{:keys [value]} env] (author-expr value env))
+
+;; ---------------------------------------------------------------------------
+;; Drawing: the author's :draw as plato.board layers over output keys
+
+(defn- at [env id]
+  (let [{:keys [x y]} (get-in env [:points id])]
+    (when-not x (throw (ex-info (str "Cannot draw unknown point " id) {:id id})))
+    [(out-key x) (out-key y)]))
+
+(defmulti draw-layer
+  "A :draw entry [kind & args] -> a plato.board layer. Open by kind."
+  (fn [[kind] _env] kind))
+
+(defmethod draw-layer :default [[kind] _]
+  (throw (ex-info (str "No drawing for " kind
+                       "; register one with (defmethod desargues.board.construction/draw-layer "
+                       kind " ...)")
+                  {:kind kind :known (keys (methods draw-layer))})))
+
+(defmethod draw-layer :point [[_ id opts] env]
+  (merge {:layer :point :at (at env id) :label (name id)} opts))
+
+(defmethod draw-layer :segment [[_ a b opts] env]
+  (merge {:layer :segment :a (at env a) :b (at env b)} opts))
+
+(defmethod draw-layer :line [[_ a b opts] env]
+  (merge {:layer :line :a (at env a) :b (at env b)} opts))
+
+(defmethod draw-layer :polygon [[_ ids opts] env]
+  (merge {:layer :polygon :pts (mapv #(at env %) ids)} opts))
+
+(defmethod draw-layer :path [[_ ids opts] env]
+  (merge {:layer :path :pts (mapv #(at env %) ids)} opts))
+
+;; ---------------------------------------------------------------------------
+;; The plan
+
+(defn- lower [expr] (algebra/realize :raster (e/simplify expr)))
+
+(defn- build
+  "Walk maps, points, checks in order; collect kernel bindings, params and
+   handles. Every intermediate is BOUND to a symbol, so a later formula
+   refers to a name and Emmy never expands the whole figure."
+  [{:keys [params maps points checks window]}]
+  (let [param-syms (mapv (comp symbol name :id) params)
+        env0 {:param-syms param-syms :window window :points {} :maps {}}
+        ;; maps: every entry bound once, then referred to by name
+        [env binds]
+        (reduce (fn [[env binds] [mid rows]]
+                  (let [entries (for [i (range 3) j (range 3)]
+                                  [i j (sym "m" (name mid) i j)
+                                   (algebra/symbolic (get-in rows [i j]) param-syms)])]
+                    [(assoc-in env [:maps mid]
+                               (reduce (fn [M [i j s _]] (assoc-in M [i j] s))
+                                       [[0 0 0] [0 0 0] [0 0 0]] entries))
+                     (into binds (map (fn [[_ _ s ex]] [s (lower ex)])) entries)]))
+                [env0 []]
+                (sort-by key maps))
+        ;; points, in order: each sees only the points before it
+        [env binds pparams handles order]
+        (reduce (fn [[env binds ps hs order] [i p]]
+                  (let [self (point-syms i)
+                        {:keys [xy params handle]} (point p (assoc env :self self))
+                        env' (assoc-in env [:points (:id p)] self)]
+                    [env'
+                     (conj binds [(:x self) (lower (first xy))] [(:y self) (lower (second xy))])
+                     (into ps params)
+                     (cond-> hs
+                       handle (conj (cond-> (assoc handle :at (at env' (:id p)) :label (name (:id p)))
+                                      (:along handle) (update :along #(mapv (fn [id] (at env id)) %)))))
+                     (conj order self)]))
+                [env binds [] [] []]
+                (map-indexed vector points))
+        cks (vec (map-indexed (fn [i c] [(sym "ck" i) (lower (check c env)) c]) checks))]
+    {:env env
+     :bindings (into binds (map (fn [[s ex]] [s ex])) cks)
+     :point-params pparams
+     :handles handles
+     :order order
+     :checks cks}))
+
+(defmethod kernel/defaults :construction [_]
+  ;; One configuration per call: n = 1.
+  {:window {:x [-6 6] :y [-3.5 3.5] :n 1} :params []})
+
+(defmethod kernel/plan :construction [spec]
+  (let [{:keys [env bindings point-params handles order checks]} (build spec)
+        values (concat (mapcat (fn [{:keys [x y]}] [x y]) order) (map first checks))
+        all-params (into (vec (:params spec)) point-params)]
+    {:outputs (mapv out-key values)
+     :params all-params
+     :form (fn [kname]
+             (kernel/sweep-form kname {:var 'sweep :params all-params}
+                                (mapv out-key values) bindings (vec values) []))
+     :layers (-> []
+                 (into (map #(draw-layer % env)) (:draw spec))
+                 (into (map (fn [[s _ c]] {:layer :value :of (out-key s)
+                                          :label (or (:label c) (name (check-kind c)))
+                                          :invariant? (boolean (:invariant? c))}))
+                       checks)
+                 (into handles))
+     :probes {}
+     :labels {}}))

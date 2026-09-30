@@ -65,6 +65,14 @@
                        "; register one with (defmethod desargues.board.kernel/plan " (:kind spec) " ...)")
                   {:kind (:kind spec) :known (keys (methods plan))})))
 
+(defmulti defaults
+  "BoardSpec -> the defaults its kind fills in before validation (a :window
+   at least). Open by :kind, like plan."
+  :kind)
+
+(defmethod defaults :default [_]
+  {:window {:x [-4 4] :y [-3 3] :n 401} :params []})
+
 ;; ---- :calculus: f, f' (Emmy's D), and the running integral (raster) -------
 
 (defmethod plan :calculus [{:keys [var] :or {var 'x} :as spec}]

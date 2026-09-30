@@ -23,7 +23,8 @@
 (s/def ::interval (s/and (s/tuple number? number?) (fn [[a b]] (< a b))))
 (s/def ::x ::interval)
 (s/def ::y ::interval)
-(s/def ::n (s/and int? #(> % 1)))
+;; n = 1 is one configuration per call (a :construction); a sweep has more.
+(s/def ::n pos-int?)
 (s/def ::window (s/keys :req-un [::x ::y ::n]))
 
 (s/def ::kind keyword?)
