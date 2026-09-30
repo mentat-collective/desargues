@@ -72,16 +72,22 @@
     [(e/divide X W) (e/divide Y W)]))
 
 (defn- author-expr
-  "An author's expression as Emmy: params held symbolic, and (x P) / (y P)
-   read as point P's coordinates."
+  "An author's expression as Emmy: params held symbolic, u (the curve
+   parameter the kernel sweeps over [0 1]) too, and (x P) / (y P) read as
+   point P's coordinates (its kernel symbols, held symbolic as well)."
   [expr {:keys [points param-syms]}]
-  (let [expr (walk/postwalk
+  (let [used (volatile! #{})
+        expr (walk/postwalk
               (fn [f]
                 (if (and (seq? f) ('#{x y} (first f)) (= 2 (count f)))
-                  (get-in points [(keyword (second f)) (keyword (name (first f)))])
+                  (let [s (get-in points [(keyword (second f)) (keyword (name (first f)))])]
+                    (when-not s
+                      (throw (ex-info (str "Unknown point " (second f) " in " (pr-str f)) {:form f})))
+                    (vswap! used conj s)
+                    s)
                   f))
               expr)]
-    (algebra/symbolic expr param-syms)))
+    (algebra/symbolic expr (into (conj (vec param-syms) 'u) (sort-by str @used)))))
 
 ;; ---------------------------------------------------------------------------
 ;; Points, open by :op
@@ -115,14 +121,15 @@
      :params ps
      :handle (when-not fixed? {:layer :handle :drives {:x (param-key px) :y (param-key py)}})}))
 
-(defmethod point :on [{:keys [line s] :or {s 0.5}} {:keys [self] :as env}]
-  ;; X = A + s (B - A): s is the param, dragged along AB.
+(defmethod point :on [{:keys [line s fixed?] :or {s 0.5}} {:keys [self] :as env}]
+  ;; X = A + s (B - A). Draggable along AB (s is then a param); :fixed? pins
+  ;; s, for a point that must stay where it is on the line.
   (let [[a b] line
         [ax ay] (xy-of env a) [bx by] (xy-of env b)
-        s-sym (sym (:x self) "s")]
-    {:xy [(e/+ ax (e/* s-sym (e/- bx ax))) (e/+ ay (e/* s-sym (e/- by ay)))]
-     :params [{:id s-sym :min -1e6 :max 1e6 :init s :control :point}]
-     :handle {:layer :handle :drives {:s (param-key s-sym)} :along [a b]}}))
+        s-sym (if fixed? s (sym (:x self) "s"))]
+    (cond-> {:xy [(e/+ ax (e/* s-sym (e/- bx ax))) (e/+ ay (e/* s-sym (e/- by ay)))]}
+      (not fixed?) (assoc :params [{:id s-sym :min -1e6 :max 1e6 :init s :control :point}]
+                          :handle {:layer :handle :drives {:s (param-key s-sym)} :along [a b]}))))
 
 (defmethod point :meet [{:keys [lines]} env]
   (let [[[a b] [c d]] lines
@@ -136,8 +143,11 @@
     {:xy [(e/divide (e/+ ax bx) 2) (e/divide (e/+ ay by) 2)]}))
 
 (defmethod point :map [{:keys [by of]} env]
-  ;; :by names maps, composed right to left: [:P :E] is P after E.
-  (let [H (reduce mat* (map #(get-in env [:maps %]) by))]
+  ;; :by names maps, composed right to left: [:P :E] is P after E. A
+  ;; composite is bound once by build (under its :by vector), so a hundred
+  ;; images of one group element cost one matrix product, not a hundred.
+  (let [H (or (get-in env [:maps by])
+              (reduce mat* (map #(get-in env [:maps %]) by)))]
     {:xy (apply-mat H (xy-of env of))}))
 
 (defmethod point :expr [{:keys [x y]} env]
@@ -146,10 +156,15 @@
 ;; ---------------------------------------------------------------------------
 ;; Checks, open by the key that names them
 
-(def ^:private check-kinds
-  [:distance :angle :ratio :collinear :concurrent :cross-ratio :value])
+(declare check)
 
-(defn check-kind [c] (or (:check c) (some #(when (contains? c %) %) check-kinds)))
+(defn check-kind
+  "Which check a spec names: its :check, else the one registered check whose
+   key it carries ({:distance [:A :B]} is a :distance). Read off the
+   registered methods, so a new check is found without an edit here."
+  [c]
+  (or (:check c)
+      (first (filter #(and (not= % :default) (contains? c %)) (keys (methods check))))))
 
 (defmulti check
   "check spec, env -> an Emmy expression for its value."
@@ -200,6 +215,15 @@
 
 (defmethod check :value [{:keys [value]} env] (author-expr value env))
 
+(defmethod check :line-angle [{[[a b] [c d]] :line-angle} env]
+  ;; The angle between lines AB and CD, in degrees, 0 when parallel.
+  (let [[ax ay] (xy-of env a) [bx by] (xy-of env b)
+        [cx cy] (xy-of env c) [dx dy] (xy-of env d)
+        [ux uy vx vy] [(e/- bx ax) (e/- by ay) (e/- dx cx) (e/- dy cy)]]
+    (e/* (e/divide 180 Math/PI)
+         (e/atan (e/abs (e/divide (e/- (e/* ux vy) (e/* uy vx))
+                                  (e/+ (e/* ux vx) (e/* uy vy))))))))
+
 ;; ---------------------------------------------------------------------------
 ;; Drawing: the author's :draw as plato.board layers over output keys
 
@@ -233,10 +257,28 @@
 (defmethod draw-layer :path [[_ ids opts] env]
   (merge {:layer :path :pts (mapv #(at env %) ids)} opts))
 
+(defmethod draw-layer :trace [[_ id opts] env]
+  ;; Every sample of a point that depends on u: a curve, and under a :map,
+  ;; its image.
+  (merge {:layer :trace :of (at env id)} opts))
+
 ;; ---------------------------------------------------------------------------
 ;; The plan
 
-(defn- lower [expr] (algebra/realize :raster (e/simplify expr)))
+(defn- lower
+  "An Emmy expression in raster's vocabulary, NOT simplified: every formula
+   here is already small, over names bound earlier, and simplify would expand
+   each rational function into its canonical polynomial (a cross ratio of
+   four bound points grows to a thousand nodes, past the JVM's method limit)."
+  [expr]
+  (algebra/realize :raster expr))
+
+(defn- bind-matrix
+  "Bind the 3x3 entries of M under prefix; return [symbol-matrix bindings]."
+  [prefix M]
+  (let [entries (for [i (range 3) j (range 3)] [i j (sym prefix i j) (get-in M [i j])])]
+    [(reduce (fn [S [i j s _]] (assoc-in S [i j] s)) [[0 0 0] [0 0 0] [0 0 0]] entries)
+     (mapv (fn [[_ _ s ex]] [s (lower ex)]) entries)]))
 
 (defn- build
   "Walk maps, points, checks in order; collect kernel bindings, params and
@@ -248,15 +290,19 @@
         ;; maps: every entry bound once, then referred to by name
         [env binds]
         (reduce (fn [[env binds] [mid rows]]
-                  (let [entries (for [i (range 3) j (range 3)]
-                                  [i j (sym "m" (name mid) i j)
-                                   (algebra/symbolic (get-in rows [i j]) param-syms)])]
-                    [(assoc-in env [:maps mid]
-                               (reduce (fn [M [i j s _]] (assoc-in M [i j] s))
-                                       [[0 0 0] [0 0 0] [0 0 0]] entries))
-                     (into binds (map (fn [[_ _ s ex]] [s (lower ex)])) entries)]))
+                  (let [M (mapv (fn [row] (mapv #(algebra/symbolic % param-syms) row)) rows)
+                        [S bs] (bind-matrix (str "m" (name mid)) M)]
+                    [(assoc-in env [:maps mid] S) (into binds bs)]))
                 [env0 []]
                 (sort-by key maps))
+        ;; composites a :map point names (:by [:P :E]), each bound once
+        [env binds]
+        (reduce (fn [[env binds] by]
+                  (let [[S bs] (bind-matrix (apply str "m" (map name by) "_")
+                                            (reduce mat* (map #(get-in env [:maps %]) by)))]
+                    [(assoc-in env [:maps by] S) (into binds bs)]))
+                [env binds]
+                (distinct (for [p points :when (and (= :map (:op p)) (next (:by p)))] (:by p))))
         ;; points, in order: each sees only the points before it
         [env binds pparams handles order]
         (reduce (fn [[env binds ps hs order] [i p]]
@@ -272,32 +318,46 @@
                      (conj order self)]))
                 [env binds [] [] []]
                 (map-indexed vector points))
-        cks (vec (map-indexed (fn [i c] [(sym "ck" i) (lower (check c env)) c]) checks))]
+        ;; checks: each a value, and with :against a reference value it is
+        ;; read against (an image's length against the original's)
+        cks (vec (map-indexed
+                  (fn [i c]
+                    (cond-> {:sym (sym "ck" i) :expr (lower (check c env)) :spec c}
+                      (:against c) (assoc :ref (sym "ck" i "ref")
+                                          :ref-expr (lower (check (:against c) env)))))
+                  checks))]
     {:env env
-     :bindings (into binds (map (fn [[s ex]] [s ex])) cks)
+     :bindings (into binds (mapcat (fn [{:keys [sym expr ref ref-expr]}]
+                                     (cond-> [[sym expr]] ref (conj [ref ref-expr]))))
+                     cks)
      :point-params pparams
      :handles handles
      :order order
      :checks cks}))
 
 (defmethod kernel/defaults :construction [_]
-  ;; One configuration per call: n = 1.
-  {:window {:x [-6 6] :y [-3.5 3.5] :n 1} :params []})
+  ;; One configuration per call (n = 1). A figure with a curve in it (a
+  ;; point whose :expr uses u) asks for more samples, and the kernel sweeps
+  ;; u over [0 1]: every other point repeats, the curve's point traces.
+  {:window {:x [-6 6] :y [-3.5 3.5] :n 1 :sweep [0 1]} :params []})
 
 (defmethod kernel/plan :construction [spec]
   (let [{:keys [env bindings point-params handles order checks]} (build spec)
-        values (concat (mapcat (fn [{:keys [x y]}] [x y]) order) (map first checks))
+        values (concat (mapcat (fn [{:keys [x y]}] [x y]) order)
+                       (mapcat (fn [{:keys [sym ref]}] (cond-> [sym] ref (conj ref))) checks))
         all-params (into (vec (:params spec)) point-params)]
     {:outputs (mapv out-key values)
      :params all-params
      :form (fn [kname]
-             (kernel/sweep-form kname {:var 'sweep :params all-params}
+             (kernel/sweep-form kname {:var 'u :params all-params}
                                 (mapv out-key values) bindings (vec values) []))
      :layers (-> []
                  (into (map #(draw-layer % env)) (:draw spec))
-                 (into (map (fn [[s _ c]] {:layer :value :of (out-key s)
-                                          :label (or (:label c) (name (check-kind c)))
-                                          :invariant? (boolean (:invariant? c))}))
+                 (into (map (fn [{:keys [sym ref spec]}]
+                              (cond-> {:layer :value :of (out-key sym)
+                                       :label (or (:label spec) (name (check-kind spec)))
+                                       :invariant? (boolean (or (:invariant? spec) ref))}
+                                ref (assoc :against (out-key ref)))))
                        checks)
                  (into handles))
      :probes {}

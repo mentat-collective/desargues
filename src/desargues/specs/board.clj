@@ -25,7 +25,10 @@
 (s/def ::y ::interval)
 ;; n = 1 is one configuration per call (a :construction); a sweep has more.
 (s/def ::n pos-int?)
-(s/def ::window (s/keys :req-un [::x ::y ::n]))
+;; The domain the kernel sweeps its variable over, when it is not the x axis
+;; (a construction sweeps a curve's parameter u over [0 1]).
+(s/def ::sweep ::interval)
+(s/def ::window (s/keys :req-un [::x ::y ::n] :opt-un [::sweep]))
 
 (s/def ::kind keyword?)
 (s/def ::var symbol?)

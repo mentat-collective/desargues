@@ -47,12 +47,15 @@
 ;; Pure: the frame and the Board value
 
 (defn sample-frame
-  "Run `kernel` on this host over the window at the params' :init values:
-   {output [numbers]} for every output of the plan. n = 1 is one call at x0."
-  [kernel {:keys [params] {[x0 x1] :x n :n} :window} outputs]
-  (let [arrays (mapv (fn [_] (double-array n)) outputs)
-        h (if (> n 1) (/ (- (double x1) (double x0)) (dec n)) 0.0)]
-    (apply kernel (concat arrays [(long n) (double x0) h] (map (comp double :init) params)))
+  "Run `kernel` on this host at the params' :init values: {output [numbers]}
+   for every output of the plan. The kernel sweeps its variable over the
+   window's :sweep domain (default its :x range) in n samples; n = 1 is one
+   call at the domain's start."
+  [kernel {:keys [params] {:keys [x n sweep]} :window} outputs]
+  (let [[s0 s1] (or sweep x)
+        arrays (mapv (fn [_] (double-array n)) outputs)
+        h (if (> n 1) (/ (- (double s1) (double s0)) (dec n)) 0.0)]
+    (apply kernel (concat arrays [(long n) (double s0) h] (map (comp double :init) params)))
     (zipmap outputs (map vec arrays))))
 
 (defn board-value
