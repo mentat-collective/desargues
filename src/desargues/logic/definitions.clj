@@ -3,4 +3,5 @@
   (:require [desargues.logic.definition]
             [desargues.logic.definition.function]
             [desargues.logic.definition.order]
-            [desargues.logic.definition.relation]))
+            [desargues.logic.definition.relation]
+            [desargues.logic.definition.graph]))
