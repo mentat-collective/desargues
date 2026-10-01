@@ -23,7 +23,8 @@
             [desargues.logic.proof.library :as lib]
             [desargues.logic.proof.scope :as sc]
             [desargues.logic.term :as t]
-            [hive-dsl.result :as r]))
+            [hive-dsl.result :as r]
+            [desargues.logic.definitions]))
 
 (defmulti justify
   "The Result of checking one line in ctx."
