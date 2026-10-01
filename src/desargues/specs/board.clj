@@ -60,11 +60,19 @@
 ;; Kind-neutral on purpose: a renderer typesets the lines without knowing
 ;; which kind of board wrote them.
 (s/def :board/math (s/coll-of string? :kind vector?))
+;; The camera of a 3D board: yaw and pitch as numbers or param ids, a scale,
+;; and an optional perspective distance. Its layers name points by three
+;; output keys, which the page projects.
+(s/def :board/view (s/keys :req-un [::yaw ::pitch ::scale] :opt-un [::perspective]))
+(s/def ::yaw (s/or :param keyword? :value number?))
+(s/def ::pitch (s/or :param keyword? :value number?))
+(s/def ::scale number?)
+(s/def ::perspective (s/and number? pos?))
 
 (s/def ::board
   (s/and (s/keys :req [:board/id :board/kind :board/kernel :board/window
                        :board/params :board/outputs :board/layers :board/probes
                        :board/frame :board/label]
-                 :opt [:board/math])
+                 :opt [:board/math :board/view])
          (fn [{:board/keys [outputs frame window]}]
            (every? #(= (:n window) (count (get frame %))) outputs))))

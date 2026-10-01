@@ -29,7 +29,10 @@
             [desargues.board.compiler :as compiler]
             [desargues.board.kernel :as kernel]
             [desargues.specs.board :as spec]
-            [desargues.board.construction]))
+            [desargues.board.construction]
+            [desargues.board.euclid]
+            [desargues.board.projective]
+            [desargues.board.symmetry]))
 
 (defn- conform!
   "The spec with its kind's defaults (kernel/defaults), or an ex-info naming
@@ -73,7 +76,8 @@
            :board/layers (:layers plan)
            :board/probes (:probes plan)
            :board/frame frame}
-    (seq (:math plan)) (assoc :board/math (vec (:math plan)))))
+    (seq (:math plan)) (assoc :board/math (vec (:math plan)))
+    (:view plan) (assoc :board/view (:view plan))))
 
 ;; ---------------------------------------------------------------------------
 ;; Boundary
