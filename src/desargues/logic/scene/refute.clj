@@ -229,13 +229,14 @@
         (conj (verdict tree) {:beat :hold :seconds 1.5}))))
 
 (defn construct
-  "A construct fn playing the refutation flow of formula on a stage."
-  [formula]
+  "A construct fn playing the refutation flow of formula on a stage. opts:
+   :pace."
+  [formula & {:as opts}]
   (let [bs (beats formula)]
-    (fn [stage] (b/play! stage bs))))
+    (fn [stage] (b/play! stage bs opts))))
 
 (defn record
   "Record the refutation flow of formula against a fresh RecordingBackend."
-  [scene-name formula]
+  [scene-name formula & {:as opts}]
   (s/with-backend (rec/recording-backend)
-    (s/render! scene-name (construct formula))))
+    (s/render! scene-name (construct formula opts))))

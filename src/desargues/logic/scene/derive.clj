@@ -146,14 +146,15 @@
           {:beat :hold :seconds 1.5})))
 
 (defn construct
-  "A construct fn playing the derivation flow of class statement s."
-  [s & opts]
-  (let [bs (apply beats s opts)]
-    (fn [stage] (b/play! stage bs))))
+  "A construct fn playing the derivation flow of class statement s. opts:
+   :handoff (see `beats`) and :pace."
+  [s & {:as opts}]
+  (let [bs (beats s (dissoc opts :pace))]
+    (fn [stage] (b/play! stage bs opts))))
 
 (defn record
   "Record the derivation flow of class statement s against a fresh
    RecordingBackend."
-  [scene-name s & opts]
+  [scene-name s & {:as opts}]
   (s/with-backend (rec/recording-backend)
-    (s/render! scene-name (apply construct s opts))))
+    (s/render! scene-name (construct s opts))))

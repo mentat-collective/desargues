@@ -1,6 +1,7 @@
 (ns desargues.logic.scene.table-test
   (:require [clojure.test :refer [deftest is testing]]
             [desargues.logic.formula :as f]
+            [desargues.logic.scene.beats :as b]
             [desargues.logic.scene.table :as st]
             [desargues.logic.table :as t]
             [desargues.scene.data :as rec]
@@ -20,13 +21,7 @@
    4 ['(implies (and (implies P Q) (implies R S) (or P R)) (or Q S))
       '(iff (not (and (or P Q) (or R S))) (or (and (not P) (not Q)) (and (not R) (not S))))]})
 
-(defn- inside? [{:keys [kind at from to] :as item}]
-  (let [{:keys [half-w half-h]} st/world
-        in? (fn [[x y] [hw hh]] (and (<= (+ (Math/abs (double x)) hw) half-w)
-                                     (<= (+ (Math/abs (double y)) hh) half-h)))]
-    (if (= kind :line)
-      (and (in? from [0 0]) (in? to [0 0]))
-      (in? at (st/item-extent item)))))
+(defn- inside? [item] (b/inside? (b/extent item)))
 
 (deftest fill-is-column-major-children-first
   (doseq [fm (mapcat val by-atoms)]
@@ -74,7 +69,7 @@
 (deftest every-item-inside-the-world
   (doseq [[n fms] by-atoms fm fms]
     (let [bs (st/beats fm)
-          items (st/beat-items bs)
+          items (vec (b/items bs))
           lay (st/layout (t/table fm))]
       (testing (str n " atoms " (pr-str fm))
         (is (= n (count (f/atoms fm))))
@@ -85,8 +80,8 @@
           (is (:legible? lay) "up to 12 columns the headers stay legible"))))))
 
 (deftest recording-yields-a-scene-graph
-  (let [g (st/record-table "de-morgan" de-morgan)
-        items (st/beat-items (st/beats de-morgan))]
+  (let [g (st/record "de-morgan" de-morgan)
+        items (vec (b/items (st/beats de-morgan)))]
     (is (= "de-morgan" (:scene g)))
     (is (= (count items) (:node-count g)))
     (is (seq (rec/play-steps g)))
@@ -102,5 +97,5 @@
       (doseq [fm (concat (mapcat val by-atoms) '[P (in x A) (not (or P Q))])]
         (let [l (lt/->TeX fm)
               w (/ (:w (ty/typeset ts l :white)) 10.0)
-              est (st/tex-width l 60)]
+              est (b/tex-width l 60)]
           (is (< 0.8 (/ est w) 1.25) (str l " real " w " est " est)))))))

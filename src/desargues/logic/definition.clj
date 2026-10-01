@@ -5,7 +5,9 @@
    form abbreviates, one level, or nil. Class statements (= and subset
    between classes) are read by the axiom of extent; membership in a class
    term unfolds by desargues.logic.classes/unfold. Bound variables are the
-   symbols x y z (fresh ones are chosen when those occur in form).")
+   symbols x y z (fresh ones are chosen when those occur in form)."
+  (:require [desargues.logic.classes :as cl]
+            [desargues.logic.term :as t]))
 
 (defmulti defines
   "form -> the formula it abbreviates, one level, or nil."
@@ -71,3 +73,33 @@
 
 (defmethod defines 'partial-order [[_ r a]]
   (list 'and (list 'reflexive r a) (list 'antisymmetric r) (list 'transitive r)))
+
+(defmethod defines 'element [[_ a :as form]]
+  (let [[c] (fresh form 1)]
+    (list 'exists [c] (list 'in a c))))
+
+(defmethod defines 'disjoint [[_ a b]]
+  (list '= (list 'inter a b) 'empty))
+
+;; ---------------------------------------------------------------------------
+;; Membership in class terms (Pinter 1.2 and 1.4), on classes/unfold
+
+(defmethod cl/unfold 'class [z [_ [v] body]]
+  (list 'and (list 'element z) (t/substitute body {v z})))
+
+(defmethod cl/unfold 'set-of [z [_ & as]]
+  (if (= 1 (count as))
+    (list '= z (first as))
+    (cons 'or (map #(list '= z %) as))))
+
+(defmethod cl/unfold 'pair [z [_ a b]]
+  (list 'in z (list 'set-of (list 'set-of a) (list 'set-of a b))))
+
+(defmethod cl/unfold 'pair-alt [z [_ a b]]
+  (list 'in z (list 'set-of (list 'set-of a 'empty) (list 'set-of b (list 'set-of 'empty)))))
+
+(defmethod cl/unfold 'product [z [_ a b :as c]]
+  (let [[x y] (fresh (list z c) 2)]
+    (list 'exists [x]
+          (list 'exists [y]
+                (list 'and (list '= z (list 'pair x y)) (list 'in x a) (list 'in y b))))))

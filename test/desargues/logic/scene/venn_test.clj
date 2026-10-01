@@ -2,7 +2,8 @@
   (:require [clojure.test :refer [deftest is testing]]
             [desargues.logic.scene.venn :as v]
             [desargues.scene.data :as rec]
-            [desargues.tex.label :as label]))
+            [desargues.tex.label :as label]
+            [desargues.logic.scene.beats :as b]))
 
 (def de-morgan '(= (compl (union A B)) (inter (compl A) (compl B))))
 (def distributive '(= (inter A (union B C)) (union (inter A B) (inter A C))))
@@ -49,7 +50,7 @@
   (doseq [st [de-morgan distributive diff-swap '(= (compl (compl A)) A)
               '(= (compl universe) empty)]]
     (testing (pr-str st)
-      (is (v/inside-world? (v/beats st))))))
+      (is (every? b/inside? (b/footprints (v/beats st)))))))
 
 (deftest beats-are-data-in-flow-order
   (let [bs (v/beats diff-swap)]
@@ -57,7 +58,7 @@
     (is (some #(= :recolor (:beat %)) bs))
     (is (not-any? #(= :recolor (:beat %)) (v/beats de-morgan)))
     (is (= "the regions differ: the identity fails"
-           (:text (first (filter #(= :verdict (:key %)) bs)))))))
+           (:text (first (filter #(= :verdict (:id %)) (b/items bs))))))))
 
 (deftest recording-works
   (let [g (v/record :de-morgan de-morgan)]

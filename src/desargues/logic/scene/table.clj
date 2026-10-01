@@ -2,19 +2,18 @@
   "The truth-table flow: a desargues.logic.table animated as dynamic
    programming.
 
-     (beats formula)            ; pure: the flow as a vector of beat maps
-     (table-construct formula)  ; 1-arg construct fn for desargues.scene/render!
-     (record-table name formula); the scene graph under the RecordingBackend
+     (beats formula)                 ; pure: the flow as a vector of beat maps
+     (construct formula & opts)      ; 1-arg construct fn for desargues.scene/render!
+     (record scene-name formula & opts) ; the scene graph under the RecordingBackend
 
    Layout (`layout`) and beats are plain data in world units (centred, y up,
-   14.2 x 8). A beat is
+   14.2 x 8), played by desargues.logic.scene.beats/play!. A beat is
 
-     {:beat   :show | :recolor | :caption | :mark   ; the action, open (play-beat)
+     {:beat   :show | :recolor | :caption | :mark
       :phase  :intro :headers :frame :atoms :focus :shortcut :fill :mark
               :unfocus :outline :verdict :final        ; what it means
       :col    compound column index (column beats only)
-      :items  [item]      ; :show
-      :item   item        ; :caption (replaces the caption in :slot)
+      :items  [item]      ; :show, :caption (replaces the caption in :slot)
       :slot   :top | :bottom
       :ids    [id] :color kw   ; :recolor, :mark
       :cells  [{:row :col}]}   ; :mark: the essential cells
@@ -32,12 +31,8 @@
             [desargues.logic.scene.beats :as b]))
 
 ;; =============================================================================
-;; World and text extents
+;; Layout (pure)
 ;; =============================================================================
-
-(def world
-  "The scene world: half-extents in units and pixels per unit."
-  {:half-w b/half-width :half-h b/half-height :px b/px-per-unit})
 
 (def ^:private margin 0.35)
 (def ^:private caption-top-y 3.55)
@@ -45,35 +40,7 @@
 (def ^:private table-top 3.1)
 (def ^:private table-bottom -3.15)
 
-(def ^:private em b/em)
-
-(def tex-width
-  "Estimated rendered width in world units of latex at font size px
-   (desargues.logic.scene.beats/tex-width)."
-  b/tex-width)
-
-(def text-width
-  "Estimated rendered width in world units of plain text at font size px
-   (desargues.logic.scene.beats/text-width)."
-  b/text-width)
-
-(defn item-extent
-  "The [half-width half-height] an item occupies around its :at (items
-   without :at, such as lines: nil). Footprints come from
-   desargues.logic.scene.beats/extent, open on :kind."
-  [item]
-  (when (:at item)
-    (let [[[x0 y0] [x1 y1]] (b/extent item)]
-      [(/ (- x1 x0) 2) (/ (- y1 y0) 2)])))
-
-;; =============================================================================
-;; Layout (pure)
-;; =============================================================================
-
 (def ^:private true-tex (b/value-tex true))
-(def value-tex
-  "TeX for a truth value (desargues.logic.scene.beats/value-tex)."
-  b/value-tex)
 
 (defn layout
   "Geometry of tbl's table in the world: {:columns :n-atoms :xs :widths
@@ -84,17 +51,17 @@
   [{:keys [atoms columns rows]}]
   (let [cols (vec (concat atoms columns))
         n (count rows)
-        avail-w (- (* 2 (:half-w world)) (* 2 margin))
+        avail-w (- (* 2 b/half-width) (* 2 margin))
         pad 0.4
         header-h 0.75
         header-y (- table-top (/ header-h 2))
         rule-y (- table-top header-h)
         rows-top (- rule-y 0.12)
         row-h (min 0.62 (/ (- rows-top table-bottom) (max n 1)))
-        cell-size0 (-> (* row-h (:px world) 0.6) (min 30.0) (max 12.0))
-        tex30 (mapv #(tex-width (lt/->TeX %) 30) cols)
+        cell-size0 (-> (* row-h b/px-per-unit 0.6) (min 30.0) (max 12.0))
+        tex30 (mapv #(b/tex-width (lt/->TeX %) 30) cols)
         widths-at (fn [s cs]
-                    (let [cw (tex-width true-tex cs)]
+                    (let [cw (b/tex-width true-tex cs)]
                       (mapv #(+ pad (max (* % (/ s 30.0)) cw)) tex30)))
         fits? (fn [s] (<= (reduce + (widths-at s cell-size0)) avail-w))
         header-size (or (first (filter fits? (range 30.0 7.9 -0.5))) 8.0)
@@ -146,11 +113,17 @@
 
 (defn- caption [slot text color]
   (let [y (if (= slot :top) caption-top-y caption-bottom-y)
-        size (min 24 (/ (* 2 (- (:half-w world) margin)) (* (em 1) 0.52 (max 1 (count text)))))]
+        size (min 24 (/ (* 2 (- b/half-width margin)) (* (b/em 1) 0.52 (max 1 (count text)))))]
     (text-item [:caption slot] text [0.0 y] size color)))
 
+(defn- caption-beat [phase slot text color & {:as extra}]
+  (merge {:beat :caption :phase phase :slot slot :hold 0.6 :items [(caption slot text color)]} extra))
+
+(defn- show-beat [phase items & {:as extra}]
+  (merge {:beat :show :phase phase :items items :lag (min 0.3 (/ 3.0 (max 1 (count items))))} extra))
+
 (defn- cell-item [{:keys [xs row-ys cell-size]} row col v extra]
-  (tex-item [:cell row col] (value-tex v) [(xs col) (row-ys row)] cell-size
+  (tex-item [:cell row col] (b/value-tex v) [(xs col) (row-ys row)] cell-size
             (plain-colors v) :row row :col col :value v extra))
 
 (defn- column-beats
@@ -159,12 +132,11 @@
   (let [header [:header col]
         essential (filterv :essential? col-cells)]
     (cond-> [{:beat :recolor :phase :focus :col j :ids [header] :color :gold}
-             {:beat :caption :phase :shortcut :col j :slot :top
-              :item (caption :top (:shortcut (c/spec (f/op g))) :gold)}
-             {:beat :show :phase :fill :col j
-              :items (mapv (fn [{:keys [row value essential?]}]
-                             (cell-item lay row col value {:essential? essential?}))
-                           col-cells)}]
+             (caption-beat :shortcut :top (:shortcut (c/spec (f/op g))) :gold :col j)
+             (show-beat :fill (mapv (fn [{:keys [row value essential?]}]
+                                      (cell-item lay row col value {:essential? essential?}))
+                                    col-cells)
+                        :col j)]
       (seq essential)
       (conj {:beat :mark :phase :mark :col j :color :gold
              :ids (mapv (fn [{:keys [row]}] [:cell row col]) essential)
@@ -199,93 +171,39 @@
         {vcolor :color vtext :text} (verdict-caption verdict)]
     (vec
      (concat
-      [{:beat :caption :phase :intro :slot :top
-        :item (caption :top "each column asks one question of the columns before it" :white)}
-       {:beat :show :phase :headers
-        :items (mapv (fn [col g] (tex-item [:header col] (lt/->TeX g) [(xs col) header-y]
-                                           header-size :white))
-                     (range) columns)}
-       {:beat :show :phase :frame
-        :items [(line-item [:rule 0] [left rule-y] [right rule-y] :grey 2)
-                (line-item [:rule 1] [split-x top-y] [split-x bottom-y] :grey 2)]}
-       {:beat :show :phase :atoms
-        :items (vec (for [[i {:keys [env]}] (map-indexed vector (:rows tbl))
-                          [col a] (map-indexed vector (:atoms tbl))]
-                      (cell-item lay i col (get env a) {})))}]
+      [(caption-beat :intro :top "each column asks one question of the columns before it" :white)
+       (show-beat :headers (mapv (fn [col g] (tex-item [:header col] (lt/->TeX g) [(xs col) header-y]
+                                                       header-size :white))
+                                 (range) columns))
+       (show-beat :frame [(line-item [:rule 0] [left rule-y] [right rule-y] :grey 2)
+                          (line-item [:rule 1] [split-x top-y] [split-x bottom-y] :grey 2)])
+       (show-beat :atoms (vec (for [[i {:keys [env]}] (map-indexed vector (:rows tbl))
+                                    [col a] (map-indexed vector (:atoms tbl))]
+                                (cell-item lay i col (get env a) {}))))]
       (mapcat (fn [j g] (column-beats lay j (+ n-atoms j) g (by-col j)))
               (range) (:columns tbl))
-      [{:beat :show :phase :outline :items (outline-items lay last-col)}
-       {:beat :caption :phase :verdict :slot :bottom :item (caption :bottom vtext vcolor)}
+      [(show-beat :outline (outline-items lay last-col))
+       (caption-beat :verdict :bottom vtext vcolor)
        {:beat :recolor :phase :final :verdict verdict
         :color (if (= verdict :tautology) :green :red)
         :ids (vec (for [[i v] final-cells
                         :when (or (= verdict :tautology) (false? v))]
                     [:cell i last-col]))}]))))
 
-(defn beat-items
-  "Every item any beat places, in beat order."
-  [bs]
-  (vec (mapcat (fn [b] (cond (:items b) (:items b) (:item b) [(:item b)] :else [])) bs)))
-
 ;; =============================================================================
-;; Boundary: beats -> desargues.scene
+;; Boundary: beats -> desargues.scene, through desargues.logic.scene.beats/play!
 ;; =============================================================================
 
-(defmulti reveal
-  "Item kind -> the animation that brings its node in."
-  (fn [item _node _pace] (:kind item)))
-
-(defmethod reveal :default [_ node pace] (s/appear node :run-time (* 0.4 pace)))
-(defmethod reveal :line [_ node pace] (s/draw node :run-time (* 0.5 pace)))
-
-(defmulti play-beat!
-  "Play one beat on ctx {:stage :nodes (atom id->node) :pace}. Open on :beat."
-  (fn [_ctx beat] (:beat beat)))
-
-(defn- build! [{:keys [nodes]} item]
-  (let [nd (b/realize item)]
-    (swap! nodes assoc (:id item) nd)
-    nd))
-
-(defmethod play-beat! :show [{:keys [stage pace] :as ctx} {:keys [items]}]
-  (let [anims (mapv (fn [it] (reveal it (build! ctx it) pace)) items)]
-    (when (seq anims)
-      (s/play! stage (s/stagger anims :lag-ratio (min 0.3 (/ 3.0 (count anims))))))))
-
-(defmethod play-beat! :caption [{:keys [stage nodes pace] :as ctx} {:keys [item]}]
-  (let [old (get @nodes (:id item))
-        nd (build! ctx item)]
-    (s/play! stage (s/together (cond-> [(s/appear nd :run-time (* 0.5 pace))]
-                                 old (conj (s/vanish old :run-time (* 0.3 pace))))))
-    (s/hold! stage (* 0.6 pace))))
-
-(defmethod play-beat! :recolor [{:keys [stage nodes pace]} {:keys [ids color]}]
-  (when-let [anims (seq (keep #(some-> (get @nodes %) (s/recolor color :run-time (* 0.4 pace))) ids))]
-    (s/play! stage (s/together anims))))
-
-(defmethod play-beat! :mark [{:keys [stage nodes pace]} {:keys [ids color]}]
-  (let [nds (keep #(get @nodes %) ids)]
-    (s/play! stage (s/together (mapv #(s/recolor % color :run-time (* 0.4 pace)) nds)))
-    (s/play! stage (s/together (mapv #(s/emphasize % :run-time (* 0.5 pace)) nds)))))
-
-(defn play-beats!
-  "Interpret beats on stage. opts: :pace (run-time multiplier, default 1)."
-  [stage bs & {:keys [pace] :or {pace 1.0}}]
-  (let [ctx {:stage stage :nodes (atom {}) :pace pace}]
-    (doseq [b bs] (play-beat! ctx b))
-    (s/hold! stage (* 2 pace))
-    ctx))
-
-(defn table-construct
+(defn construct
   "A 1-arg construct fn for desargues.scene/render! that plays the truth-table
    flow of formula. opts: :pace."
   [formula & {:as opts}]
-  (let [bs (beats formula)]
-    (fn [stage] (play-beats! stage bs opts) nil)))
+  (let [bs (conj (beats formula) {:beat :hold :seconds 2})]
+    (fn [stage] (b/play! stage bs opts) nil)))
 
-(defn record-table
+(defn record
   "The scene graph of formula's truth-table flow under a fresh
    RecordingBackend."
   [scene-name formula & {:as opts}]
   (s/with-backend (rec/recording-backend)
-    (s/render! scene-name (table-construct formula opts))))
+    (s/render! scene-name (construct formula opts))))
