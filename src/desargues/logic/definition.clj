@@ -88,9 +88,10 @@
   (list 'and (list 'element z) (t/substitute body {v z})))
 
 (defmethod cl/unfold 'set-of [z [_ & as]]
-  (if (= 1 (count as))
-    (list '= z (first as))
-    (cons 'or (map #(list '= z %) as))))
+  (list 'and (list 'element z)
+        (if (= 1 (count as))
+          (list '= z (first as))
+          (cons 'or (map #(list '= z %) as)))))
 
 (defmethod cl/unfold 'pair [z [_ a b]]
   (list 'in z (list 'set-of (list 'set-of a) (list 'set-of a b))))

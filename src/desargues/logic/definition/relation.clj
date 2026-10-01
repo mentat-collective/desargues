@@ -63,6 +63,9 @@
   (let [[x] (fresh 1 c term)]
     (list 'exists [x] (list 'and (list 'in x a) (list '= c (list 'class-of x g))))))
 
+(defmethod cl/unfold 'identity [p [_ a :as term]]
+  (at-pair p term (fn [x y] (list 'and (list 'in x a) (list '= x y)))))
+
 (defmethod cl/unfold 'kernel [p [_ f :as term]]
   (at-pair p term (fn [a b] (list '= (list 'apply f a) (list 'apply f b)))))
 
