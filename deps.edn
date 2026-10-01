@@ -62,4 +62,7 @@
   :dynamics {:extra-deps {io.github.replikativ/raster {:git/tag "v0.2.258" :git/sha "d0fb8f7"}
                           org.typedclojure/typed.clj.runtime {:mvn/version "1.4.0"}}
              :jvm-opts ["--enable-native-access=ALL-UNNAMED"
-                        "--add-modules=jdk.incubator.vector"]}}}
+                        "--add-modules=jdk.incubator.vector"]}
+  :ansatz {:extra-paths ["ansatz"]
+           :extra-deps {org.replikativ/ansatz {:mvn/version "0.2.115"}}
+           :jvm-opts ["--enable-native-access=ALL-UNNAMED"]}}}
