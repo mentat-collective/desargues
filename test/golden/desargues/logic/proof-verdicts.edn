@@ -1,0 +1,33 @@
+{:bad-taut
+ {:ok? false,
+  :concludes? true,
+  :weakest :evidence/structural,
+  :failing [6 7]},
+ :captured-gen
+ {:ok? false,
+  :concludes? true,
+  :weakest :evidence/structural,
+  :failing [1]},
+ :malformed
+ {:malformed
+  #:proof{:shape {:lines ["should have at least 1 elements"]}}},
+ :not-the-goal
+ {:ok? false,
+  :concludes? false,
+  :weakest :evidence/structural,
+  :failing []},
+ :transitivity
+ {:ok? true,
+  :concludes? true,
+  :weakest :evidence/structural,
+  :failing []},
+ :wrong-definition
+ {:ok? false,
+  :concludes? true,
+  :weakest :evidence/structural,
+  :failing [2 4]},
+ :wrong-substitution
+ {:ok? false,
+  :concludes? true,
+  :weakest :evidence/structural,
+  :failing [6]}}
