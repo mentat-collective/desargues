@@ -4,7 +4,7 @@
  {org.clojure/clojure {:mvn/version "1.12.3"}
 
   ;; symbolic math
-  io.github.mentat-collective/emmy {:git/tag "v0.32.0" :git/sha "53fd990"}
+  io.github.mentat-collective/emmy {:git/url "https://github.com/BuddhiLW/emmy.git" :git/sha "4960de45705f79a0183f429f32d7d5be8fa7af39"}
 
   ;; python interop -> Manim CE (lives in the conda `manim` env, not on the JVM)
   clj-python/libpython-clj {:mvn/version "2.026"}
