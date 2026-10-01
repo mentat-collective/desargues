@@ -24,6 +24,12 @@
 (defmethod enter :discharge [scope _ {:keys [from]}]
   (-> scope (update :in-force dissoc (first from)) (update :depth dec)))
 
+(defmethod enter :choose [scope i {:keys [claim]}]
+  (-> scope (update :in-force assoc i claim) (update :depth inc)))
+
+(defmethod enter :exists-elim [scope _ {:keys [from]}]
+  (-> scope (update :in-force dissoc (first from)) (update :depth dec)))
+
 (defn scopes
   "The Scope in force at each line: [scope-at-0 scope-at-1 ...]."
   [lines]

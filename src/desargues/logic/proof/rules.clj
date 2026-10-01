@@ -147,6 +147,60 @@
 ;; ---------------------------------------------------------------------------
 ;; Outside evidence
 
+;; ---------------------------------------------------------------------------
+;; Equality
+
+(defmethod justify :refl [{:keys [claim]} _]
+  (if (and (seq? claim) (= '= (first claim)) (= 3 (count claim)) (t/alpha= (nth claim 1) (nth claim 2)))
+    (holds :evidence/structural "a thing equals itself")
+    (fails :evidence/structural "claim is not t = t")))
+
+(defn- replace-some
+  "Every form obtained from form by replacing any non-empty set of the
+   occurrences of a with b."
+  [form a b]
+  (letfn [(go [g]
+            (let [here (if (= g a) [b] [])
+                  inside (if (seq? g)
+                           (let [opts (map (fn [x] (cons x (go x))) (rest g))]
+                             (map #(apply list (first g) %)
+                                  (reduce (fn [acc o] (for [p acc x o] (conj p x))) [[]] opts)))
+                           [g])]
+              (distinct (concat here inside))))]
+    (remove #(= % form) (go form))))
+
+(defmethod justify :subst [{:keys [claim from]} ctx]
+  (let [[e i] (refs from)
+        eq (claim-of ctx e)
+        src (claim-of ctx i)]
+    (if (and (seq? eq) (= '= (first eq)))
+      (let [[_ a b] eq]
+        (if (some #(t/alpha= % claim) (concat (replace-some src a b) (replace-some src b a)))
+          (holds :evidence/structural "replace equals by equals")
+          (fails :evidence/structural "claim is not the cited line with equals replaced")))
+      (fails :evidence/structural "first cited line is not an equation"))))
+
+;; ---------------------------------------------------------------------------
+;; Existential elimination: choose a witness, reason, conclude
+
+(defmethod justify :choose [{:keys [claim from with]} ctx]
+  (let [src (claim-of ctx from)]
+    (if (and (seq? src) (= 'exists (first src)))
+      (let [[_ _ body] src
+            [[x c]] (seq with)
+            fresh? (not-any? #(t/free-in? c %) (cons src (sc/givens (:scope ctx))))]
+        (cond (not fresh?) (fails :evidence/structural (str c " is not a new name"))
+              (t/alpha= claim (t/substitute body {x c})) (holds :evidence/given "let it be such")
+              :else (fails :evidence/structural "claim is not the chosen witness's body")))
+      (fails :evidence/structural "cited line is not an exists"))))
+
+(defmethod justify :exists-elim [{:keys [claim from with]} ctx]
+  (let [[c-line last-line] (refs from)
+        c (first (vals with))]
+    (cond (t/free-in? c claim) (fails :evidence/structural (str "the conclusion still mentions " c))
+          (t/alpha= claim (claim-of ctx last-line)) (holds :evidence/structural "it holds whichever witness")
+          :else (fails :evidence/structural (str "claim is not the conclusion reached from line " c-line)))))
+
 (defmethod justify :cite [{:keys [result]} _]
   (holds :evidence/cited (str "by " result)))
 
