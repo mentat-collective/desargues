@@ -13,7 +13,8 @@
    line l through A at angle pi u meets the conic again at X, where X is
    fixed by asking the hexagon A B C D E X to be Pascal's, so AB.DE, BC.EX
    and CD.XA are collinear. Draw it with [:trace id] on a board whose window
-   sweeps u (:n > 1)."
+   sweeps u (:n > 1). With :angle expr the line's angle is expr instead
+   (radians, over the params), and X is one point riding the conic."
   (:require [desargues.board.construction :as c]
             [desargues.board.linalg :as la]
             [emmy.env :as e]))
@@ -30,12 +31,12 @@
         [X Y W] (la/cross (la/cross (H from) (H of)) (la/cross (H a) (H b)))]
     {:xy [(e/divide X W) (e/divide Y W)]}))
 
-(defmethod c/point :conic [{[a b c* d f] :through} {:keys [self] :as env}]
+(defmethod c/point :conic [{[a b c* d f] :through angle :angle} {:keys [self] :as env}]
   ;; every homogeneous intermediate bound under :let, so each step refers
   ;; to names and the kernel never inlines the whole chain of meets
   (let [H #(la/h (c/xy-of env %))
         [ax ay] (c/xy-of env a)
-        th (e/* Math/PI 'u)
+        th (if angle (c/author-expr angle env) (e/* Math/PI 'u))
         steps (volatile! [])
         bind (fn [k v]
                (let [ss (mapv #(c/local self (str k %)) (range 3))]

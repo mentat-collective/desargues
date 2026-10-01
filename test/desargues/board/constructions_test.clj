@@ -97,6 +97,19 @@
       (is (close? -1 (second ((drawn b) "Y"))) "Y is on AB")
       (is (close? 0 (get (readouts b) "OPY")) "and on OP"))))
 
+(deftest pascal-holds-for-a-point-riding-the-conic
+  (doseq [ph [0.3 1.3 2.2 2.9]]
+    (let [b (compile! {:id :pascal-test :kind :construction
+                       :params [{:id 'ph :min 0.05 :max 3.09 :init ph :play true}]
+                       :points [{:id :A :at [-1.8 -0.6]} {:id :B :at [-0.6 1.3]} {:id :C :at [1.2 1.2]}
+                                {:id :D :at [2.0 -0.4]} {:id :E :at [0.3 -1.5]}
+                                {:id :F :op :conic :through [:A :B :C :D :E] :angle 'ph}
+                                {:id :P :op :meet :lines [[:A :B] [:D :E]]}
+                                {:id :Q :op :meet :lines [[:B :C] [:E :F]]}
+                                {:id :R :op :meet :lines [[:C :D] [:F :A]]}]
+                       :checks [{:collinear [:P :Q :R] :label "PQR"}]})]
+      (is (< (Math/abs (double (get (readouts b) "PQR"))) 1e-9) (str "at angle " ph)))))
+
 (deftest groups-act-on-a-figure
   (let [b (compile! {:id :symmetry-test :kind :construction
                      :params [{:id 'th :min 0 :max 6.3 :init 0.7} {:id 'k :min 0.2 :max 3 :init 2}]
