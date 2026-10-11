@@ -46,7 +46,8 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "21"
+          # raster compiles kernels with java.lang.classfile (final in JDK 24).
+          java-version: "25"
       - uses: DeLaGuardo/setup-clojure@13.0
         with:
           cli: latest
