@@ -35,7 +35,7 @@ live scenes and the benchmark charts below.
 ```clojure
 ;; deps.edn
 {:deps {io.github.mentat-collective/desargues
-        {:git/tag "v0.1.1" :git/sha "6d26609"}}}
+        {:git/tag "v0.2.0" :git/sha "859f6c9"}}}
 ```
 
 `main` carries more than the last tag (see [CHANGELOG](doc/CHANGELOG.md)); pin a
