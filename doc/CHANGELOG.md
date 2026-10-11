@@ -6,7 +6,20 @@ All notable changes to desargues. The format follows
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-11
+
 ### Added
+- `desargues.geometry`: a projective layer on Emmy generics (`projective`, with
+  symbolic Desargues and Pappus proofs), a disposition solver (clp(FD) logic
+  tier, Nelder-Mead polish, trajectory checks), display-homography fitting
+  (`fit`), and emission of solved configurations as facade scenes.
+- `desargues.geometry.kernel`: a `GeometryKernel` port with batched
+  double-array cost and trajectory-sampling kernels; homography fits run about
+  30x faster than on Emmy matrices, bit-identical results. A raster provider
+  (`:dynamics`) is selectable; the pure-Clojure array kernel is the default.
+  Benchmarks: `clojure -M:bench:dynamics -m desargues.bench.geometry`.
+- `doc/cljw-lane.md` and `dev/cljw/`: measurements of desargues' pure half on
+  ClojureWasm and a Zig wasm RK4 kernel (no-go for now, revisit conditions listed).
 - `desargues.scene/path` and `desargues.scene/reshape`: one connected stroke
   through a list of points (`:color :width`, `:closed?`) and the animation that
   moves its points, the count free to change (a trail growing a sample at a
@@ -76,6 +89,7 @@ All notable changes to desargues. The format follows
 - Emmy → LaTeX → Manim pipeline, the DevX hot-reload segment DAG, the
   brachistochrone derivation and number-theory demos (work from 2025-12).
 
-[Unreleased]: https://github.com/mentat-collective/desargues/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/mentat-collective/desargues/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/mentat-collective/desargues/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/mentat-collective/desargues/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/mentat-collective/desargues/releases/tag/v0.1.0
