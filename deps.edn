@@ -37,7 +37,7 @@
           :main-opts ["-m" "desargues.bench"]}
   ;; `bb site` — the landing page: a plato deck (site/) prerendered to dist/site.
   :site {:extra-paths ["site"]
-         :extra-deps {io.github.BuddhiLW/plato {:git/sha "56516c5d5303a87de39a04a9c1278c429982a725"}}
+         :extra-deps {io.github.BuddhiLW/plato {:git/sha "fabc9b6f18e24d0e91d0909d7e59e26724a46a38"}}
          :main-opts ["-m" "plato.cli"]}
   :dev  {:extra-paths ["dev"]
          :extra-deps {orchestra/orchestra {:mvn/version "2021.01.01-1"}

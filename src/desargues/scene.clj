@@ -80,6 +80,12 @@
   [from to & {:as opts}]
   (p/-line (backend) from to opts))
 
+(defn path
+  "One connected stroke through `points` ([x y (z)] each), in order.
+   opts: :color :width, :closed? (join the last point back to the first)."
+  [points & {:as opts}]
+  (p/-path (backend) points opts))
+
 (defn move-to
   "Move obj's center to point [x y] or [x y z]. Returns obj."
   [obj point]
@@ -121,6 +127,11 @@
   "Animate a line's endpoints to from/to (a rod following its bob)."
   [line from to & {:as opts}]
   (p/-connect (backend) line from to opts))
+
+(defn reshape
+  "Animate a path's points to `points`; the count may change (a growing trail)."
+  [path points & {:as opts}]
+  (p/-reshape (backend) path points opts))
 
 (defn together
   "Play a seq of animations as one group. opts: {:lag-ratio n}."

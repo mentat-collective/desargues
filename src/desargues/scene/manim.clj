@@ -16,7 +16,8 @@
             [desargues.manim.animations :as man-anim]
             [desargues.manim-quickstart :as man-quick]
             [desargues.layout.realize :as layout]
-            [desargues.domain.protocols :as dom]))
+            [desargues.domain.protocols :as dom]
+            [desargues.manim.paths :as man-path]))
 
 ;; ============================================================================
 ;; Keyword resolution — the semantic layer that keeps Python out of consumers
@@ -68,6 +69,20 @@
   [f fixed opts]
   (apply f (concat fixed (mapcat identity opts))))
 
+(defn- stroke-opts
+  "The facade's stroke opts as Manim kwargs: :width -> :stroke_width, and the
+   path-only :closed? dropped."
+  [opts]
+  (cond-> (dissoc opts :width :closed?)
+    (:width opts) (assoc :stroke_width (:width opts))))
+
+(defn- corners
+  "3D corner list for a path: points padded to [x y z], the first repeated at
+   the end when closed?."
+  [points closed?]
+  (let [pts (mapv pad3 points)]
+    (if (and closed? (seq pts)) (conj pts (first pts)) pts)))
+
 ;; ============================================================================
 ;; ManimBackend — implements every scene protocol by delegating to manim.*
 ;; ============================================================================
@@ -91,10 +106,9 @@
   (-rounded-rectangle [_ opts]   (kw-apply man-mob/rounded-rectangle []      (resolve-opts opts)))
   (-decimal [_ value opts]       (kw-apply man-mob/decimal-number    [value] (resolve-opts opts)))
   (-line [_ from to opts]
-    ;; the facade's :width is Manim's stroke_width
-    (let [opts (cond-> (dissoc opts :width)
-                 (:width opts) (assoc :stroke_width (:width opts)))]
-      (kw-apply man-mob/line [(pad3 from) (pad3 to)] (resolve-opts opts))))
+    (kw-apply man-mob/line [(pad3 from) (pad3 to)] (resolve-opts (stroke-opts opts))))
+  (-path [_ points opts]
+    (kw-apply man-path/polyline [(corners points (:closed? opts))] (resolve-opts (stroke-opts opts))))
   (-place-at [_ obj point]       (man-mob/move-to obj (pad3 point)))
   (-place-next-to [_ obj ref direction opts]
     (kw-apply man-mob/next-to [obj ref (resolve-const direction)] (resolve-opts opts)))
@@ -117,6 +131,9 @@
     (kw-apply man-anim/move-to-target [obj] (resolve-opts opts)))
   (-connect [_ line from to opts]
     (kw-apply man-anim/move-endpoints [line (pad3 from) (pad3 to)] (resolve-opts opts)))
+  (-reshape [_ path points opts]
+    (let [closed? (boolean (man-core/call-method path "is_closed"))]
+      (kw-apply man-path/move-corners [path (corners points closed?)] (resolve-opts opts))))
   (-together [_ anims opts]
     (apply man-anim/animation-group (concat anims (mapcat identity (resolve-opts opts)))))
   (-stagger [_ anims opts]

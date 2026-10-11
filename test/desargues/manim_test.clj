@@ -3,7 +3,8 @@
   (:require [clojure.test :refer :all]
             [libpython-clj2.python :as py]
             [desargues.manim-quickstart :as mq]
-            [desargues.config :as config]))
+            [desargues.config :as config]
+            [desargues.scene.protocols :as p]))
 
 (def ^:dynamic *python-initialized* false)
 
@@ -140,3 +141,19 @@ manim_examples
       (is (number? TAU) "TAU should be a number")
       (is (< 3.14 PI 3.15) "PI should be approximately 3.14159")
       (is (< 6.28 TAU 6.29) "TAU should be approximately 6.28318"))))
+
+(deftest test-scene-path-on-manim
+  (testing "the facade's path is a VMobject through its corners; reshape animates them"
+    (require 'desargues.scene.manim)
+    (let [b      ((resolve 'desargues.scene.manim/manim-backend))
+          open   (p/-path b [[0 0] [1 0] [1 1]] {:color :gold :width 4})
+          closed (p/-path b [[0 0] [1 0] [0 1]] {:closed? true})
+          anim   (p/-reshape b open [[0 0] [1 0] [1 1] [2 1]] {:run-time 0.5})
+          anchors (fn [vm] (py/->jvm (py/call-attr vm "get_anchors")))]
+      (is (== 4 (py/->jvm (py/get-attr open "stroke_width"))))
+      (is (false? (py/call-attr open "is_closed")))
+      (is (true? (py/call-attr closed "is_closed")))
+      (is (= [0.0 0.0 0.0] (vec (first (anchors open)))))
+      (is (= [1.0 1.0 0.0] (vec (last (anchors open)))))
+      (is (py/has-attr? (py/call-attr anim "build") "begin")
+          "reshape is an .animate builder that builds a Manim Animation"))))
