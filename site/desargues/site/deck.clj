@@ -14,7 +14,7 @@
             [plato.desargues :as desargues]
             [desargues.videos.physics :as phys]
             [clojure.string :as str]
-            [desargues.videos.lagrangian :as lag]))
+            [desargues.site.pendulum3d :as pendulum3d]))
 
 ;; ── scenes, computed by the library ─────────────────────────────────────────
 
@@ -242,61 +242,7 @@ clojure -M:doctor             # JVM ok? Manim env ok? LaTeX? ffmpeg?")
   (s/with-backend (rec/recording-backend)
     (s/render! "desargues-pendulum" pendulum-construct)))
 
-(def spherical
-  "Two chained spherical pendulums; Emmy derives the equations of motion from
-   L = T - V, desargues integrates them with RK4. Initial conditions keep both
-   polar angles away from the coordinate poles for the whole 8 s."
-  (lag/spherical-double-pendulum {:l1 1.4 :l2 1.2 :theta1 1.3 :phi1 0.0 :theta2 1.6 :phi2 0.8
-                                  :phi1-dot 1.4 :phi2-dot 0.9}))
-
-(defn project
-  "Orthographic view of [x y z] (z up) from azimuth az and elevation el, scaled
-   and hung from `origin`: [X Y depth], depth positive towards the viewer."
-  [[x y z] az el scale [ox oy]]
-  (let [ca (Math/cos az) sa (Math/sin az) ce (Math/cos el) se (Math/sin el)
-        xr (- (* x ca) (* y sa))
-        yr (+ (* x sa) (* y ca))]
-    [(+ ox (* scale xr))
-     (+ oy (* scale (+ (* z ce) (* yr se))))
-     (- (* z se) (* yr ce))]))
-
-(defn double-pendulum-construct
-  "The 3D double pendulum seen from an oblique camera: two rods, two bobs, the
-   second bob's trail a path that grows by one sample per 0.1 s glide."
-  [stage]
-  (let [az 0.7 el 0.45 scale 1.15 origin [0 2.3]
-        view    (fn [p] (let [[X Y _] (project p az el scale origin)] [X Y]))
-        samples (take-nth 10 (phys/evolve spherical {:dt 0.01 :duration 8.0}))
-        frames  (mapv (fn [{:keys [state]}] (mapv view (lag/positions-at spherical state))) samples)
-        [b1 b2] (first frames)
-        title   (-> (s/text "3D double pendulum: Emmy derives the equations, RK4 integrates" :font-size 28 :color :white)
-                    (s/move-to [0 3.4]))
-        pivot   (-> (s/dot :color :grey) (s/move-to origin))
-        trail   (s/path [b2 b2] :color :gold :width 2)
-        rod1    (s/line origin b1 :color :grey :width 4)
-        rod2    (s/line b1 b2 :color :grey :width 4)
-        bob1    (-> (s/circle :radius 0.22 :color :teal) (s/move-to b1) (s/fill! :teal :opacity 0.8))
-        bob2    (-> (s/circle :radius 0.26 :color :gold) (s/move-to b2) (s/fill! :gold :opacity 0.8))
-        clock   (-> (s/decimal 0 :font-size 30 :color :grey :num-decimal-places 1) (s/move-to [5.2 -3.2]))
-        unit    (-> (s/text "s" :font-size 26 :color :grey) (s/move-to [5.9 -3.2]))]
-    (s/play! stage (s/together [(s/appear title :run-time 0.5) (s/appear pivot :run-time 0.5)
-                                (s/appear trail :run-time 0.5)
-                                (s/draw rod1 :run-time 0.5) (s/draw rod2 :run-time 0.5)
-                                (s/draw bob1 :run-time 0.5) (s/draw bob2 :run-time 0.5)
-                                (s/appear clock :run-time 0.5) (s/appear unit :run-time 0.5)]))
-    (doseq [i (range 1 (count frames))]
-      (let [[p1 p2] (nth frames i)]
-        (s/play! stage (s/together [(s/connect rod1 origin p1 :run-time 0.1)
-                                    (s/glide bob1 p1 :run-time 0.1)
-                                    (s/connect rod2 p1 p2 :run-time 0.1)
-                                    (s/glide bob2 p2 :run-time 0.1)
-                                    (s/reshape trail (mapv second (subvec frames 0 (inc i))) :run-time 0.1)
-                                    (s/count-to clock (* 0.1 i) :run-time 0.1)]))))
-    (s/hold! stage 1)))
-
-(def double-pendulum-graph
-  (s/with-backend (rec/recording-backend)
-    (s/render! "desargues-double-pendulum" double-pendulum-construct)))
+(def double-pendulum-graph pendulum3d/graph)
 
 (def lagrangian-source
   "(require '[desargues.videos.lagrangian :as lag])
@@ -425,7 +371,7 @@ clojure -M:doctor             # JVM ok? Manim env ok? LaTeX? ffmpeg?")
         :derivatives-scene
         (desargues/scene derivative-graph {:controls? true :autoplay? true})
         {:transition :fade
-         :notes "The teal dots are the tangent: slope from ((e/D sin) x) at every step, the readout counts the same number."})
+         :notes "The curve is one path. The teal line is the tangent: slope from ((e/D sin) x) at every step, the readout counts the same number."})
        (deck/slide
         :derivatives-taylor
         [:div
@@ -457,7 +403,7 @@ clojure -M:doctor             # JVM ok? Manim env ok? LaTeX? ffmpeg?")
       :physics-3d
       (desargues/scene double-pendulum-graph {:controls? true :autoplay? true})
       {:transition :fade
-       :notes "Spherical double pendulum: q = [theta1 phi1 theta2 phi2]. Emmy builds L = T - V from the bob positions, derives q'' and compiles it; RK4 at dt 0.01; an oblique orthographic camera projects it. The gold trail is the second bob."})
+       :notes "Spherical double pendulum: q = [theta1 phi1 theta2 phi2]. Emmy builds L = T - V from the bob positions, derives q'' and compiles it; RK4 at dt 0.01. The orthographic camera orbits the vertical axis at 0.12 rad/s, so the gold trail and the floor ring are re-projected every sample; each bob grows as it comes towards the viewer."})
 
      (deck/slide
       :physics-lagrangian
