@@ -1,14 +1,18 @@
 (ns desargues.infrastructure.raster-adapter
-  "Boundary adapter: the raster ODE engine (io.github.replikativ/raster) as a
-   TrajectorySolver provider for desargues.videos.physics.
+  "Boundary adapter: the raster engine (io.github.replikativ/raster) as
+   - a TrajectorySolver provider for desargues.videos.physics, and
+   - a GeometryKernel provider for desargues.geometry.kernel (batched
+     homography-over-cloud and leaf-space lerp grids, as deftm loops).
 
    The PhysicalSystem's `derivatives` is the pure kernel raster integrates;
    this adapter projects raster's solution back into the domain Trajectory
    shape ({:time t :state {label value ...}}). Nothing above this namespace
    sees a raster type. Only this file requires raster, and raster is only on
    the classpath under the :dynamics alias."
-  (:require [desargues.videos.physics :as phys]
-            [raster.core :refer [ftm]]
+  (:require [desargues.geometry.kernel :as kernel]
+            [desargues.videos.physics :as phys]
+            [raster.arrays :as ra]
+            [raster.core :refer [deftm ftm]]
             [raster.ode :as ode]
             [raster.ode.core :as ode-core]))
 
@@ -76,3 +80,43 @@
       :dp5   (ode/dp5)
       alg)
     (boolean resample?))))
+
+(deftm h-cloud!
+  [h :- (Array double) xs :- (Array double) ys :- (Array double)
+   ox :- (Array double) oy :- (Array double) ow :- (Array double)] :- (Array double)
+  (let [n (ra/alength xs)]
+    (loop [i (int 0)]
+      (if (>= i n)
+        ow
+        (let [x (ra/aget xs i) y (ra/aget ys i)
+              w (+ (+ (* (ra/aget h 6) x) (* (ra/aget h 7) y)) (ra/aget h 8))]
+          (ra/aset ow i w)
+          (ra/aset ox i (/ (+ (+ (* (ra/aget h 0) x) (* (ra/aget h 1) y)) (ra/aget h 2)) w))
+          (ra/aset oy i (/ (+ (+ (* (ra/aget h 3) x) (* (ra/aget h 4) y)) (ra/aget h 5)) w))
+          (recur (unchecked-inc-int i)))))))
+
+(deftm lerp-grid-into!
+  [a :- (Array double) b :- (Array double) out :- (Array double) samples :- Long] :- (Array double)
+  (let [l (ra/alength a)
+        denom (double (+ samples 1))]
+    (loop [s (long 0)]
+      (if (>= s samples)
+        out
+        (let [t (/ (double (+ s 1)) denom)
+              base (* s l)]
+          (loop [j (int 0)]
+            (when (< j l)
+              (ra/aset out (+ base j) (+ (ra/aget a j) (* t (- (ra/aget b j) (ra/aget a j)))))
+              (recur (unchecked-inc-int j))))
+          (recur (+ s 1)))))))
+
+(defrecord RasterKernel []
+  kernel/GeometryKernel
+  (transform-cloud! [_ h xs ys ox oy ow] (h-cloud! h xs ys ox oy ow))
+  (lerp-grid! [_ a b out samples] (lerp-grid-into! a b out (long samples))))
+
+(defn geometry-kernel
+  "A desargues.geometry.kernel/GeometryKernel whose batched loops are raster
+   deftm functions."
+  []
+  (->RasterKernel))

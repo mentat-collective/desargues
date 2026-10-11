@@ -15,7 +15,8 @@
    for the first satisfying disposition) -> numeric tier (Nelder-Mead polish of
    the soft cost, warm-started from the logic solution) -> trajectory check
    (lerp the PARAMS, not the points, and verify the hard constraints at every
-   sampled t).
+   sampled t; the leaf-space sample grid goes through
+   desargues.geometry.kernel/*kernel*).
 
    This namespace is dev/build-time only: decks consume solved parameters as
    literals. Nothing under desargues.geometry.scene or the deck runtime may
@@ -23,6 +24,7 @@
   (:require [clojure.core.logic :as l]
             [clojure.core.logic.fd :as fd]
             [emmy.numerical.multimin.nelder-mead :as nm]
+            [desargues.geometry.kernel :as k]
             [desargues.geometry.projective :as g]))
 
 ;; =============================================================================
@@ -291,13 +293,27 @@
 
 (defn valid-trajectory?
   "Sample the param-lerp between consecutive frames (samples interior t's per
-   leg, >= 20 recommended) and require every hard constraint at every sample."
-  [{:keys [derive hard]} frames samples]
-  (every? (fn [[a b]]
-            (every? (fn [i]
-                      (hard-ok? hard (derive (lerp-params a b (/ (double i) (inc samples))))))
-                    (range 1 (inc samples))))
-          (partition 2 1 frames)))
+   leg, >= 20 recommended) and require every hard constraint at every sample.
+   Frames are param maps of the construction that agree on every non-leaf
+   entry (as solved frames do); the samples equal (lerp-params a b t) at
+   t = i/(samples+1), with the leaf grid computed through
+   desargues.geometry.kernel/*kernel*."
+  [{:keys [params derive hard]} frames samples]
+  (let [ls (leaves params)
+        nl (count ls)
+        flat (fn [p] (double-array (flatten-params params ls p)))
+        idx (map vector ls (range))]
+    (every? (fn [[a b]]
+              (let [^doubles grid (k/lerp-grid! k/*kernel* (flat a) (flat b)
+                                                (double-array (* samples nl)) samples)]
+                (every? (fn [s]
+                          (let [base (* s nl)
+                                p (reduce (fn [m [leaf j]]
+                                            (assoc-leaf m (:path leaf) (aget grid (+ base j))))
+                                          a idx)]
+                            (hard-ok? hard (derive p))))
+                        (range samples))))
+            (partition 2 1 frames))))
 
 (defn solve-keyframes
   "n keyframes: solve each disposition at least min-param-dist (Chebyshev,

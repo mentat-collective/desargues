@@ -9,11 +9,16 @@
    away from 0 (no point sent to infinity), and every w must share a sign (no
    point may PASS through infinity on the way in).
 
+   The minimizer evaluates H over the figure's point cloud as double arrays
+   through desargues.geometry.kernel/*kernel*; results are returned as Emmy
+   matrices.
+
    Dev/build-time only, like desargues.geometry.disposition: decks consume the
    fitted H (or its effect) as literals."
   (:require [emmy.env :as e]
             [emmy.numerical.multimin.nelder-mead :as nm]
             [desargues.geometry.disposition :as d]
+            [desargues.geometry.kernel :as k]
             [desargues.geometry.projective :as g]))
 
 ;; =============================================================================
@@ -50,46 +55,31 @@
 ;; =============================================================================
 
 (def families
-  "family -> {:dof n :->H (fn [dof-vector] -> 3x3) :x0 identity-like start}."
-  {:similarity {:dof 4 :->H g/similarity-h :x0 [0.0 1.0 0.0 0.0]}
-   :affine {:dof 6 :->H g/affine-h :x0 [1.0 0.0 0.0 1.0 0.0 0.0]}
-   :projective {:dof 8 :->H g/projective-h :x0 [1.0 0.0 0.0 0.0 1.0 0.0 0.0 0.0]}})
+  "family -> {:dof n :->H (fn [dof-vector] -> 3x3 Emmy matrix) :->h (the same
+  map as a row-major double[9]) :x0 identity-like start}."
+  {:similarity {:dof 4 :->H g/similarity-h :->h k/similarity-a :x0 [0.0 1.0 0.0 0.0]}
+   :affine {:dof 6 :->H g/affine-h :->h k/affine-a :x0 [1.0 0.0 0.0 1.0 0.0 0.0]}
+   :projective {:dof 8 :->H g/projective-h :->h k/projective-a
+                :x0 [1.0 0.0 0.0 0.0 1.0 0.0 0.0 0.0]}})
 
 ;; =============================================================================
 ;; Fitting
 ;; =============================================================================
 
-(defn- min-abs-w
-  "Smallest |w| over the figure's homogeneous images, and whether every w
-   shares a sign."
-  [H ps]
-  (let [ws (mapv (fn [p] (double (get (g/apply-h* H p) 2))) ps)]
-    [(reduce min (map #(Math/abs %) ws))
-     (or (every? pos? ws) (every? neg? ws))]))
-
-(defn- degeneracy-cost
-  "Big unless every transformed point keeps |w| >= eps and all w share a sign
-   (no figure point sent to, or through, infinity)."
-  [H ps eps]
-  (let [[m same-sign?] (min-abs-w H ps)]
-    (+ (if same-sign? 0.0 1.0e6)
-       (if (< m eps) (* 1.0e6 (- eps m)) 0.0))))
+(def ^:private default-weights {:oob 100.0 :margin 10.0 :spacing 1.0})
 
 (defn fit-homography
   "The H in `family` (:similarity | :affine | :projective) minimizing
   frame-cost of H . config + degeneracy penalty. Returns {:H :cost :dof}.
-  Deterministic."
+  Deterministic. Costs are evaluated through desargues.geometry.kernel/*kernel*."
   [config & {:keys [family frame margin eps maxiter x0]
              :or {family :similarity frame d/default-frame margin 0.5
                   eps 0.05 maxiter 1600}}]
-  (let [{:keys [->H x0] :as fam} (families family)
+  (let [{:keys [->H ->h x0] :as fam} (families family)
         _ (when-not fam (throw (ex-info "fit: unknown homography family" {:family family})))
-        ps (vec (if (map? config) (vals config) config))
-        cost (fn [xs]
-               (let [H (->H xs)]
-                 (+ (frame-cost (mapv #(g/apply-h H %) ps)
-                                :frame frame :margin margin)
-                    (degeneracy-cost H ps eps))))
+        [xs ys] (k/cloud config)
+        cost (fn [dof]
+               (k/h-cloud-cost (->h dof) xs ys frame margin default-weights eps))
         {:keys [result value]} (nm/nelder-mead cost (vec x0)
                                                {:maxiter maxiter
                                                 :simplex-tolerance 1e-7
@@ -97,33 +87,32 @@
     {:H (->H result) :cost value :dof (vec result) :family family}))
 
 (defn- frobenius-sq
-  "Squared Frobenius distance between two 3x3 Emmy matrices."
-  [A B]
-  (reduce + (map (fn [ra rb]
-                   (reduce + (map (fn [a b] (let [d (- (double a) (double b))] (* d d)))
-                                  ra rb)))
-                 A B)))
+  "Squared Frobenius distance between two row-major double[9] homographies."
+  ^double [^doubles A ^doubles B]
+  (loop [i 0 acc 0.0]
+    (if (< i 9)
+      (let [d (- (aget A i) (aget B i))] (recur (inc i) (+ acc (* d d))))
+      acc)))
 
 (defn fit-keyframes
   "Fit one H per keyframe configuration, jointly: the total cost adds
   :continuity * ||H_{i+1} - H_i||_F^2 so the display map does not jump
-  mid-animation. Returns a vector of {:H :family} fits."
+  mid-animation. Returns a vector of {:H :family} fits. Costs are evaluated
+  through desargues.geometry.kernel/*kernel*."
   [configs & {:keys [family frame margin eps continuity maxiter]
               :or {family :similarity frame d/default-frame margin 0.5
                    eps 0.05 continuity 20.0 maxiter 4000}}]
-  (let [{:keys [dof ->H x0]} (families family)
-        pss (mapv (fn [c] (vec (if (map? c) (vals c) c))) configs)
-        n (count pss)
+  (let [{:keys [dof ->H ->h x0]} (families family)
+        clouds (mapv k/cloud configs)
+        n (count clouds)
         split (fn [xs] (mapv (fn [i] (subvec xs (* i dof) (* (inc i) dof))) (range n)))
         cost (fn [xs]
-               (let [Hs (mapv ->H (split (vec xs)))]
-                 (+ (reduce + (map (fn [H ps]
-                                     (+ (frame-cost (mapv #(g/apply-h H %) ps)
-                                                    :frame frame :margin margin)
-                                        (degeneracy-cost H ps eps)))
-                                   Hs pss))
+               (let [hs (mapv ->h (split (vec xs)))]
+                 (+ (reduce + (map (fn [h [cx cy]]
+                                     (k/h-cloud-cost h cx cy frame margin default-weights eps))
+                                   hs clouds))
                     (* continuity
-                       (reduce + (map frobenius-sq Hs (rest Hs)))))))
+                       (reduce + (map frobenius-sq hs (rest hs)))))))
         x0* (vec (mapcat identity (repeat n x0)))
         {:keys [result]} (nm/nelder-mead cost x0* {:maxiter maxiter
                                                    :simplex-tolerance 1e-7
