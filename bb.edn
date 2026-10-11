@@ -11,8 +11,12 @@
                  :task (shell "clojure -M:test:dynamics")}
   typecheck     {:doc "Static Typed Clojure gate"
                  :task (shell "clojure -M:dev -m desargues.typecheck")}
-  bench         {:doc "Micro-benchmarks -> bench/results/latest.edn + doc/bench/*.svg"
+  bench         {:doc "Every bench suite (core, hotpaths, geometry) -> bench/results/latest.edn + doc/bench/*.svg. Args: --only core,hotpaths,geometry --manim --charts-only"
                  :task (apply shell "clojure -M:bench:dynamics" *command-line-args*)}
+  bench:check   {:doc "Fresh run vs bench/results/baseline.edn; exits 1 on a regression (median beyond --tolerance, default 0.25, and 3x MAD)"
+                 :task (apply shell "clojure -M:bench:dynamics --check" *command-line-args*)}
+  bench:baseline {:doc "Fresh run, saved as bench/results/baseline.edn (commit it)"
+                  :task (apply shell "clojure -M:bench:dynamics --save-baseline" *command-line-args*)}
   site          {:doc "Landing page -> dist/site (plato deck under site/, live scenes, bench charts)"
                  :task (do (fs/create-dirs "dist/site/assets")
                            (shell "clojure -M:site build --deck desargues.site.deck/model"

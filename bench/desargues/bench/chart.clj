@@ -147,32 +147,41 @@
 
 (defn charts
   "Bench report -> {file-name svg-hiccup}. Only groups present in the report
-   produce a chart."
+   produce a chart. Bars show the median when the row has one, else the mean."
   [{:keys [results jvm clojure cpu]}]
   (let [by   (group-by :group results)
-        sub  (str "mean per call ± σ · JDK " jvm " · Clojure " clojure " · " cpu)
-        bars (fn [rows] (mapv (fn [r] {:label (or (:id r) (str "n = " (:n r)))
-                                       :value (:mean-ms r) :err (:std-ms r)}) rows))
+        sub  (str "median per call ± MAD · JDK " jvm " · Clojure " clojure " · " cpu)
+        value (fn [r] (or (:median-ms r) (:mean-ms r)))
+        bars (fn [rows] (mapv (fn [r] {:label (or (some->> [(:id r) (:provider r)] (remove nil?) seq (clojure.string/join " / "))
+                                                  (str "n = " (:n r)))
+                                       :value (value r) :err (or (:mad-ms r) (:std-ms r))}) rows))
         scaling (keep (fn [[g label]]
                         (when-let [rows (seq (by g))]
-                          {:label label :points (mapv (juxt :n :mean-ms) (sort-by :n rows))}))
+                          {:label label :points (mapv (juxt :n value) (sort-by :n rows))}))
                       [[:layout "resolve-layout (elements)"]
                        [:scene-graph "layout->scene-graph (elements)"]
-                       [:recording "recording render! (animations)"]])]
-    (cond-> {}
-      (by :emmy)
-      (assoc "emmy-conveyor.svg"
-             (bar-chart {:title "Emmy conveyor: f → f′ → LaTeX (both)" :subtitle sub :bars (bars (by :emmy))}))
-      (by :solver)
-      (assoc "solvers.svg"
-             (bar-chart {:title "Pendulum trajectory, 10 s at dt = 0.01" :subtitle sub :bars (bars (by :solver))}))
+                       [:recording "recording render! (animations)"]])
+        cloud (for [[id rows] (group-by :id (by :h-cloud))]
+                {:label id :points (mapv (juxt :n value) (sort-by :n rows))})
+        bar-charts [[:emmy "emmy-conveyor.svg" "Emmy conveyor: f → f′ → LaTeX (both)"]
+                    [:solver "solvers.svg" "Pendulum trajectory, 10 s at dt = 0.01"]
+                    [:physics "physics.svg" "videos.physics evolve: 800 steps (cljw-lane pendulum)"]
+                    [:lagrangian "lagrangian.svg" "videos.lagrangian: compile and evolve 8 s"]
+                    [:pipeline "pipeline.svg" "pipeline.emmy: Emmy → LaTeX → Python"]
+                    [:scene "scene-recording.svg" "Landing-page pendulum: RecordingBackend"]
+                    [:geometry "geometry.svg" "Geometry: fit, disposition, trajectory check"]
+                    [:manim "manim-render.svg" "Manim render of a 16-cell layout (wall time)"]]]
+    (cond-> (into {}
+                  (for [[g file title] bar-charts :when (by g)]
+                    [file (bar-chart {:title title :subtitle sub :bars (bars (by g))})]))
       (seq scaling)
       (assoc "scaling.svg"
              (line-chart {:title "Pure backend: time vs size (log–log)" :subtitle sub
                           :x-label "size" :y-label "time" :series (vec scaling)}))
-      (by :manim)
-      (assoc "manim-render.svg"
-             (bar-chart {:title "Manim render of a 16-cell layout (wall time)" :subtitle sub :bars (bars (by :manim))})))))
+      (seq cloud)
+      (assoc "h-cloud.svg"
+             (line-chart {:title "Homography over an n-point cloud (log–log)" :subtitle sub
+                          :x-label "points" :y-label "time" :series (vec cloud)})))))
 
 (defn write-all!
   "Write every chart of `report` into `dir`; returns the file names written."

@@ -36,7 +36,7 @@
            :main-opts ["-m" "desargues.doctor"]}
   ;; `clojure -M:bench:dynamics` — micro-benchmarks of the pure pipeline ->
   ;; bench/results/latest.edn + doc/bench/*.svg. Add --manim for render timings.
-  :bench {:extra-paths ["bench"]
+  :bench {:extra-paths ["bench" "site"]
           :extra-deps {org.slf4j/slf4j-nop {:mvn/version "1.7.36"}}
           :main-opts ["-m" "desargues.bench"]}
   ;; `bb site` — the landing page: a plato deck (site/) prerendered to dist/site.

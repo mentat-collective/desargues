@@ -3,14 +3,15 @@
    disposition solver, the trajectory check and the raw H-over-cloud kernel,
    once per available GeometryKernel provider (array; raster under :dynamics).
 
+     clojure -M:bench:dynamics --only geometry        # part of bb bench
      clojure -M:bench:dynamics -m desargues.bench.geometry [--out DIR]
 
-   Writes DIR/results/geometry.edn (DIR defaults to bench). Runs against a
-   tree without desargues.geometry.kernel too (one :baseline provider), which
-   is how before/after numbers are taken."
+   The standalone main writes DIR/results/geometry.edn (DIR defaults to bench).
+   Runs against a tree without desargues.geometry.kernel too (one :baseline
+   provider), which is how before/after numbers are taken."
   (:require [clojure.java.io :as io]
             [clojure.pprint :as pp]
-            [desargues.bench :as b]
+            [desargues.bench.sample :as b]
             [desargues.geometry.disposition :as d]
             [desargues.geometry.fit :as fit]
             [desargues.geometry.projective :as g]
@@ -92,15 +93,19 @@
                (merge {:group :geometry :id id :provider label}
                       (bind #(b/sample f opts))))))))
 
+(defn run
+  "Every geometry row, across the available providers."
+  []
+  (let [ps (vec (providers))]
+    (say "geometry providers: " (mapv first ps))
+    (say "geometry: h-cloud")
+    (let [cloud (cloud-rows ps)]
+      (say "geometry: solve")
+      (into cloud (solve-rows ps)))))
+
 (defn -main [& args]
   (let [out (or (second (drop-while #(not= "--out" %) args)) "bench")
-        ps (vec (providers))
-        _ (say "providers: " (mapv first ps))
-        _ (say "h-cloud")
-        cloud (cloud-rows ps)
-        _ (say "geometry solve")
-        solve (solve-rows ps)
-        rep (assoc (b/system-info) :results (into cloud solve))
+        rep (assoc (b/system-info) :results (run))
         f (io/file out "results" "geometry.edn")]
     (.mkdirs (.getParentFile f))
     (spit f (with-out-str (pp/pprint rep)))
