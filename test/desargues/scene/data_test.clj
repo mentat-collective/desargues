@@ -47,6 +47,25 @@
       (is (= {:anim :connect :target 1 :from [0 2] :to [-1 0] :opts {:run-time 0.5}}
              (get-in step2 [:anims 0 :children 0]))))))
 
+(deftest path-and-reshape-record-points
+  (testing "a trail: a path node with its points, and reshape growing it by one sample"
+    (let [g (s/with-backend (data/recording-backend)
+              (s/render! "trail"
+                         (fn [stage]
+                           (let [curve (s/path (list '(0 0) [1 0.5] [2 0]) :color :grey :width 2)
+                                 tri   (s/path [[0 0] [1 0] [0 1]] :closed? true)]
+                             (s/play! stage (s/together [(s/draw curve) (s/draw tri)]))
+                             (s/play! stage (s/reshape curve [[0 0] [1 0.5] [2 0] [3 1]] :run-time 0.1))))))
+          [curve tri] [(get-in g [:nodes 1]) (get-in g [:nodes 2])]
+          [_ step2] (:steps g)]
+      (is (= :path (:node curve)))
+      (is (= [[0 0] [1 0.5] [2 0]] (:points curve)) "points are vectors, whatever seq came in")
+      (is (every? vector? (:points curve)))
+      (is (= {:color :grey :width 2} (:opts curve)))
+      (is (= {:closed? true} (:opts tri)))
+      (is (= {:anim :reshape :target 1 :points [[0 0] [1 0.5] [2 0] [3 1]] :opts {:run-time 0.1}}
+             (get-in step2 [:anims 0]))))))
+
 (deftest render-layout-is-not-a-stub
   (testing "the old stub echoed the raw tree and realized nothing; now it realizes"
     (let [g (data/layout->scene-graph "s" (sample-tree) {})]

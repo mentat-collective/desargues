@@ -7,6 +7,18 @@ All notable changes to desargues. The format follows
 ## [Unreleased]
 
 ### Added
+- `desargues.scene/path` and `desargues.scene/reshape`: one connected stroke
+  through a list of points (`:color :width`, `:closed?`) and the animation that
+  moves its points, the count free to change (a trail growing a sample at a
+  time). Manim backend: a `VMobject` with `set_points_as_corners`, animated via
+  `animate.set_points_as_corners` (`desargues.manim.paths`); recording backend:
+  `:path` node, `:reshape` anim; plato (`path-mobject` branch) draws polylines
+  and polygons and tweens their points.
+- Landing page: the sin curve is a path and its tangent a line that follows the
+  slope; the 3D double pendulum's trail is a growing path.
+- Landing page, 3D double pendulum (`desargues.site.pendulum3d`): the camera
+  orbits the vertical axis slowly, re-projecting the trail and a floor ring
+  every sample, and each bob is a disc whose radius scales with its depth.
 - `desargues.scene/line` and `desargues.scene/connect`: a straight segment
   mobject and the animation that moves its endpoints (a rod following a bob),
   implemented by the Manim backend (`Line`, `animate.put_start_and_end_on`) and

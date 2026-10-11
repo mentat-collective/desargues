@@ -14,7 +14,7 @@
             [plato.desargues :as desargues]
             [desargues.videos.physics :as phys]
             [clojure.string :as str]
-            [desargues.videos.lagrangian :as lag]))
+            [desargues.site.pendulum3d :as pendulum3d]))
 
 ;; ── scenes, computed by the library ─────────────────────────────────────────
 
@@ -132,32 +132,32 @@
 (def curve-df (e/D curve-f))
 
 (defn derivative-construct
-  "y = sin x drawn as dots; a gold point walks the curve while a seven-dot
-   tangent follows the slope Emmy's D returns and a readout shows f'(x)."
+  "y = sin x drawn as one path; a gold point walks the curve while the tangent
+   line follows the slope Emmy's D returns and a readout shows f'(x)."
   [stage]
   (let [sx 1.0 sy 1.6 oy -0.4
         P (fn [x] [(* sx x) (+ oy (* sy (curve-f x)))])
-        tangent-pts (fn [x] (let [m (curve-df x)]
-                              (mapv (fn [i] (let [h (* i 0.28)] [(* sx (+ x h)) (+ oy (* sy (+ (curve-f x) (* m h))))]))
-                                    (range -3 4))))
+        tangent-ends (fn [x] (let [m (curve-df x) h 0.85]
+                               [[(* sx (- x h)) (+ oy (* sy (- (curve-f x) (* m h))))]
+                                [(* sx (+ x h)) (+ oy (* sy (+ (curve-f x) (* m h))))]]))
         title  (-> (s/text "f(x) = sin x, and Emmy's f'(x) = cos x as a slope" :font-size 30 :color :white)
                    (s/move-to [0 3.3]))
-        curve  (mapv (fn [x] (-> (s/dot :color :grey :radius 0.04) (s/move-to (P x))))
-                     (range -6.0 6.01 0.2))
+        curve  (s/path (mapv P (range -6.0 6.01 0.1)) :color :grey :width 3)
         xs     (vec (range -6.0 6.01 0.3))
-        tang   (mapv (fn [p] (-> (s/dot :color :teal :radius 0.06) (s/move-to p))) (tangent-pts (first xs)))
+        tang   (let [[a b] (tangent-ends (first xs))] (s/line a b :color :teal :width 4))
         point  (-> (s/circle :radius 0.18 :color :gold) (s/move-to (P (first xs))) (s/fill! :gold :opacity 0.9))
         label  (-> (s/text "f'(x) =" :font-size 30 :color :grey) (s/move-to [4.4 -3.0]))
         slope  (-> (s/decimal (curve-df (first xs)) :font-size 30 :color :gold :num-decimal-places 2)
                    (s/move-to [5.7 -3.0]))]
     (s/play! stage (s/appear title :run-time 0.5))
-    (s/play! stage (s/stagger (map #(s/appear % :run-time 0.2) curve) :lag-ratio 0.02))
-    (s/play! stage (s/together (concat [(s/draw point :run-time 0.4) (s/appear label :run-time 0.4) (s/appear slope :run-time 0.4)]
-                                       (map #(s/appear % :run-time 0.4) tang))))
+    (s/play! stage (s/draw curve :run-time 1.5))
+    (s/play! stage (s/together [(s/draw point :run-time 0.4) (s/appear label :run-time 0.4)
+                                (s/appear slope :run-time 0.4) (s/draw tang :run-time 0.4)]))
     (doseq [x (rest xs)]
-      (s/play! stage (s/together (concat [(s/glide point (P x) :run-time 0.15)
-                                          (s/count-to slope (curve-df x) :run-time 0.15)]
-                                         (map (fn [d p] (s/glide d p :run-time 0.15)) tang (tangent-pts x))))))
+      (let [[a b] (tangent-ends x)]
+        (s/play! stage (s/together [(s/glide point (P x) :run-time 0.15)
+                                    (s/count-to slope (curve-df x) :run-time 0.15)
+                                    (s/connect tang a b :run-time 0.15)]))))
     (s/hold! stage 1)))
 
 (def derivative-graph
@@ -242,59 +242,7 @@ clojure -M:doctor             # JVM ok? Manim env ok? LaTeX? ffmpeg?")
   (s/with-backend (rec/recording-backend)
     (s/render! "desargues-pendulum" pendulum-construct)))
 
-(def spherical
-  "Two chained spherical pendulums; Emmy derives the equations of motion from
-   L = T - V, desargues integrates them with RK4. Initial conditions keep both
-   polar angles away from the coordinate poles for the whole 8 s."
-  (lag/spherical-double-pendulum {:l1 1.4 :l2 1.2 :theta1 1.3 :phi1 0.0 :theta2 1.6 :phi2 0.8
-                                  :phi1-dot 1.4 :phi2-dot 0.9}))
-
-(defn project
-  "Orthographic view of [x y z] (z up) from azimuth az and elevation el, scaled
-   and hung from `origin`: [X Y depth], depth positive towards the viewer."
-  [[x y z] az el scale [ox oy]]
-  (let [ca (Math/cos az) sa (Math/sin az) ce (Math/cos el) se (Math/sin el)
-        xr (- (* x ca) (* y sa))
-        yr (+ (* x sa) (* y ca))]
-    [(+ ox (* scale xr))
-     (+ oy (* scale (+ (* z ce) (* yr se))))
-     (- (* z se) (* yr ce))]))
-
-(defn double-pendulum-construct
-  "The 3D double pendulum seen from an oblique camera: two rods, two bobs, the
-   second bob leaving a trail, one glide per 0.1 s sample."
-  [stage]
-  (let [az 0.7 el 0.45 scale 1.15 origin [0 2.3]
-        view    (fn [p] (let [[X Y _] (project p az el scale origin)] [X Y]))
-        samples (take-nth 10 (phys/evolve spherical {:dt 0.01 :duration 8.0}))
-        frames  (mapv (fn [{:keys [state]}] (mapv view (lag/positions-at spherical state))) samples)
-        [b1 b2] (first frames)
-        title   (-> (s/text "3D double pendulum: Emmy derives the equations, RK4 integrates" :font-size 28 :color :white)
-                    (s/move-to [0 3.4]))
-        pivot   (-> (s/dot :color :grey) (s/move-to origin))
-        rod1    (s/line origin b1 :color :grey :width 4)
-        rod2    (s/line b1 b2 :color :grey :width 4)
-        bob1    (-> (s/circle :radius 0.22 :color :teal) (s/move-to b1) (s/fill! :teal :opacity 0.8))
-        bob2    (-> (s/circle :radius 0.26 :color :gold) (s/move-to b2) (s/fill! :gold :opacity 0.8))
-        trail   (mapv (fn [[_ p2]] (-> (s/dot :color :gold :radius 0.035) (s/move-to p2))) (rest frames))
-        clock   (-> (s/decimal 0 :font-size 30 :color :grey :num-decimal-places 1) (s/move-to [5.2 -3.2]))
-        unit    (-> (s/text "s" :font-size 26 :color :grey) (s/move-to [5.9 -3.2]))]
-    (s/play! stage (s/together [(s/appear title :run-time 0.5) (s/appear pivot :run-time 0.5)
-                                (s/draw rod1 :run-time 0.5) (s/draw rod2 :run-time 0.5)
-                                (s/draw bob1 :run-time 0.5) (s/draw bob2 :run-time 0.5)
-                                (s/appear clock :run-time 0.5) (s/appear unit :run-time 0.5)]))
-    (doseq [[i [[p1 p2] dot]] (map-indexed vector (map vector (rest frames) trail))]
-      (s/play! stage (s/together [(s/connect rod1 origin p1 :run-time 0.1)
-                                  (s/glide bob1 p1 :run-time 0.1)
-                                  (s/connect rod2 p1 p2 :run-time 0.1)
-                                  (s/glide bob2 p2 :run-time 0.1)
-                                  (s/appear dot :run-time 0.1)
-                                  (s/count-to clock (* 0.1 (inc i)) :run-time 0.1)])))
-    (s/hold! stage 1)))
-
-(def double-pendulum-graph
-  (s/with-backend (rec/recording-backend)
-    (s/render! "desargues-double-pendulum" double-pendulum-construct)))
+(def double-pendulum-graph pendulum3d/graph)
 
 (def lagrangian-source
   "(require '[desargues.videos.lagrangian :as lag])
@@ -423,7 +371,7 @@ clojure -M:doctor             # JVM ok? Manim env ok? LaTeX? ffmpeg?")
         :derivatives-scene
         (desargues/scene derivative-graph {:controls? true :autoplay? true})
         {:transition :fade
-         :notes "The teal dots are the tangent: slope from ((e/D sin) x) at every step, the readout counts the same number."})
+         :notes "The curve is one path. The teal line is the tangent: slope from ((e/D sin) x) at every step, the readout counts the same number."})
        (deck/slide
         :derivatives-taylor
         [:div
@@ -455,7 +403,7 @@ clojure -M:doctor             # JVM ok? Manim env ok? LaTeX? ffmpeg?")
       :physics-3d
       (desargues/scene double-pendulum-graph {:controls? true :autoplay? true})
       {:transition :fade
-       :notes "Spherical double pendulum: q = [theta1 phi1 theta2 phi2]. Emmy builds L = T - V from the bob positions, derives q'' and compiles it; RK4 at dt 0.01; an oblique orthographic camera projects it. The gold trail is the second bob."})
+       :notes "Spherical double pendulum: q = [theta1 phi1 theta2 phi2]. Emmy builds L = T - V from the bob positions, derives q'' and compiles it; RK4 at dt 0.01. The orthographic camera orbits the vertical axis at 0.12 rad/s, so the gold trail and the floor ring are re-projected every sample; each bob grows as it comes towards the viewer."})
 
      (deck/slide
       :physics-lagrangian
