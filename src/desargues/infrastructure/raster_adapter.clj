@@ -10,6 +10,7 @@
    sees a raster type. Only this file requires raster, and raster is only on
    the classpath under the :dynamics alias."
   (:require [desargues.geometry.kernel :as kernel]
+            [desargues.kernel.emmy :as emmy-modes]
             [desargues.videos.physics :as phys]
             [raster.arrays :as ra]
             [raster.core :refer [deftm ftm]]
@@ -237,3 +238,19 @@
    deftm functions."
   []
   (->RasterKernel))
+
+;; ── the :raster backend's port methods (desargues.backend) ───────────────────
+
+(defmethod phys/solver :raster
+  ([_] (raster-solver))
+  ([_ {:keys [alg kernel?] :as opts}]
+   (if kernel?
+     (kernel-solver)
+     (raster-solver (or alg :rk4) (select-keys opts [:resample?])))))
+
+(defmethod kernel/provider :raster [_] (geometry-kernel))
+
+;; On an Emmy with an open compiler, (compile-state-fn .. {:mode
+;; :desargues/raster :calling-convention :primitive}) answers the raster
+;; kernels of the function: {:n :rk4 :deriv :nscratch :rhs-fn}.
+(emmy-modes/register-mode! :desargues/raster rk/kernels)

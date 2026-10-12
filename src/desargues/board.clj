@@ -96,8 +96,10 @@
    opts:
      :out-dir   where the .wasm is written      (default \"vendor/boards\")
      :url-base  where the page fetches it from  (default \"./vendor/boards/\")
-     :compiler  a desargues.board.compiler/KernelCompiler
-                                                (default: raster)"
+     :backend   the backend key whose KernelCompiler compiles the kernel
+                (desargues.board.compiler/kernel-compiler; default :raster)
+     :compiler  a desargues.board.compiler/KernelCompiler, instead of
+                :backend"
   ([board-spec] (compile-board! board-spec {}))
   ([board-spec {:keys [out-dir url-base] :or {out-dir "vendor/boards" url-base "./vendor/boards/"}
                 :as opts}]
@@ -107,7 +109,7 @@
          ;; points own their coordinates); the plan's list is then the ABI's.
          spec* (assoc spec* :params (vec (or (:params plan) (:params spec*))))
          export (name (:id spec*))
-         kc (or (:compiler opts) (compiler/raster-compiler))
+         kc (or (:compiler opts) (compiler/kernel-compiler (:backend opts :raster)))
          kvar (compiler/define-kernel kc (symbol (str export "-kernel!")) ((:form plan) (symbol (str export "-kernel!"))))
          board (board-value spec* plan
                             {:wasm (str url-base export ".wasm") :export export}

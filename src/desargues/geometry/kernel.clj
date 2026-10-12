@@ -12,10 +12,11 @@
                        interior t_s = (s+1)/(samples+1), s = 0..samples-1;
                        writes row s at out[s*L .. s*L+L-1], returns out.
 
-   Providers: `array-kernel` (pure Clojure, always present) and the raster
-   provider desargues.infrastructure.raster-adapter/geometry-kernel (only
-   under the :dynamics alias, resolved with requiring-resolve). Both compute
-   the same arithmetic in the same order, so their results are identical.
+   Providers answer by backend key through `provider` (desargues.backend):
+   :jvm is `array-kernel` (pure Clojure, always present), :raster the raster
+   provider of desargues.infrastructure.raster-adapter (only under the
+   :dynamics alias, loaded on demand). Every provider computes the same
+   arithmetic in the same order, so their results are identical.
 
    *kernel* is the provider the solvers use; it defaults to `array-kernel`.
    (select-kernel :raster) answers the raster provider or nil when raster is
@@ -23,7 +24,8 @@
 
    Also here: the double-array forms of the frame cost and the degeneracy
    cost, and of the homography families, so a minimizer never builds an Emmy
-   matrix per evaluation.")
+   matrix per evaluation."
+  (:require [desargues.backend :as backend]))
 
 (defprotocol GeometryKernel
   (transform-cloud! [k h xs ys ox oy ow]
@@ -63,26 +65,34 @@
   "The pure-Clojure GeometryKernel."
   (->ArrayKernel))
 
+(defmulti provider
+  "backend key -> a GeometryKernel (see desargues.backend): :jvm is
+   array-kernel, :raster the deftm loops of
+   desargues.infrastructure.raster-adapter. A new engine is a defmethod in
+   its own namespace."
+  (fn [backend & _] backend))
+
+(defmethod provider :jvm [_] array-kernel)
+
+(defmethod provider :default [backend & args]
+  (backend/dispatch-default provider "geometry kernel" backend args))
+
 (defn raster-kernel
   "The raster GeometryKernel, or nil when raster is not on the classpath. A
    load failure that is not raster's absence is rethrown."
   []
-  (when-let [f (try (requiring-resolve 'desargues.infrastructure.raster-adapter/geometry-kernel)
-                    (catch Throwable t
-                      (let [root (loop [e t] (if-let [c (.getCause e)] (recur c) e))]
-                        (when-not (.contains (str (.getMessage root)) "raster")
-                          (throw t)))
-                      nil))]
-    (f)))
+  (when (backend/available? :raster)
+    (provider :raster)))
 
 (defn select-kernel
-  "Kernel by name: :array, :raster (nil when raster is absent) or :auto (the
-   default, array-kernel)."
+  "Kernel by name: :array or :jvm (array-kernel), :auto (the default,
+   array-kernel), :raster (nil when raster is absent), or any other backend
+   key with a `provider` method."
   [k]
   (case k
-    :array array-kernel
+    (:array :auto) array-kernel
     :raster (raster-kernel)
-    :auto array-kernel))
+    (provider k)))
 
 (def ^:dynamic *kernel*
   "The GeometryKernel the solvers evaluate through."

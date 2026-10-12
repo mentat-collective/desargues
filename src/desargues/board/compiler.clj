@@ -6,9 +6,13 @@
    callable kernel on this host, and turn that kernel into WebAssembly bytes.
    Everything upstream (desargues.board.kernel) is pure data and knows no
    compiler; everything downstream (desargues.board) holds a KernelCompiler
-   and never learns which one (LSP). RasterCompiler is the one backend today;
-   a second is a new record, not an edit."
-  (:require [raster.compiler.pipeline :as pl]))
+   and never learns which one (LSP).
+
+   `kernel-compiler` answers a KernelCompiler by backend key (see
+   desargues.backend). No engine is required here: the :raster compiler is
+   desargues.infrastructure.raster-board, loaded when :raster is asked for. A
+   second backend is a record and a defmethod in its own namespace."
+  (:require [desargues.backend :as backend]))
 
 (defprotocol KernelCompiler
   (define-kernel [compiler kname form]
@@ -18,22 +22,18 @@
     "The WebAssembly module of `kernel` with its entry point exported as
      `export`, as a byte array."))
 
-(defrecord RasterCompiler [ns-sym]
-  KernelCompiler
-  (define-kernel [_ kname form]
-    (binding [*ns* (the-ns ns-sym)]
-      (eval form))
-    (ns-resolve ns-sym kname))
-  (wasm-bytes [_ kernel export]
-    (byte-array (:bytes (pl/compile-wasm kernel :name export :dtype :double)))))
+(defmulti kernel-compiler
+  "backend key, opts -> a KernelCompiler. opts are the backend's own (the
+   :raster compiler takes {:ns sym}, the namespace kernels are evaluated
+   into)."
+  (fn [backend & _] backend))
+
+(defmethod kernel-compiler :default [backend & args]
+  (backend/dispatch-default kernel-compiler "board kernel compiler" backend args))
 
 (defn raster-compiler
-  "The raster backend: kernels are evaluated into `ns-sym` (default
-   desargues.board.kernels, created on demand) and compiled to f64 wasm."
-  ([] (raster-compiler 'desargues.board.kernels))
-  ([ns-sym]
-   (create-ns ns-sym)
-   (binding [*ns* (the-ns ns-sym)]
-     (refer-clojure)
-     (require '[raster.core] '[raster.math] '[raster.numeric]))
-   (->RasterCompiler ns-sym)))
+  "The raster backend's KernelCompiler: (kernel-compiler :raster {:ns ns-sym}).
+   Kernels are evaluated into `ns-sym` (default desargues.board.kernels) and
+   compiled to f64 wasm."
+  ([] (kernel-compiler :raster))
+  ([ns-sym] (kernel-compiler :raster {:ns ns-sym})))

@@ -5,7 +5,8 @@
    positions of its masses are functions of q. Emmy turns L into a state
    derivative; desargues integrates it with any TrajectorySolver and renders
    the positions. Ships the planar and the spherical (3D) double pendulum."
-  (:require [desargues.videos.physics :as phys]
+  (:require [desargues.kernel :as kernel]
+            [desargues.videos.physics :as phys]
             [emmy.env :as e :refer [up]]
             [emmy.expression.compile :as compile]
             [emmy.mechanics.lagrange :as lagrange]))
@@ -121,40 +122,6 @@
   "cache-key -> compiled state derivative (see lagrangian-system :cache-key)."
   (atom {}))
 
-(def ^:private chunk-size
-  "Let bindings per generated method; keeps each well under HotSpot's
-   8000-byte huge-method limit (beyond it a method is never JIT-compiled)."
-  120)
-
-(defn- split-kernel-source
-  "Rewrite Emmy's :primitive kernel source (fn [in out ps] (let [..] body))
-   into chunk fns of at most chunk-size bindings that hand their locals over
-   through a double[] scratch array. Every binding is evaluated by the same
-   expression on the same values, so the result is bit-identical."
-  [[_ [in-sym out-sym ps-sym] [_ bindings body]]]
-  (let [pairs (vec (partition 2 bindings))]
-    (if (<= (count pairs) chunk-size)
-      (list 'fn [in-sym out-sym ps-sym] (list 'let bindings body))
-      (let [index (into {} (map-indexed (fn [i [sym _]] [sym i]) pairs))
-            scratch (with-meta (gensym "scratch") {:tag 'doubles})
-            refs (fn [form] (into #{} (filter index) (tree-seq coll? seq form)))
-            load (fn [syms] (mapcat (fn [s] [s (list 'clojure.core/aget scratch (index s))]) (sort-by index syms)))
-            chunks (partition-all chunk-size pairs)
-            chunk-fns (map (fn [chunk]
-                             (let [own (set (map first chunk))
-                                   needed (remove own (refs (map second chunk)))]
-                               (list 'fn [in-sym ps-sym scratch]
-                                     (list 'let (vec (concat (load needed) (mapcat identity chunk)))
-                                           (cons 'do (concat (map (fn [[s _]] (list 'clojure.core/aset scratch (index s) s)) chunk)
-                                                             [nil]))))))
-                           chunks)
-            names (repeatedly (count chunks) #(gensym "chunk"))]
-        (list 'let (vec (interleave names chunk-fns))
-              (list 'fn [in-sym out-sym ps-sym]
-                    (list 'let [scratch (list 'clojure.core/double-array (count pairs))]
-                          (cons 'do (concat (map (fn [nm] (list nm in-sym ps-sym scratch)) names)
-                                            [(list 'let (vec (load (refs body))) body)])))))))))
-
 (defn- kernel->state-fn
   "The (up t q q') -> (up 1 q' q'') state derivative, run on a primitive kernel."
   [kernel n]
@@ -208,8 +175,7 @@
                       src (compile/compile-state-fn (fn [] sd) [] st0
                                                     {:simplify? false :calling-convention :primitive
                                                      :mode :source})
-                      kernel (binding [*ns* (the-ns 'desargues.videos.lagrangian)]
-                               (eval (split-kernel-source src)))
+                      kernel (kernel/compile-jvm src)
                       pks (mapv #(compile-position % n) positions)]
                   {:kernel kernel
                    :kernel-source src

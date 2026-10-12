@@ -7,16 +7,10 @@
    evaluates a number.
 
    What Emmy returns is one symbolic expression; `realize` dispatches it by
-   TARGET, and the set of targets is open:
-     :sexp    the simplified expression as data (Emmy's freeze)
-     :tex     LaTeX, for the slide's labels (Emmy's ->TeX)
-     :raster  the vocabulary raster's deftm compiles, for the kernel
-   A new target (a shader, another compiler) is a defmethod, never an edit.
-
-   Every number is raster's: the :raster realisation feeds the kernel that
-   runs natively on the JVM for the static frame and as WebAssembly in the
-   page."
+   TARGET (:sexp, :tex, :raster, ...), and the set of targets is open: it is
+   desargues.kernel/realize, where a new target is a defmethod."
   (:require [clojure.walk :as walk]
+            [desargues.kernel :as kernel]
             [emmy.env :as e]))
 
 ;; ---------------------------------------------------------------------------
@@ -62,57 +56,8 @@
 ;; ---------------------------------------------------------------------------
 ;; Realisations, open by target
 
-(defmulti realize
-  "target, emmy-expression -> that expression for the target."
-  (fn [target _expr] target))
-
-(defmethod realize :sexp [_ expr] (e/freeze expr))
-
-(defmethod realize :tex [_ expr] (e/->TeX expr))
-
-(def ^:private raster-fns
-  ;; raster.math has no sqrt or abs: those are JVM intrinsics raster lowers
-  ;; to f64.sqrt / f64.abs, and pow lives in raster.numeric.
-  '{sin raster.math/sin cos raster.math/cos tan raster.math/tan
-    exp raster.math/exp log raster.math/log sqrt Math/sqrt
-    sinh raster.math/sinh cosh raster.math/cosh tanh raster.math/tanh
-    asin raster.math/asin acos raster.math/acos atan raster.math/atan
-    abs Math/abs})
-
-(defn- binary
-  "A variadic application as nested binary ones: raster's typed dispatch
-   resolves +, * one pair at a time."
-  [op args]
-  (reduce (fn [acc a] (list op acc a)) args))
-
-(defn- power
-  "x^k: integer k becomes multiplication (raster's wasm pow is exp(k log x),
-   undefined for x < 0), any other k goes to raster.numeric/pow."
-  [base k]
-  (cond
-    (and (integer? k) (zero? k)) 1.0
-    (and (integer? k) (pos? k)) (binary '* (repeat k base))
-    (integer? k) (list '/ 1.0 (power base (- k)))
-    :else (list 'raster.numeric/pow base (double k))))
-
-(defn- lower-raster [x]
-  (cond
-    ;; Every literal a double: raster's wasm backend has no Long*Double.
-    (and (number? x) (not (double? x))) (double x)
-    (not (seq? x)) x
-    :else
-    (let [[op & args] x]
-      (case op
-        (+ *) (if (next args) (binary op args) (first args))
-        - (if (next args) (binary '- args) (list '- 0.0 (first args)))
-        / (if (next args) (binary '/ args) (list '/ 1.0 (first args)))
-        expt (power (first args) (let [k (second args)] (if (double? k) (if (== k (Math/rint k)) (long k) k) k)))
-        square (power (first args) 2)
-        cube (power (first args) 3)
-        (if-let [f (raster-fns op)] (cons f args) x)))))
-
-(defmethod realize :raster [_ expr]
-  ;; postwalk lowers bottom-up, so every argument is already raster's
-  ;; vocabulary when its operator is rewritten; `power` sees the base lowered
-  ;; and the exponent still a literal.
-  (walk/postwalk lower-raster (e/freeze expr)))
+(def realize
+  "target, emmy-expression -> that expression for the target. This is
+   desargues.kernel/realize, the one multimethod: a method added under either
+   name is the same registration."
+  kernel/realize)
