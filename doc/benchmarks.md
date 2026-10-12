@@ -90,6 +90,54 @@ the array Nelder-Mead in the fits and the disposition solver, and the cached
 Lagrangian compile. The noisiest row is the cold Lagrangian compile; the
 3 × MAD rule is what keeps it from tripping the check.
 
+## The raster kernel solver (opt-in, `:dynamics`)
+
+`(desargues.infrastructure.raster-adapter/kernel-solver)` runs the whole RK4
+integration inside one raster `deftm`: the Lagrangian state derivative is
+Emmy's compiled kernel source lowered to raster, and the damped pendulum has
+a hand-written kernel. Its trajectories are bit-identical to the array path
+(the tests compare them with `=`). `phys/evolve-batch` hands it N systems,
+which it integrates in one kernel call. These A/B figures come from a single
+JVM (2026-10-12, same machine, load around 17), as medians in ms. They are not
+part of the baseline; the new rows in `hotpaths.clj` / `geometry.clj` measure
+them on the next run.
+
+| subject | array (default) | old raster rk4 | raster kernel |
+|---|---|---|---|
+| pendulum, 800 steps | 2.2–3.9 | 1.2 | 0.19–0.37 |
+| planar double pendulum, 800 steps | 1.4–1.7 | 1.6–7.1 | 0.45–0.52 |
+| spherical double pendulum, 800 steps | 5.1–7.5 | 3.2 | 2.7–3.3 |
+| pendulum sweep, 64 × 800 (evolve-batch) | 145–151 | | 12–14 |
+| planar, 64 initial conditions × 800 | 91–129 | | 45 |
+| one-time kernel compile, planar / spherical | | | ~100 / 300–430 |
+
+Raster wins clearly on every evolve, and by 10x on batches. It is still not
+the default: compiling the kernel takes 100–430 ms once per system, which
+makes a single cold evolve slower than the array path. Pass it as `:solver`
+when you evolve the same system many times or run sweeps.
+
+Adaptive steppers, error measured on the 0.01 grid against an RK4 reference
+at dt = 1e-4 over 8 s:
+
+| system | method | max error | median |
+|---|---|---|---|
+| pendulum | RK4 kernel, dt 0.01 | 1.1e-8 | 0.25 ms |
+| pendulum | raster tsit5, tol 1e-8 | 1.2e-8 | 1.7 ms |
+| planar (chaotic) | RK4 kernel, dt 0.01 | 2.7 (diverged) | 0.45 ms |
+| planar | RK4 kernel, dt 0.001 | 1.0e-4 | 5.8 ms |
+| planar | raster tsit5, tol 1e-8 | 3.2e-4 | 3.8 ms |
+| planar | raster dp5, tol 1e-8 | 8.1e-3 | 3.1 ms |
+| planar | raster tsit5, default tol 1e-3 | 22 (diverged) | 1.5 ms |
+
+On the smooth pendulum, fixed RK4 already reaches tsit5's accuracy for less
+time. On the chaotic double pendulum, tsit5 at 1e-8 is about 1.5x cheaper
+than an RK4 run of similar accuracy. That is a modest edge, so adaptive
+stepping stays opt-in.
+
+H over a point cloud (array vs raster `deftm`): 1e4 points take 0.054 vs
+0.028 ms, 1e5 points 0.27 vs 0.28 ms, and 1e6 points 3.0 vs 2.3 ms. At figure
+size raster is still about 10x slower, so the geometry kernel stays `:array`.
+
 ## Reference: the cljw lane (not run by `bb bench`)
 
 These figures are copied from [cljw-lane.md](cljw-lane.md): the same 800-step

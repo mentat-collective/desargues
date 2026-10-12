@@ -63,7 +63,7 @@
         transform! (kernel-fn 'desargues.geometry.kernel/transform-cloud!)]
     (into []
           cat
-          (for [n [10 100 1000 10000]]
+          (for [n [10 100 1000 10000 100000 1000000]]
             (let [rnd (java.util.Random. 7)
                   xs (double-array (repeatedly n #(.nextDouble rnd)))
                   ys (double-array (repeatedly n #(.nextDouble rnd)))
