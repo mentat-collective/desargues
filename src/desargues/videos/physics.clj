@@ -68,6 +68,15 @@
 ;; Integrators - ODE Solvers
 ;; =============================================================================
 
+(defprotocol ArraySystem
+  "Optional fast path for a PhysicalSystem whose derivative is a primitive
+   kernel. Arrays are flat doubles in (state-labels this) order."
+  (array-kernel [this]
+    "nil, or a fresh (not thread-shared) map {:state ^doubles current state,
+     :deriv! (fn [^doubles s ^doubles ds]) filling ds with the derivative at s,
+     :->state (fn [^doubles s]) the state map get-state would answer at s}.
+     deriv! must perform the same IEEE operations as `derivatives`."))
+
 (defrecord EulerIntegrator []
   Integrator
   (step [_ system dt]
@@ -149,17 +158,48 @@
     "Evolve `system` per opts {:dt :duration}. Returns a Trajectory whose
      first point is {:time 0.0 :state (get-state system)}."))
 
+(defn- rk4-trajectory-arrays
+  "StepperSolver's rk4 loop on an ArraySystem kernel (see array-kernel): the
+   same IEEE operations, in the same order, as rk4-step-doubles, with every
+   intermediate in a reused double[]."
+  [{:keys [state deriv! ->state]} ^double dt ^double duration]
+  (let [^doubles s state
+        n (alength s)
+        k1 (double-array n) k2 (double-array n) k3 (double-array n) k4 (double-array n)
+        tmp (double-array n)
+        h2 (/ dt 2.0) h6 (/ dt 6.0)
+        axpy! (fn [^doubles k ^double h]
+                (dotimes [i n] (aset tmp i (+ (aget s i) (* (aget k i) h)))))]
+    (loop [t 0.0
+           trajectory (transient [{:time 0.0 :state (->state s)}])]
+      (if (>= t duration)
+        (persistent! trajectory)
+        (do (deriv! s k1)
+            (axpy! k1 h2) (deriv! tmp k2)
+            (axpy! k2 h2) (deriv! tmp k3)
+            (axpy! k3 dt) (deriv! tmp k4)
+            (dotimes [i n]
+              (let [c (+ (+ (+ (aget k1 i) (* 2.0 (aget k2 i))) (* 2.0 (aget k3 i))) (aget k4 i))]
+                (aset s i (+ (aget s i) (* c h6)))))
+            (let [new-t (+ t dt)]
+              (recur new-t (conj! trajectory {:time new-t :state (->state s)}))))))))
+
 (defrecord StepperSolver [integrator]
   TrajectorySolver
   (solve-trajectory [_ system {:keys [dt duration] :or {dt 0.01 duration 10.0}}]
-    (loop [sys system
-           t 0.0
-           trajectory [{:time 0.0 :state (get-state system)}]]
-      (if (>= t duration)
-        trajectory
-        (let [new-sys (step integrator sys dt)
-              new-t (+ t dt)]
-          (recur new-sys new-t (conj trajectory {:time new-t :state (get-state new-sys)})))))))
+    (if-let [kernel (and (instance? RK4Integrator integrator)
+                         (instance? Double dt)
+                         (satisfies? ArraySystem system)
+                         (array-kernel system))]
+      (rk4-trajectory-arrays kernel (double dt) (double duration))
+      (loop [sys system
+             t 0.0
+             trajectory [{:time 0.0 :state (get-state system)}]]
+        (if (>= t duration)
+          trajectory
+          (let [new-sys (step integrator sys dt)
+                new-t (+ t dt)]
+            (recur new-sys new-t (conj trajectory {:time new-t :state (get-state new-sys)}))))))))
 
 (defn stepper-solver
   "A TrajectorySolver that drives a step-based Integrator (default rk4)."

@@ -52,7 +52,23 @@
             (recur (inc i) (assoc! m (dot-label (nth labels i)) (double (first bs))) (next bs))
             (persistent! m)))))))
 
-(defrecord LagrangianSystem [labels positions state-derivative q qdot]
+(def ^:private no-params (double-array 0))
+
+(defn- kernel-derivatives
+  "derivatives through the primitive kernel: state map in, labelled map out."
+  [labels kernel s]
+  (let [n (count labels)
+        in (double-array (inc (* 2 n)))
+        out (double-array (inc (* 2 n)))]
+    (dotimes [i n]
+      (aset in (inc i) (double (get s (nth labels i))))
+      (aset in (+ 1 n i) (double (get s (dot-label (nth labels i))))))
+    (kernel in out no-params)
+    (labelled labels
+              (map #(aget out %) (range 1 (inc n)))
+              (map #(aget out %) (range (inc n) (inc (* 2 n)))))))
+
+(defrecord LagrangianSystem [labels positions state-derivative q qdot kernel]
   phys/PhysicalSystem
   (get-state [_]
     (labelled labels q qdot))
@@ -61,47 +77,153 @@
            :q    (mapv #(double (get s %)) labels)
            :qdot (mapv #(double (get s (dot-label %))) labels)))
   (derivatives [_ s]
-    (let [[_ dq ddq] (seq (state-derivative (state-tuple labels s)))]
-      (labelled labels dq ddq)))
+    (if kernel
+      (kernel-derivatives labels kernel s)
+      (let [[_ dq ddq] (seq (state-derivative (state-tuple labels s)))]
+        (labelled labels dq ddq))))
   (state-labels [_]
-    (vec (concat labels (map dot-label labels)))))
+    (vec (concat labels (map dot-label labels))))
+  phys/ArraySystem
+  (array-kernel [_]
+    (when kernel
+      (let [n (count labels)
+            m (* 2 n)
+            in (double-array (inc m))
+            out (double-array (inc m))
+            s0 (double-array m)]
+        (dotimes [i n]
+          (aset s0 i (double (nth q i)))
+          (aset s0 (+ n i) (double (nth qdot i))))
+        {:state s0
+         :deriv! (fn [^doubles s ^doubles ds]
+                   (System/arraycopy s 0 in 1 m)
+                   (kernel in out no-params)
+                   (System/arraycopy out 1 ds 0 m))
+         :->state (fn [^doubles s]
+                    (labelled labels
+                              (map #(aget s %) (range n))
+                              (map #(aget s %) (range n m))))}))))
 
 (defn positions-at
   "Cartesian [x y z] of every mass of `system` in `state` (a state map)."
-  [{:keys [labels positions]} state]
-  (let [q (apply up (map #(double (get state %)) labels))]
-    (mapv (fn [p] (mapv double (seq (p q)))) positions)))
+  [{:keys [labels positions position-kernels]} state]
+  (if position-kernels
+    (let [in (double-array (count labels))]
+      (dotimes [i (count labels)] (aset in i (double (get state (nth labels i)))))
+      (mapv (fn [k] (let [out (double-array 3)]
+                      (k in out no-params)
+                      [(aget out 0) (aget out 1) (aget out 2)]))
+            position-kernels))
+    (let [q (apply up (map #(double (get state %)) labels))]
+      (mapv (fn [p] (mapv double (seq (p q)))) positions))))
 
 (def ^:private compiled-cache
   "cache-key -> compiled state derivative (see lagrangian-system :cache-key)."
   (atom {}))
+
+(def ^:private chunk-size
+  "Let bindings per generated method; keeps each well under HotSpot's
+   8000-byte huge-method limit (beyond it a method is never JIT-compiled)."
+  120)
+
+(defn- split-kernel-source
+  "Rewrite Emmy's :primitive kernel source (fn [in out ps] (let [..] body))
+   into chunk fns of at most chunk-size bindings that hand their locals over
+   through a double[] scratch array. Every binding is evaluated by the same
+   expression on the same values, so the result is bit-identical."
+  [[_ [in-sym out-sym ps-sym] [_ bindings body]]]
+  (let [pairs (vec (partition 2 bindings))]
+    (if (<= (count pairs) chunk-size)
+      (list 'fn [in-sym out-sym ps-sym] (list 'let bindings body))
+      (let [index (into {} (map-indexed (fn [i [sym _]] [sym i]) pairs))
+            scratch (with-meta (gensym "scratch") {:tag 'doubles})
+            refs (fn [form] (into #{} (filter index) (tree-seq coll? seq form)))
+            load (fn [syms] (mapcat (fn [s] [s (list 'clojure.core/aget scratch (index s))]) (sort-by index syms)))
+            chunks (partition-all chunk-size pairs)
+            chunk-fns (map (fn [chunk]
+                             (let [own (set (map first chunk))
+                                   needed (remove own (refs (map second chunk)))]
+                               (list 'fn [in-sym ps-sym scratch]
+                                     (list 'let (vec (concat (load needed) (mapcat identity chunk)))
+                                           (cons 'do (concat (map (fn [[s _]] (list 'clojure.core/aset scratch (index s) s)) chunk)
+                                                             [nil]))))))
+                           chunks)
+            names (repeatedly (count chunks) #(gensym "chunk"))]
+        (list 'let (vec (interleave names chunk-fns))
+              (list 'fn [in-sym out-sym ps-sym]
+                    (list 'let [scratch (list 'clojure.core/double-array (count pairs))]
+                          (cons 'do (concat (map (fn [nm] (list nm in-sym ps-sym scratch)) names)
+                                            [(list 'let (vec (load (refs body))) body)])))))))))
+
+(defn- kernel->state-fn
+  "The (up t q q') -> (up 1 q' q'') state derivative, run on a primitive kernel."
+  [kernel n]
+  (fn [state]
+    (let [m (* 2 n)
+          in (double-array (inc m))
+          out (double-array (inc m))
+          [t q qdot] (seq state)]
+      (aset in 0 (double t))
+      (dotimes [i n]
+        (aset in (inc i) (double (nth (seq q) i)))
+        (aset in (+ 1 n i) (double (nth (seq qdot) i))))
+      (kernel in out no-params)
+      (up (aget out 0)
+          (apply up (map #(aget out %) (range 1 (inc n))))
+          (apply up (map #(aget out %) (range (inc n) (inc m))))))))
+
+(defn- compile-position
+  "Primitive kernel (fn [^doubles q ^doubles xyz ps]) for position fn p, or nil
+   when p does not compile to a 3-vector."
+  [p n]
+  (try
+    (let [src (compile/compile-state-fn p false (apply up (repeat n 1.0))
+                                        {:simplify? false :mode :source :cache? false
+                                         :calling-convention :primitive})]
+      (binding [*ns* (the-ns 'desargues.videos.lagrangian)]
+        (eval src)))
+    (catch Exception _ nil)))
 
 (defn lagrangian-system
   "A PhysicalSystem from Lagrangian `L` (a fn of the (up t q q') local tuple).
    labels name the coordinates (their velocities are label-dot); positions are
    the mass position fns of q used by positions-at; q0 / qdot0 are the initial
    values. :compile? (default true) compiles the derived state derivative with
-   Emmy's compiler, simplification off, before the first step.
+   Emmy's compiler, simplification off, into a primitive double[] kernel
+   before the first step (the system then implements phys/ArraySystem), and
+   the position fns into primitive kernels for positions-at.
 
    :cache-key (optional) names the system up to its initial state: compiled
    derivatives are memoized under [cache-key (count q0)], so a second system
    with the same key reuses the compiled fn. Two Lagrangians must share a key
-   only when they are the same function of the local tuple."
+   only when they are the same function of the local tuple (and so the same
+   positions)."
   [{:keys [L labels positions q0 qdot0 compile? cache-key] :or {compile? true}}]
-  (let [st0 (up 0.0 (apply up (map double q0)) (apply up (map double qdot0)))
+  (let [n (count q0)
+        st0 (up 0.0 (apply up (map double q0)) (apply up (map double qdot0)))
         build (fn []
                 (let [sd (lagrange/Lagrangian->state-derivative L)
-                      compiled (compile/compile-state-fn (fn [] sd) [] st0 {:simplify? false})]
-                  (fn [state] (compiled state []))))
-        sd  (cond
-              (not compile?) (lagrange/Lagrangian->state-derivative L)
-              (nil? cache-key) (build)
-              :else (let [k [cache-key (count q0)]]
-                      (or (get @compiled-cache k)
-                          (get (swap! compiled-cache
-                                      (fn [c] (if (contains? c k) c (assoc c k (build)))))
-                               k))))]
-    (->LagrangianSystem (vec labels) (vec positions) sd (mapv double q0) (mapv double qdot0))))
+                      src (compile/compile-state-fn (fn [] sd) [] st0
+                                                    {:simplify? false :calling-convention :primitive
+                                                     :mode :source})
+                      kernel (binding [*ns* (the-ns 'desargues.videos.lagrangian)]
+                               (eval (split-kernel-source src)))
+                      pks (mapv #(compile-position % n) positions)]
+                  {:kernel kernel
+                   :sd (kernel->state-fn kernel n)
+                   :position-kernels (when (every? some? pks) pks)}))
+        compiled (cond
+                   (not compile?) nil
+                   (nil? cache-key) (build)
+                   :else (let [k [cache-key n]]
+                           (or (get @compiled-cache k)
+                               (get (swap! compiled-cache
+                                           (fn [c] (if (contains? c k) c (assoc c k (build)))))
+                                    k))))
+        sd (if compiled (:sd compiled) (lagrange/Lagrangian->state-derivative L))]
+    (cond-> (->LagrangianSystem (vec labels) (vec positions) sd (mapv double q0) (mapv double qdot0)
+                                (:kernel compiled))
+      (:position-kernels compiled) (assoc :position-kernels (:position-kernels compiled)))))
 
 ;; ── double pendulums ────────────────────────────────────────────────────────
 

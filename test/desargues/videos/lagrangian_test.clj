@@ -62,3 +62,30 @@
           cached (lag/double-pendulum {})
           run #(mapv :state (phys/evolve % {:dt 0.01 :duration 0.5}))]
       (is (= (run fresh) (run cached))))))
+
+(defn- step-loop
+  "evolve without the ArraySystem fast path: the map-based StepperSolver loop."
+  [sys {:keys [dt duration]}]
+  (loop [s sys t 0.0 acc [{:time 0.0 :state (phys/get-state sys)}]]
+    (if (>= t duration)
+      acc
+      (let [s' (phys/step phys/rk4 s dt) t' (+ t dt)]
+        (recur s' t' (conj acc {:time t' :state (phys/get-state s')}))))))
+
+(deftest primitive-kernel-path-is-bit-identical
+  (doseq [[label sys opts] [["planar" (lag/double-pendulum {}) {:dt 0.01 :duration 8.0}]
+                            ["spherical" (lag/spherical-double-pendulum
+                                          {:l1 1.4 :l2 1.2 :theta1 1.3 :phi1 0.0 :theta2 1.6 :phi2 0.8
+                                           :phi1-dot 1.4 :phi2-dot 0.9})
+                             {:dt 0.01 :duration 8.0}]]]
+    (testing (str label ": array RK4 loop == map RK4 loop, bit for bit")
+      (is (some? (phys/array-kernel sys)))
+      (is (= (step-loop sys opts) (phys/evolve sys opts))))
+    (testing (str label ": compiled positions == Emmy positions, bit for bit")
+      (let [plain (dissoc sys :position-kernels)]
+        (doseq [{:keys [state]} (take-nth 37 (phys/evolve sys opts))]
+          (is (= (lag/positions-at plain state) (lag/positions-at sys state))))))
+    (testing (str label ": the structured state derivative matches the kernel")
+      (let [s (phys/get-state sys)]
+        (is (= (phys/derivatives sys s)
+               (phys/derivatives (assoc sys :kernel nil) s)))))))
