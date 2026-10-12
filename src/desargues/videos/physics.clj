@@ -336,6 +336,15 @@
 ;; Generic Evolution Functions
 ;; =============================================================================
 
+(defn- check-evolve-opts!
+  "Reject a :dt that is not finite positive or a :duration that is not finite
+   non-negative (a NaN step never reaches the duration and would spin forever)."
+  [dt duration]
+  (when-not (and (number? dt) (Double/isFinite (double dt)) (pos? dt))
+    (throw (ex-info "evolve: :dt must be a finite positive number" {:dt dt})))
+  (when-not (and (number? duration) (Double/isFinite (double duration)) (not (neg? duration)))
+    (throw (ex-info "evolve: :duration must be a finite non-negative number" {:duration duration}))))
+
 (defn evolve
   "Evolve a physical system over time.
 
@@ -352,13 +361,29 @@
    Returns a sequence of {:time t :state state} maps."
   [system {:keys [dt duration integrator solver]
            :or {dt 0.01 duration 10.0 integrator rk4}}]
-  (when-not (and (number? dt) (Double/isFinite (double dt)) (pos? dt))
-    (throw (ex-info "evolve: :dt must be a finite positive number" {:dt dt})))
-  (when-not (and (number? duration) (Double/isFinite (double duration)) (not (neg? duration)))
-    (throw (ex-info "evolve: :duration must be a finite non-negative number" {:duration duration})))
+  (check-evolve-opts! dt duration)
   (solve-trajectory (or solver (stepper-solver integrator))
                     system
                     {:dt dt :duration duration}))
+
+(defprotocol BatchTrajectorySolver
+  "Optional for a TrajectorySolver: evolve many systems in one call (N initial
+   conditions, a parameter sweep). Must answer what mapping solve-trajectory
+   over the systems would."
+  (solve-batch [this systems opts]
+    "A vector of Trajectories, one per system, per opts {:dt :duration}."))
+
+(defn evolve-batch
+  "evolve for every system in `systems` with the same opts (see evolve).
+   A :solver that implements BatchTrajectorySolver gets them in one call
+   (the raster kernel solver integrates the whole batch inside one kernel);
+   any other solver is mapped. Returns a vector of trajectories."
+  [systems {:keys [dt duration solver] :or {dt 0.01 duration 10.0} :as opts}]
+  (check-evolve-opts! dt duration)
+  (let [systems (vec systems)]
+    (if (and solver (satisfies? BatchTrajectorySolver solver))
+      (solve-batch solver systems {:dt dt :duration duration})
+      (mapv #(evolve % opts) systems))))
 
 (defn phase-portrait
   "Extract phase portrait data from trajectory.

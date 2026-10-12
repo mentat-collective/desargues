@@ -14,7 +14,8 @@
             [raster.arrays :as ra]
             [raster.core :refer [deftm ftm]]
             [raster.ode :as ode]
-            [raster.ode.core :as ode-core]))
+            [raster.ode.core :as ode-core]
+            [desargues.infrastructure.raster-kernels :as rk]))
 
 (defn- state->array
   ^doubles [labels state]
@@ -33,19 +34,135 @@
         ts       (mapv #(* % dt) (range (inc n)))]
     (if (< (- duration (peek ts)) (* 1e-9 dt)) ts (conj ts duration))))
 
+(defn- double-pendulum?
+  "A physics/Pendulum whose state and parameters are all Doubles: the shape
+   the stepper's double fast path takes, so the kernel can match it bitwise."
+  [system]
+  (and (instance? desargues.videos.physics.Pendulum system)
+       (every? #(instance? Double %) ((juxt :theta :omega :gravity :length :damping) system))))
+
+(defn- kernel-source
+  "The Emmy kernel source a compiled Lagrangian system carries, or nil."
+  [system]
+  (:kernel-source system))
+
+(defn- step-times
+  "The times the stepper visits for dt over duration: 0, then t+dt until
+   t >= duration, accumulated exactly as StepperSolver does."
+  [^double dt ^double duration]
+  (loop [t 0.0 ts (transient [0.0])]
+    (if (>= t duration)
+      (persistent! ts)
+      (let [t' (+ t dt)] (recur t' (conj! ts t'))))))
+
+(defn- kernel-plan
+  "How the kernel solver runs `system`: {:key :n :u0 :labels :params :run}
+   where (run u0s nb out steps dt params) integrates nb stacked states, or nil
+   when the system has no raster kernel. :key groups systems one call can
+   batch; :labels name the state slots (state-labels order)."
+  [system]
+  (cond
+    (kernel-source system)
+    (let [src (kernel-source system)
+          {:keys [rk4 n]} (rk/kernels src)]
+      {:key [:emmy src] :n n :u0 (:state (phys/array-kernel system))
+       :labels (vec (phys/state-labels system))
+       :run (fn [u0s nb out steps dt _] (rk4 u0s (long nb) out (long steps) (double dt)))})
+
+    (double-pendulum? system)
+    {:key [:pendulum] :n 2
+     :u0 (double-array [(:theta system) (:omega system)])
+     :params [(/ (double (:gravity system)) (double (:length system))) (double (:damping system))]
+     :labels [:theta :omega]
+     :run (fn [u0s nb out steps dt params]
+            (rk/pendulum-rk4 u0s (long nb) (double-array (map first params)) (double-array (map second params))
+                             out (long steps) (double dt)))}))
+
+(defn- run-group
+  "Integrate systems sharing one kernel (their plans) in one kernel call. Each
+   row of the kernel's output becomes {label value} over (:labels plan), built
+   straight from the output array."
+  [plans dt duration]
+  (let [{:keys [n run]} (first plans)
+        n (long n)
+        ts (step-times dt duration)
+        steps (dec (count ts))
+        rows (inc steps)
+        nb (count plans)
+        u0s (double-array (* nb n))
+        out (double-array (* nb rows n))]
+    (dotimes [b nb] (System/arraycopy ^doubles (:u0 (nth plans b)) 0 u0s (* b n) n))
+    (run u0s nb out steps dt (mapv :params plans))
+    (mapv (fn [b {:keys [labels]}]
+            (let [labels (object-array labels)]
+              (loop [i 0 ts (seq ts) acc (transient [])]
+                (if (< i rows)
+                  (let [off (* (+ (* b rows) i) n)
+                        state (loop [j 0 m (transient {})]
+                                (if (< j n)
+                                  (recur (inc j) (assoc! m (aget labels j) (aget out (+ off j))))
+                                  (persistent! m)))]
+                    (recur (inc i) (next ts) (conj! acc {:time (first ts) :state state})))
+                  (persistent! acc)))))
+          (range nb) plans)))
+
+(defrecord RasterKernelSolver []
+  phys/TrajectorySolver
+  (solve-trajectory [this system opts]
+    (first (phys/solve-batch this [system] opts)))
+  phys/BatchTrajectorySolver
+  (solve-batch [_ systems {:keys [dt duration] :or {dt 0.01 duration 10.0}}]
+    (let [dt (double dt) duration (double duration)
+          plans (mapv kernel-plan systems)
+          fallback (phys/stepper-solver phys/rk4)
+          groups (group-by (fn [i] (some-> (plans i) :key)) (range (count systems)))
+          results (reduce-kv
+                   (fn [acc k idxs]
+                     (if k
+                       (into acc (map vector idxs (run-group (mapv plans idxs) dt duration)))
+                       (into acc (map (fn [i] [i (phys/solve-trajectory fallback (systems i) {:dt dt :duration duration})]) idxs))))
+                   {} groups)]
+      (mapv results (range (count systems))))))
+
+(defn kernel-solver
+  "A TrajectorySolver (and BatchTrajectorySolver) whose fixed-step RK4 runs
+   entirely inside a raster deftm kernel: compiled Lagrangian systems (from
+   their Emmy kernel source) and all-Double pendulums. Answers the same
+   trajectory as phys/stepper-solver rk4, bit for bit; systems without a
+   kernel go to that stepper. solve-batch integrates every system that shares
+   a kernel in ONE kernel call (N initial conditions, pendulum parameter
+   sweeps)."
+  []
+  (->RasterKernelSolver))
+
+(defn kernel-rhs
+  "A raster RHS that calls a compiled deftm derivative directly (no state map,
+   no Clojure fn per evaluation), or nil when `system` has none: a compiled
+   Lagrangian system or an all-Double pendulum."
+  [system]
+  (cond
+    (kernel-source system) ((:rhs-fn (rk/kernels (kernel-source system))))
+    (double-pendulum? system)
+    (let [gl (/ (double (:gravity system)) (double (:length system)))
+          mu (double (:damping system))]
+      (ftm [du :- (Array double), u :- (Array double), t :- Double]
+        (rk/pendulum-deriv du u gl mu)))))
+
 (defn rhs
   "raster right-hand side (du u t) for `system`. The state vector is ordered
    by (state-labels system); every derivative the system does not report is
-   taken as 0."
+   taken as 0. Systems with a compiled kernel (see kernel-rhs) get it; the
+   rest go through `derivatives` on a state map per evaluation."
   [system]
-  (let [labels (vec (phys/state-labels system))
-        n      (count labels)
-        fill!  (fn [^doubles du ^doubles u _t]
-                 (let [derivs (phys/derivatives system (array->state labels u))]
-                   (dotimes [i n]
-                     (aset du i (double (get derivs (labels i) 0.0))))))]
-    (ftm [du :- (Array double), u :- (Array double), t :- Double]
-      (fill! du u t))))
+  (or (kernel-rhs system)
+      (let [labels (vec (phys/state-labels system))
+            n      (count labels)
+            fill!  (fn [^doubles du ^doubles u _t]
+                     (let [derivs (phys/derivatives system (array->state labels u))]
+                       (dotimes [i n]
+                         (aset du i (double (get derivs (labels i) 0.0))))))]
+        (ftm [du :- (Array double), u :- (Array double), t :- Double]
+          (fill! du u t)))))
 
 (defrecord RasterSolver [alg resample?]
   phys/TrajectorySolver

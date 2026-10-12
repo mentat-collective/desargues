@@ -191,7 +191,9 @@
    values. :compile? (default true) compiles the derived state derivative with
    Emmy's compiler, simplification off, into a primitive double[] kernel
    before the first step (the system then implements phys/ArraySystem), and
-   the position fns into primitive kernels for positions-at.
+   the position fns into primitive kernels for positions-at. The kernel's
+   Emmy source stays on the system as :kernel-source, for engines that
+   compile it themselves (desargues.infrastructure.raster-kernels).
 
    :cache-key (optional) names the system up to its initial state: compiled
    derivatives are memoized under [cache-key (count q0)], so a second system
@@ -210,6 +212,7 @@
                                (eval (split-kernel-source src)))
                       pks (mapv #(compile-position % n) positions)]
                   {:kernel kernel
+                   :kernel-source src
                    :sd (kernel->state-fn kernel n)
                    :position-kernels (when (every? some? pks) pks)}))
         compiled (cond
@@ -223,6 +226,7 @@
         sd (if compiled (:sd compiled) (lagrange/Lagrangian->state-derivative L))]
     (cond-> (->LagrangianSystem (vec labels) (vec positions) sd (mapv double q0) (mapv double qdot0)
                                 (:kernel compiled))
+      (:kernel-source compiled) (assoc :kernel-source (:kernel-source compiled))
       (:position-kernels compiled) (assoc :position-kernels (:position-kernels compiled)))))
 
 ;; ── double pendulums ────────────────────────────────────────────────────────
