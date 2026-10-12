@@ -192,3 +192,11 @@
                        (sh/solid :I :icosahedron {:size 1.6})))]
       (is (s/valid? ::spec/board b))
       (is (= 60 (count (filter #(= :point (:layer %)) (:board/layers b))))))))
+
+;; Boards compile through the :raster backend; without it the namespace is
+;; skipped, loudly, like the raster solver conformance suite.
+(clojure.test/use-fixtures :once
+  (fn [run]
+    (if (desargues.backend/available? :raster)
+      (run)
+      (println "[constructions-test] raster not on classpath (use -A:dynamics); skipping"))))

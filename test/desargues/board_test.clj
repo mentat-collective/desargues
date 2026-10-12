@@ -151,3 +151,11 @@
                                  :points [{:id :A :at [2 1]} {:id :A* :op ::reflect-test :of :A}]}
                                 {:out-dir (.getPath (tmp-dir))})]
     (is (= [-2.0 1.0] [(first (get-in b [:board/frame :o-pt1x])) (first (get-in b [:board/frame :o-pt1y]))]))))
+
+;; Boards compile through the :raster backend; without it the namespace is
+;; skipped, loudly, like the raster solver conformance suite.
+(clojure.test/use-fixtures :once
+  (fn [run]
+    (if (desargues.backend/available? :raster)
+      (run)
+      (println "[board-test] raster not on classpath (use -A:dynamics); skipping"))))
