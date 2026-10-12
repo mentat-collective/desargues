@@ -30,6 +30,21 @@
     (is (d/no-label-overlap? [[0 0] [2 0]] [1.0 0.5]))
     (is (not (d/no-label-overlap? [[0 0] [0.5 0.1]] [1.0 0.5])))))
 
+(deftest keyframes-bit-identical-to-emmy-polish
+  ;; Raw IEEE bits of (solve-keyframes (desargues-disposition) 3) as solved by
+  ;; emmy's nelder-mead over the boxed objective (v0.2.0); the array
+  ;; simplex + primitive objective must land on exactly these doubles.
+  (let [golden [{:a3 "bff14f3b0d2d16c9" :py "c0099999999450ef" :qx "c0195e080bc48db0"
+                 :ra "3ff7d4b97ab87c68" :ra' "400b90f175223f2d"}
+                {:a3 "bff19ceaabdcb8c8" :py "c00999999996c51c" :qx "c0177a592dd50d17"
+                 :ra "3ff7d4b97aa842b8" :ra' "400b90f17514b584"}
+                {:a3 "bff11023b60feaba" :py "c00993c7b377f26e" :qx "c01854410895f1e2"
+                 :ra "3ff7de0d4bb473ee" :ra' "400b9c315b22283e"}]]
+    (is (= golden
+           (mapv (fn [m] (update-vals (select-keys m [:a3 :py :qx :ra :ra'])
+                                      #(Long/toHexString (Double/doubleToRawLongBits %))))
+                 (d/solve-keyframes (d/desargues-disposition) 3))))))
+
 ;; =============================================================================
 ;; Solving one disposition
 ;; =============================================================================

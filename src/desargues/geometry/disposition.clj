@@ -23,7 +23,7 @@
    require it."
   (:require [clojure.core.logic :as l]
             [clojure.core.logic.fd :as fd]
-            [emmy.numerical.multimin.nelder-mead :as nm]
+            [desargues.geometry.simplex :as simplex]
             [desargues.geometry.kernel :as k]
             [desargues.geometry.projective :as g]))
 
@@ -37,7 +37,13 @@
 
 (defn- points-of [pts] (if (map? pts) (vals pts) pts))
 
-(defn dist [[x1 y1] [x2 y2]] (Math/hypot (- x2 x1) (- y2 y1)))
+(defn dist [p q]
+  (let [x1 (nth p 0) y1 (nth p 1) x2 (nth q 0) y2 (nth q 1)]
+    (if (and (instance? Double x1) (instance? Double y1)
+             (instance? Double x2) (instance? Double y2))
+      (Math/hypot (- (.doubleValue ^Double x2) (.doubleValue ^Double x1))
+                  (- (.doubleValue ^Double y2) (.doubleValue ^Double y1)))
+      (Math/hypot (- x2 x1) (- y2 y1)))))
 
 (defn within-frame?
   "Every point inside the frame (default [[-7.1 7.1] [-4 4]])."
@@ -46,13 +52,30 @@
    (every? (fn [[x y]] (and (<= xlo (double x) xhi) (<= ylo (double y) yhi)))
            (points-of pts))))
 
+(defn- boxed-min
+  "clojure.core/min on boxed doubles (NaN wins, a tie answers y), unboxed."
+  ^double [^double x ^double y]
+  (cond (Double/isNaN x) x (Double/isNaN y) y (< x y) x :else y))
+
+(defn- boxed-max
+  "clojure.core/max on boxed doubles (NaN wins, a tie answers y), unboxed."
+  ^double [^double x ^double y]
+  (cond (Double/isNaN x) x (Double/isNaN y) y (> x y) x :else y))
+
 (defn spacing
   "Minimum pairwise distance between the points."
   [pts]
-  (let [ps (vec (points-of pts))]
-    (reduce min Double/MAX_VALUE
-            (for [i (range (count ps)) j (range (inc i) (count ps))]
-              (dist (ps i) (ps j))))))
+  (let [ps (vec (points-of pts))
+        n (count ps)]
+    (loop [i 0 acc Double/MAX_VALUE]
+      (if (< i n)
+        (let [p (ps i)]
+          (recur (inc i)
+                 (loop [j (inc i) acc acc]
+                   (if (< j n)
+                     (recur (inc j) (boxed-min acc (double (dist p (ps j)))))
+                     acc))))
+        acc))))
 
 (defn min-spacing?
   "Every pair of points at least d apart."
@@ -211,29 +234,59 @@
    (Nelder-Mead is unconstrained; the domains are enforced as penalties) + a
    repulsion barrier keeping the polish min-param-dist (Chebyshev, real units)
    away from every already-solved frame — without it every warm start relaxes
-   onto the same optimum and the keyframes collapse to one."
+   onto the same optimum and the keyframes collapse to one. Takes the leaf
+   values as a double[] (see desargues.geometry.simplex)."
   [{:keys [params derive hard soft]} ls {:keys [solved min-param-dist]
                                          :or {solved [] min-param-dist 0.0}}]
-  (fn [xs]
-    (let [p (unflatten params ls xs)
-          oob (reduce + (map (fn [{:keys [lo hi]} x]
-                               (double (max 0.0 (- lo x) (- x hi))))
-                             ls xs))
-          repel (reduce + (map (fn [s]
-                                 (let [d (reduce max 0.0 (map (fn [x y]
-                                                                (Math/abs (double (- x y))))
-                                                              xs s))]
-                                   (* 1.0e4 (max 0.0 (- min-param-dist d)))))
-                               solved))
-          pts (try (derive p) (catch Exception _ nil))]
-      (if (nil? pts)
-        1.0e12
-        (+ (if soft (double (soft pts)) 0.0)
-           (* 1000.0 (count (remove (fn [h] (try (boolean (h pts))
-                                                 (catch Exception _ false)))
-                                    hard)))
-           (* 100.0 oob)
-           repel)))))
+  (let [n (count ls)
+        ^doubles los (double-array (map :lo ls))
+        ^doubles his (double-array (map :hi ls))
+        ^objects paths (object-array (map :path ls))
+        base (fixed-base params)
+        ^objects solved (object-array (map double-array solved))
+        ns (alength solved)
+        mpd (double min-param-dist)
+        hard (vec hard)
+        nh (count hard)
+        oob-at (fn ^double [^doubles xs ^long i]
+                 (let [x (aget xs i)]
+                   (boxed-max (boxed-max 0.0 (- (aget los i) x)) (- x (aget his i)))))
+        repel-at (fn ^double [^doubles xs ^long k]
+                   (let [^doubles s (aget solved k)
+                         d (loop [i 0 d 0.0]
+                             (if (< i n)
+                               (recur (inc i) (boxed-max d (Math/abs (- (aget xs i) (aget s i)))))
+                               d))]
+                     (* 1.0e4 (boxed-max 0.0 (- mpd d)))))]
+    (fn ^double [^doubles xs]
+      (let [p (loop [i 0 m base]
+                (if (< i n)
+                  (recur (inc i) (assoc-leaf m (aget paths i) (aget xs i)))
+                  m))
+            ;; (reduce + coll): seeded with the first element, 0 when empty
+            oob (if (zero? n)
+                  0.0
+                  (loop [i 1 acc (oob-at xs 0)]
+                    (if (< i n) (recur (inc i) (+ acc (oob-at xs i))) acc)))
+            repel (if (zero? ns)
+                    0.0
+                    (loop [k 1 acc (repel-at xs 0)]
+                      (if (< k ns) (recur (inc k) (+ acc (repel-at xs k))) acc)))
+            pts (try (derive p) (catch Exception _ nil))]
+        (if (nil? pts)
+          1.0e12
+          (let [violated (loop [i 0 c 0]
+                           (if (< i nh)
+                             (recur (inc i)
+                                    (if (try (boolean ((nth hard i) pts))
+                                             (catch Exception _ false))
+                                      c
+                                      (inc c)))
+                             c))]
+            (+ (+ (+ (if soft (double (soft pts)) 0.0)
+                     (* 1000.0 (double violated)))
+                  (* 100.0 oob))
+               repel)))))))
 
 (defn polish
   "Nelder-Mead on the soft cost, warm-started from p0. Returns the polished
@@ -243,9 +296,9 @@
    {:keys [maxiter solved min-param-dist] :or {maxiter 800 solved [] min-param-dist 0.0}}]
   (let [x0 (flatten-params (:params construction) ls p0)
         f (objective construction ls {:solved solved :min-param-dist min-param-dist})
-        {:keys [result]} (nm/nelder-mead f x0 {:maxiter maxiter
-                                               :simplex-tolerance 1e-7
-                                               :fn-tolerance 1e-9})
+        {:keys [result]} (simplex/nelder-mead f x0 {:maxiter maxiter
+                                                    :simplex-tolerance 1e-7
+                                                    :fn-tolerance 1e-9})
         p (unflatten (:params construction) ls result)
         flat (flatten-params (:params construction) ls p)]
     (when-not (hard-ok? hard (derive p))
@@ -368,11 +421,19 @@
   "Intersection of line p1p2 with line p3p4, plain doubles. The solver's
    generate-and-test derives thousands of candidates per search; the generic
    emmy path (desargues.geometry.projective) is for placement and proofs, this
-   one is for speed."
+   one is for speed. Same operation order as (cross3 (cross3 p1 p2) (cross3 p3
+   p4)) with w = 1."
   [p1 p2 p3 p4]
-  (let [l (cross3 (conj p1 1.0) (conj p2 1.0))
-        m (cross3 (conj p3 1.0) (conj p4 1.0))
-        [x y w] (cross3 l m)]
+  (let [a1 (double (nth p1 0)) b1 (double (nth p1 1))
+        a2 (double (nth p2 0)) b2 (double (nth p2 1))
+        a3 (double (nth p3 0)) b3 (double (nth p3 1))
+        a4 (double (nth p4 0)) b4 (double (nth p4 1))
+        ;; l = (a1 b1 1) x (a2 b2 1)
+        l0 (- (* b1 1.0) (* 1.0 b2)) l1 (- (* 1.0 a2) (* a1 1.0)) l2 (- (* a1 b2) (* b1 a2))
+        m0 (- (* b3 1.0) (* 1.0 b4)) m1 (- (* 1.0 a4) (* a3 1.0)) m2 (- (* a3 b4) (* b3 a4))
+        x (- (* l1 m2) (* l2 m1))
+        y (- (* l2 m0) (* l0 m2))
+        w (- (* l0 m1) (* l1 m0))]
     [(/ x w) (/ y w)]))
 
 (defn desargues-disposition
