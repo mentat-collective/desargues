@@ -77,26 +77,64 @@
       (set-state system new-state)))
   (integrator-name [_] "Euler"))
 
+(defn- all-doubles?
+  "Every value of m a java.lang.Double, keys exactly ks (a vector)."
+  [m ks]
+  (and (= (count m) (count ks))
+       (every? #(instance? Double (get m %)) ks)))
+
+(defn- rk4-step-doubles
+  "The RK4 step below, specialised to all-Double states and derivatives with
+   one key set: the same IEEE operations in the same order, on double[]s.
+   Answers nil (caller falls back to the generic path) when a derivative map
+   breaks that shape."
+  [system state ^double dt]
+  (let [ks (vec (keys state))
+        n (count ks)
+        s (double-array (map #(get state %) ks))
+        h2 (/ dt 2.0) h6 (/ dt 6.0)
+        ->arr (fn [d] (when (all-doubles? d ks) (double-array (map #(get d %) ks))))
+        ->state (fn [^doubles a]
+                  (persistent! (reduce (fn [m i] (assoc! m (nth ks i) (aget a i)))
+                                       (transient state) (range n))))
+        axpy (fn [^doubles k ^double h]
+               (let [o (double-array n)]
+                 (dotimes [i n] (aset o i (+ (aget s i) (* (aget k i) h))))
+                 o))]
+    (when-let [^doubles k1 (->arr (derivatives system state))]
+      (when-let [^doubles k2 (->arr (derivatives system (->state (axpy k1 h2))))]
+        (when-let [^doubles k3 (->arr (derivatives system (->state (axpy k2 h2))))]
+          (when-let [^doubles k4 (->arr (derivatives system (->state (axpy k3 dt))))]
+            (let [o (double-array n)]
+              (dotimes [i n]
+                (let [c (+ (+ (+ (aget k1 i) (* 2.0 (aget k2 i))) (* 2.0 (aget k3 i))) (aget k4 i))]
+                  (aset o i (+ (aget s i) (* c h6)))))
+              (->state o))))))))
+
 (defrecord RK4Integrator []
   Integrator
   (step [_ system dt]
     (let [state (get-state system)
-          k1 (derivatives system state)
-          state2 (merge-with + state (into {} (map (fn [[k v]] [k (* v (/ dt 2))]) k1)))
-          k2 (derivatives system state2)
-          state3 (merge-with + state (into {} (map (fn [[k v]] [k (* v (/ dt 2))]) k2)))
-          k3 (derivatives system state3)
-          state4 (merge-with + state (into {} (map (fn [[k v]] [k (* v dt)]) k3)))
-          k4 (derivatives system state4)
-          ;; Combine: new = old + dt/6 * (k1 + 2*k2 + 2*k3 + k4)
-          combined (merge-with
-                    (fn [& vs] (reduce + vs))
-                    k1
-                    (into {} (map (fn [[k v]] [k (* 2 v)]) k2))
-                    (into {} (map (fn [[k v]] [k (* 2 v)]) k3))
-                    k4)
-          new-state (merge-with + state (into {} (map (fn [[k v]] [k (* v (/ dt 6))]) combined)))]
-      (set-state system new-state)))
+          fast (when (and (instance? Double dt) (seq state) (all-doubles? state (vec (keys state))))
+                 (rk4-step-doubles system state (double dt)))]
+      (if fast
+        (set-state system fast)
+        (let [k1 (derivatives system state)
+              state2 (merge-with + state (into {} (map (fn [[k v]] [k (* v (/ dt 2))]) k1)))
+              k2 (derivatives system state2)
+              state3 (merge-with + state (into {} (map (fn [[k v]] [k (* v (/ dt 2))]) k2)))
+              k3 (derivatives system state3)
+              state4 (merge-with + state (into {} (map (fn [[k v]] [k (* v dt)]) k3)))
+              k4 (derivatives system state4)
+              ;; Combine: new = old + dt/6 * (k1 + 2*k2 + 2*k3 + k4)
+              combined (merge-with
+                        (fn [& vs] (reduce + vs))
+                        k1
+                        (into {} (map (fn [[k v]] [k (* 2 v)]) k2))
+                        (into {} (map (fn [[k v]] [k (* 2 v)]) k3))
+                        k4)
+              new-state (merge-with + state (into {} (map (fn [[k v]] [k (* v (/ dt 6))]) combined)))]
+          (set-state system new-state)))))
   (integrator-name [_] "Runge-Kutta 4"))
 
 (def euler (->EulerIntegrator))
