@@ -6,6 +6,65 @@ All notable changes to desargues. The format follows
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-12
+
+### Added
+- `desargues.backend`: numeric backends, open by key. A backend (`:jvm`,
+  `:raster`, or one another library registers with `register-backend!`) names
+  who runs the numbers behind a port, and every port dispatches on that key
+  through a multimethod: `desargues.videos.physics/solver`,
+  `desargues.geometry.kernel/provider`,
+  `desargues.board.compiler/kernel-compiler` and `desargues.kernel/realize`.
+  A backend's provider namespaces load the first time it is named, so raster
+  stays off the classpath until `:raster` is asked for; an unknown or absent
+  backend fails at the port with what it needs. raster is one backend among
+  others: a new engine is a registration and `defmethod`s in its own
+  namespace, with no edit to a port.
+- `evolve` and `evolve-batch` take a backend key as `:solver`:
+  `{:solver :raster}`, `{:solver [:raster {:alg :tsit5}]}`,
+  `{:solver [:raster {:kernel? true}]}`, `{:solver [:jvm {:integrator euler}]}`.
+- `desargues.kernel`: kernels as data. `realize` (target, Emmy expression ->
+  form; `:sexp`, `:tex`, `:raster`) moved here from `desargues.board.algebra`,
+  which keeps the same multimethod under its old name. Emmy `:primitive`
+  kernel sources are read once (`source->ir`, `stores`) and split by one
+  chunker (`chunk`) that the JVM kernel (`compile-jvm`) and the raster
+  kernels both use.
+- `desargues.kernel.emmy`: desargues kernels as Emmy compilation modes
+  (`:desargues/jvm`), on an Emmy whose compiler is open
+  ([mentat-collective/emmy#199](https://github.com/mentat-collective/emmy/pull/199));
+  on Emmy v0.32.0 it registers nothing.
+- `desargues.board`: interactive boards. A `BoardSpec` (a function of a
+  variable and draggable params) compiles to a WebAssembly kernel plus the
+  data plato renders: Emmy does the algebra (`desargues.board.algebra`), a
+  `KernelCompiler` runs every number. Kinds are open (`desargues.board.kernel/
+  plan`): `:calculus` (f, f' and the running integral) and `:construction`
+  (points, lines, circles, curves, conics, groups, projective and Euclidean
+  operations, 3D figures, reference checks).
+- Raster kernels: `(solver :raster {:kernel? true})` runs the whole RK4
+  integration inside one raster `deftm` (compiled Lagrangian systems and
+  all-double pendulums), bit-identical to the stepper; `evolve-batch`
+  integrates N systems that share a kernel in one call. Pendulum 2.2-3.9 ms ->
+  0.19-0.37 ms; a 64-trajectory sweep 145 ms -> 13 ms.
+- Benchmarks: `bb bench` runs the core, hot-path and geometry suites;
+  `bb bench:check` compares a fresh run to `bench/results/baseline.edn` and
+  exits 1 on a regression; `bb bench:baseline` saves one. See
+  `doc/benchmarks.md`.
+- CI: the pure suites, the raster dynamics suite and the Typed Clojure gate
+  run on every push and pull request.
+
+### Changed
+- Performance, bit-identical results: Nelder-Mead on double arrays with a
+  primitive objective (disposition solver, `fit-homography`, `fit-keyframes`),
+  a primitive RK4 step for all-double states, Emmy `:primitive` `double[]`
+  kernels for the Lagrangian state derivative and positions, and compiled
+  state derivatives cached by physical parameters. 3-15x on the hot paths.
+- `desargues.board.compiler` no longer requires raster: the raster
+  `KernelCompiler` is `desargues.infrastructure.raster-board`, answered by
+  `(kernel-compiler :raster)`. `raster-compiler` still works.
+- `desargues.geometry.kernel/select-kernel` accepts any backend key with a
+  `provider` method, besides `:array`, `:auto` and `:raster`.
+- CI and the site build run on JDK 25.
+
 ## [0.2.0] - 2026-10-11
 
 ### Added

@@ -32,7 +32,8 @@
    ;; Get phase portrait data
    (def phase-data (phase-portrait pendulum trajectory))
    ```"
-  (:require [clojure.spec.alpha :as s]))
+  (:require [clojure.spec.alpha :as s]
+            [desargues.backend :as backend]))
 
 ;; =============================================================================
 ;; Protocols - The DNA of Physical Systems
@@ -336,6 +337,34 @@
 ;; Generic Evolution Functions
 ;; =============================================================================
 
+(defmulti solver
+  "backend key, opts -> a TrajectorySolver (see desargues.backend).
+
+     (solver :jvm)                      the built-in stepper, rk4
+     (solver :jvm {:integrator euler})  the stepper on another Integrator
+     (solver :raster {:alg :tsit5})     raster's ODE solvers
+     (solver :raster {:kernel? true})   the whole RK4 loop in one raster kernel
+
+   opts are the backend's own. A new engine is a defmethod in its own
+   namespace, registered with desargues.backend/register-backend!."
+  (fn [backend & _] backend))
+
+(defmethod solver :jvm
+  ([_] (stepper-solver))
+  ([_ {:keys [integrator]}] (if integrator (stepper-solver integrator) (stepper-solver))))
+
+(defmethod solver :default [backend & args]
+  (backend/dispatch-default solver "trajectory solver" backend args))
+
+(defn- ->solver
+  "A TrajectorySolver from what a caller may pass as :solver: a
+   TrajectorySolver, a backend key, or [backend-key opts]."
+  [x]
+  (cond
+    (keyword? x) (solver x)
+    (and (vector? x) (keyword? (first x))) (apply solver x)
+    :else x))
+
 (defn- check-evolve-opts!
   "Reject a :dt that is not finite positive or a :duration that is not finite
    non-negative (a NaN step never reaches the duration and would spin forever)."
@@ -352,7 +381,8 @@
    - system: Any PhysicalSystem
    - opts: Map with :dt (time step), :duration (total time), and either
      :integrator (a step-based Integrator, wrapped in a StepperSolver; default
-     rk4) or :solver (any TrajectorySolver, which takes precedence).
+     rk4) or :solver, which takes precedence: a TrajectorySolver, a backend
+     key (:jvm, :raster) or [backend-key opts], resolved through `solver`.
 
    :dt must be a finite positive number and :duration a finite non-negative
    number; anything else (NaN in particular) is rejected up front, because a
@@ -362,7 +392,7 @@
   [system {:keys [dt duration integrator solver]
            :or {dt 0.01 duration 10.0 integrator rk4}}]
   (check-evolve-opts! dt duration)
-  (solve-trajectory (or solver (stepper-solver integrator))
+  (solve-trajectory (or (->solver solver) (stepper-solver integrator))
                     system
                     {:dt dt :duration duration}))
 
@@ -380,7 +410,9 @@
    any other solver is mapped. Returns a vector of trajectories."
   [systems {:keys [dt duration solver] :or {dt 0.01 duration 10.0} :as opts}]
   (check-evolve-opts! dt duration)
-  (let [systems (vec systems)]
+  (let [systems (vec systems)
+        solver (->solver solver)
+        opts (cond-> opts solver (assoc :solver solver))]
     (if (and solver (satisfies? BatchTrajectorySolver solver))
       (solve-batch solver systems {:dt dt :duration duration})
       (mapv #(evolve % opts) systems))))

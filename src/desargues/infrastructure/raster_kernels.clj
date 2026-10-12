@@ -22,6 +22,7 @@
    is the initial state). The pendulum kernel takes two more arrays, gl and
    mu, the per-trajectory g/L and damping, so one call sweeps parameters."
   (:require [clojure.walk :as walk]
+            [desargues.kernel :as kernel]
             [raster.arrays]
             [raster.core :refer [deftm]]))
 
@@ -38,9 +39,11 @@
    in[0] the time reads 0.0: the systems are autonomous), out[k] becomes
    store j = k-1 and out[0] (dt/dt) is dropped. clojure.core arithmetic
    becomes raster's typed +,*,-,/; integer literals become doubles, the
-   value Clojure's mixed arithmetic would use anyway."
-  [[_ [in _out _ps] [_ bindings [_ _out2 & sets]]]]
-  (let [fix (fn [form]
+   value Clojure's mixed arithmetic would use anyway. Reads the source
+   through desargues.kernel/source->ir, like the JVM backend."
+  [src]
+  (let [{:keys [in bindings] :as ir} (kernel/source->ir src)
+        fix (fn [form]
               (walk/prewalk
                (fn [x]
                  (cond
@@ -50,8 +53,8 @@
                    (and (number? x) (not (double? x))) (double x)
                    :else x))
                form))]
-    {:bindings (mapv (fn [[sym e]] [sym (fix e)]) (partition 2 bindings))
-     :stores (vec (keep (fn [[_ k e]] (when (pos? (long k)) [(dec (long k)) (fix e)])) sets))}))
+    {:bindings (mapv (fn [[sym e]] [sym (fix e)]) bindings)
+     :stores (vec (keep (fn [[k e]] (when (pos? (long k)) [(dec (long k)) (fix e)])) (kernel/stores ir)))}))
 
 (def chunk-size
   "Let bindings per generated deftm: the spherical pendulum's 1588 bindings in
@@ -61,32 +64,29 @@
 
 (defn deriv-forms
   "deftm forms defining `nm` [s ds scratch] -> Long, which fills ds with the
-   derivative at s. Beyond chunk-size bindings the let is split into chunk
-   deftms that hand their locals over through scratch (one slot per
-   binding): same expressions on the same values, so the same results."
+   derivative at s. Beyond chunk-size bindings the let is split
+   (desargues.kernel/chunk) into chunk deftms that hand their locals over
+   through scratch (one slot per binding): same expressions on the same
+   values, so the same results."
   [nm {:keys [bindings stores]}]
-  (let [index (into {} (map-indexed (fn [i [sym _]] [sym i]) bindings))
-        refs (fn [form] (into #{} (filter index) (tree-seq coll? seq form)))
-        load (fn [syms] (mapcat (fn [sym] [sym (list 'aget 'scratch (index sym))]) (sort-by index syms)))
-        sig '[s :- (Array double) ds :- (Array double) scratch :- (Array double)]
+  (let [sig '[s :- (Array double) ds :- (Array double) scratch :- (Array double)]
+        load (fn [slots syms] (mapcat (fn [sym] [sym (list 'aget 'scratch (slots sym))]) syms))
         write-ds (fn [] (map (fn [[j e]] (list 'aset 'ds j e)) stores))]
     (if (<= (count bindings) chunk-size)
       [(list 'raster.core/deftm nm sig :- 'Long
              (list 'let (vec (mapcat identity bindings)) (cons 'do (concat (write-ds) [0]))))]
-      (let [chunks (partition-all chunk-size bindings)
+      (let [{:keys [slots chunks tail-needs]} (kernel/chunk bindings (map second stores) chunk-size)
             names (mapv #(symbol (str nm "-chunk" %)) (range (count chunks)))]
         (concat
-         (map (fn [nmi chunk]
-                (let [own (set (map first chunk))
-                      needed (remove own (refs (map second chunk)))]
-                  (list 'raster.core/deftm nmi sig :- 'Long
-                        (list 'let (vec (concat (load needed) (mapcat identity chunk)))
-                              (cons 'do (concat (map (fn [[sym _]] (list 'aset 'scratch (index sym) sym)) chunk)
-                                                [0]))))))
+         (map (fn [nmi {:keys [needs bindings]}]
+                (list 'raster.core/deftm nmi sig :- 'Long
+                      (list 'let (vec (concat (load slots needs) (mapcat identity bindings)))
+                            (cons 'do (concat (map (fn [[sym _]] (list 'aset 'scratch (slots sym) sym)) bindings)
+                                              [0])))))
               names chunks)
          [(list 'raster.core/deftm nm sig :- 'Long
                 (cons 'do (concat (map (fn [c] (list c 's 'ds 'scratch)) names)
-                                  [(list 'let (vec (load (refs (map second stores))))
+                                  [(list 'let (vec (load slots tail-needs))
                                          (cons 'do (concat (write-ds) [0])))])))])))))
 
 (defn rk4-form

@@ -19,8 +19,10 @@ live scenes and the benchmark charts below.
   `RecordingBackend` renders the same scene to EDN
 - 📐 **Layout algebra** — an elm-ui-inspired layout DSL with a pure extent
   estimator (measure → resolve → realize)
-- 🧭 **Trajectories behind a port** — `TrajectorySolver` with Clojure RK4 built in
-  and raster's adaptive solvers one alias away
+- 🧭 **Numeric backends, open by key**: every numeric port (trajectory solvers,
+  geometry kernels, board compilers) dispatches on a backend key: `:jvm` is
+  built in, `:raster` is one alias away, and a new engine is a registration
+  (`desargues.backend`)
 - 📐 **Projective geometry layer** — `desargues.geometry.*`: emmy-generic
   projective primitives (join/meet duality, cross ratio, homographies, conics,
   symbolic Desargues/Pappus proofs), a clp(FD) + Nelder-Mead disposition
@@ -184,7 +186,10 @@ scene facade   desargues.scene          backend-neutral animation API  ── DI
   └ backend    desargues.scene.data     RecordingBackend (records EDN, no Python)
 layout         desargues.layout.*       elm-ui layout algebra + pure extent measure
 pipeline       desargues.pipeline.emmy  Emmy → LaTeX → Python, pure CPPB conveyor
-physics        desargues.videos.physics TrajectorySolver port (+ raster adapter)
+backends       desargues.backend        backend key → provider namespaces, loaded on demand
+kernels        desargues.kernel         realize (by target), Emmy kernels as data, JVM kernel
+physics        desargues.videos.physics TrajectorySolver port; (solver :jvm | :raster)
+boards         desargues.board          BoardSpec → wasm kernel + data for plato
 lagrangian     desargues.videos.lagrangian  Emmy derives q'' from L = T − V (double pendulums)
 manim          desargues.manim.*        low-level Manim mobject/animation bindings
 domain         desargues.domain.*       pure Clojure + Emmy, Typed-Clojure-annotated
@@ -213,6 +218,30 @@ Typed Clojure is split across the two classpaths: the annotation runtime is a
 normal dependency because `desargues.domain.*` carry `t/ann` annotations, while the
 checker lives in the `:dev` alias. The raster solvers live in `:dynamics` because
 raster pins a newer typed runtime.
+
+### Backends
+
+A backend is a keyword that names who runs the numbers. Each port owns a
+multimethod on that key, and `desargues.backend` loads a backend's provider
+namespaces the first time it is named:
+
+```clojure
+(require '[desargues.videos.physics :as phys])
+
+(phys/evolve pendulum {:dt 0.01 :duration 10})                        ; :jvm, the default
+(phys/evolve pendulum {:solver [:raster {:alg :tsit5}] :dt 0.01 :duration 10})
+(phys/evolve-batch systems {:solver [:raster {:kernel? true}] :dt 0.01 :duration 10})
+```
+
+`:raster` needs the `:dynamics` alias and JDK 24 or newer; without it the port
+says so. A new engine registers a key and adds methods in its own namespace:
+
+```clojure
+(backend/register-backend! :my-engine {:namespaces '[my.engine.desargues]})
+
+;; in my.engine.desargues
+(defmethod phys/solver :my-engine [_ & [opts]] (->MySolver opts))
+```
 
 ## Documentation
 
