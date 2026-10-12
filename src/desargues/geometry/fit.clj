@@ -15,11 +15,10 @@
 
    Dev/build-time only, like desargues.geometry.disposition: decks consume the
    fitted H (or its effect) as literals."
-  (:require [emmy.env :as e]
-            [emmy.numerical.multimin.nelder-mead :as nm]
-            [desargues.geometry.disposition :as d]
+  (:require [desargues.geometry.disposition :as d]
             [desargues.geometry.kernel :as k]
-            [desargues.geometry.projective :as g]))
+            [desargues.geometry.projective :as g]
+            [desargues.geometry.simplex :as simplex]))
 
 ;; =============================================================================
 ;; Frame cost
@@ -71,7 +70,8 @@
 (defn fit-homography
   "The H in `family` (:similarity | :affine | :projective) minimizing
   frame-cost of H . config + degeneracy penalty. Returns {:H :cost :dof}.
-  Deterministic. Costs are evaluated through desargues.geometry.kernel/*kernel*."
+  Deterministic. Costs are evaluated through desargues.geometry.kernel/*kernel*;
+  the search is desargues.geometry.simplex (emmy's Nelder-Mead on double[])."
   [config & {:keys [family frame margin eps maxiter x0]
              :or {family :similarity frame d/default-frame margin 0.5
                   eps 0.05 maxiter 1600}}]
@@ -80,10 +80,10 @@
         [xs ys] (k/cloud config)
         cost (fn [dof]
                (k/h-cloud-cost (->h dof) xs ys frame margin default-weights eps))
-        {:keys [result value]} (nm/nelder-mead cost (vec x0)
-                                               {:maxiter maxiter
-                                                :simplex-tolerance 1e-7
-                                                :fn-tolerance 1e-9})]
+        {:keys [result value]} (simplex/nelder-mead cost (vec x0)
+                                                    {:maxiter maxiter
+                                                     :simplex-tolerance 1e-7
+                                                     :fn-tolerance 1e-9})]
     {:H (->H result) :cost value :dof (vec result) :family family}))
 
 (defn- frobenius-sq
@@ -98,7 +98,8 @@
   "Fit one H per keyframe configuration, jointly: the total cost adds
   :continuity * ||H_{i+1} - H_i||_F^2 so the display map does not jump
   mid-animation. Returns a vector of {:H :family} fits. Costs are evaluated
-  through desargues.geometry.kernel/*kernel*."
+  through desargues.geometry.kernel/*kernel*; the search is
+  desargues.geometry.simplex."
   [configs & {:keys [family frame margin eps continuity maxiter]
               :or {family :similarity frame d/default-frame margin 0.5
                    eps 0.05 continuity 20.0 maxiter 4000}}]
@@ -114,8 +115,8 @@
                     (* continuity
                        (reduce + (map frobenius-sq hs (rest hs)))))))
         x0* (vec (mapcat identity (repeat n x0)))
-        {:keys [result]} (nm/nelder-mead cost x0* {:maxiter maxiter
-                                                   :simplex-tolerance 1e-7
-                                                   :fn-tolerance 1e-9})]
+        {:keys [result]} (simplex/nelder-mead cost x0* {:maxiter maxiter
+                                                        :simplex-tolerance 1e-7
+                                                        :fn-tolerance 1e-9})]
     (mapv (fn [xs] {:H (->H xs) :dof (vec xs) :family family})
           (split (vec result)))))

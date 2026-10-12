@@ -6,7 +6,9 @@
             [emmy.env :as e]
             [desargues.geometry.disposition :as d]
             [desargues.geometry.fit :as fit]
-            [desargues.geometry.projective :as g]))
+            [desargues.geometry.projective :as g]
+            [desargues.geometry.kernel :as k]
+            [emmy.numerical.multimin.nelder-mead :as nm]))
 
 (defn- desargues-points []
   (:points (g/desargues-configuration
@@ -71,3 +73,17 @@
     (doseq [[{:keys [H]} pts] (map vector fits [(push c1 15.0) (push c2 15.0)])]
       (is (d/within-frame? (transform pts H)))
       (is (>= (min-abs-w H pts) 0.05)))))
+
+(deftest array-simplex-fit-equals-emmy-nelder-mead
+  (testing "fit-homography on desargues.geometry.simplex visits the same points
+            as emmy's Nelder-Mead and lands on the same dof, bit for bit"
+    (let [cfg (transform (desargues-points) (e/* (g/translate-h [16.0 2.0]) (g/scale-h 4.0)))
+          [xs ys] (k/cloud cfg)]
+      (doseq [family [:similarity :affine :projective]]
+        (let [{:keys [->h x0]} (fit/families family)
+              cost (fn [dof] (k/h-cloud-cost (->h dof) xs ys d/default-frame 0.5
+                                             {:oob 100.0 :margin 10.0 :spacing 1.0} 0.05))
+              ref (nm/nelder-mead cost (vec x0) {:maxiter 1600 :simplex-tolerance 1e-7 :fn-tolerance 1e-9})
+              got (fit/fit-homography cfg :family family)]
+          (is (= (vec (:result ref)) (:dof got)) (str family))
+          (is (= (:value ref) (:cost got)) (str family)))))))
