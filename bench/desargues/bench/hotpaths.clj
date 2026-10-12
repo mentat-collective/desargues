@@ -75,9 +75,12 @@
   (say "lagrangian: compile")
   (let [planar (lag/double-pendulum {})
         sph    (lag/spherical-double-pendulum spherical-opts)
-        opts   {:dt 0.01 :duration 8.0}]
-    (cond-> [(row :lagrangian "compile planar" (smp/sample #(lag/double-pendulum {}) slow))
-             (row :lagrangian "compile spherical" (smp/sample #(lag/spherical-double-pendulum spherical-opts) slow))
+        opts   {:dt 0.01 :duration 8.0}
+        cold   (fn [f] #(do (reset! @#'lag/compiled-cache {}) (f)))]
+    (cond-> [(row :lagrangian "compile planar" (smp/sample (cold #(lag/double-pendulum {})) slow))
+             (row :lagrangian "compile spherical" (smp/sample (cold #(lag/spherical-double-pendulum spherical-opts)) slow))
+             (row :lagrangian "construct planar (cached)" (smp/sample #(lag/double-pendulum {})))
+             (row :lagrangian "construct spherical (cached)" (smp/sample #(lag/spherical-double-pendulum spherical-opts)))
              (do (say "lagrangian: evolve 8 s")
                  (row :lagrangian "evolve planar rk4 x800" (smp/sample #(count (phys/evolve planar opts)) medium)))
              (row :lagrangian "evolve spherical rk4 x800" (smp/sample #(count (phys/evolve sph opts)) medium))]
