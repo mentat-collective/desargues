@@ -30,25 +30,39 @@
 
 ;; ── the system record ───────────────────────────────────────────────────────
 
-(defn- dot-label [k] (keyword (str (name k) "-dot")))
+(def ^:private dot-label
+  "label -> label-dot (memoized: it is pure, and it runs per state per step)."
+  (memoize (fn [k] (keyword (str (name k) "-dot")))))
 
 (defn- state-tuple [labels s]
   (let [q    (mapv #(double (get s %)) labels)
         qdot (mapv #(double (get s (dot-label %))) labels)]
     (up 0.0 (apply up q) (apply up qdot))))
 
+(defn- labelled
+  "{l0 a0 .. dl0 b0 ..} in labels-then-dot-labels order (what merging the two
+   zipmaps built), values coerced with double."
+  [labels as bs]
+  (let [n (count labels)]
+    (loop [i 0 m (transient {}) as (seq as)]
+      (if (< i n)
+        (recur (inc i) (assoc! m (nth labels i) (double (first as))) (next as))
+        (loop [i 0 m m bs (seq bs)]
+          (if (< i n)
+            (recur (inc i) (assoc! m (dot-label (nth labels i)) (double (first bs))) (next bs))
+            (persistent! m)))))))
+
 (defrecord LagrangianSystem [labels positions state-derivative q qdot]
   phys/PhysicalSystem
   (get-state [_]
-    (merge (zipmap labels q) (zipmap (map dot-label labels) qdot)))
+    (labelled labels q qdot))
   (set-state [this s]
     (assoc this
            :q    (mapv #(double (get s %)) labels)
            :qdot (mapv #(double (get s (dot-label %))) labels)))
   (derivatives [_ s]
     (let [[_ dq ddq] (seq (state-derivative (state-tuple labels s)))]
-      (merge (zipmap labels (map double dq))
-             (zipmap (map dot-label labels) (map double ddq)))))
+      (labelled labels dq ddq)))
   (state-labels [_]
     (vec (concat labels (map dot-label labels)))))
 
@@ -58,19 +72,35 @@
   (let [q (apply up (map #(double (get state %)) labels))]
     (mapv (fn [p] (mapv double (seq (p q)))) positions)))
 
+(def ^:private compiled-cache
+  "cache-key -> compiled state derivative (see lagrangian-system :cache-key)."
+  (atom {}))
+
 (defn lagrangian-system
   "A PhysicalSystem from Lagrangian `L` (a fn of the (up t q q') local tuple).
    labels name the coordinates (their velocities are label-dot); positions are
    the mass position fns of q used by positions-at; q0 / qdot0 are the initial
    values. :compile? (default true) compiles the derived state derivative with
-   Emmy's compiler, simplification off, before the first step."
-  [{:keys [L labels positions q0 qdot0 compile?] :or {compile? true}}]
-  (let [sd  (lagrange/Lagrangian->state-derivative L)
-        st0 (up 0.0 (apply up (map double q0)) (apply up (map double qdot0)))
-        sd  (if compile?
-              (let [compiled (compile/compile-state-fn (fn [] sd) [] st0 {:simplify? false})]
-                (fn [state] (compiled state [])))
-              sd)]
+   Emmy's compiler, simplification off, before the first step.
+
+   :cache-key (optional) names the system up to its initial state: compiled
+   derivatives are memoized under [cache-key (count q0)], so a second system
+   with the same key reuses the compiled fn. Two Lagrangians must share a key
+   only when they are the same function of the local tuple."
+  [{:keys [L labels positions q0 qdot0 compile? cache-key] :or {compile? true}}]
+  (let [st0 (up 0.0 (apply up (map double q0)) (apply up (map double qdot0)))
+        build (fn []
+                (let [sd (lagrange/Lagrangian->state-derivative L)
+                      compiled (compile/compile-state-fn (fn [] sd) [] st0 {:simplify? false})]
+                  (fn [state] (compiled state []))))
+        sd  (cond
+              (not compile?) (lagrange/Lagrangian->state-derivative L)
+              (nil? cache-key) (build)
+              :else (let [k [cache-key (count q0)]]
+                      (or (get @compiled-cache k)
+                          (get (swap! compiled-cache
+                                      (fn [c] (if (contains? c k) c (assoc c k (build)))))
+                               k))))]
     (->LagrangianSystem (vec labels) (vec positions) sd (mapv double q0) (mapv double qdot0))))
 
 ;; ── double pendulums ────────────────────────────────────────────────────────
@@ -83,11 +113,7 @@
     :or {l1 1.0 l2 1.0 m1 1.0 m2 1.0 g 9.8 theta1 2.0 theta2 2.5 omega1 0.0 omega2 0.0 compile? true}}]
   (let [p1 (fn [[th1 _]] (up (e/* l1 (e/sin th1)) 0 (e/- (e/* l1 (e/cos th1)))))
         p2 (fn [[_ th2 :as q]] (e/+ (p1 q) (up (e/* l2 (e/sin th2)) 0 (e/- (e/* l2 (e/cos th2))))))]
-    (lagrangian-system {:L (lagrangian-from-positions [m1 m2] [p1 p2] g)
-                        :labels [:theta1 :theta2]
-                        :positions [p1 p2]
-                        :q0 [theta1 theta2] :qdot0 [omega1 omega2]
-                        :compile? compile?})))
+    (lagrangian-system {:L (lagrangian-from-positions [m1 m2] [p1 p2] g), :labels [:theta1 :theta2], :positions [p1 p2], :q0 [theta1 theta2], :qdot0 [omega1 omega2], :compile? compile?, :cache-key [:desargues.videos.lagrangian/double-pendulum l1 l2 m1 m2 g]})))
 
 (defn spherical-double-pendulum
   "Two chained spherical pendulums (z up, pivot at the origin): each bob has a
@@ -107,12 +133,7 @@
                               (e/- (e/* l (e/cos th)))))
         p1  (fn [[th1 ph1 _ _]] (bob l1 th1 ph1))
         p2  (fn [[_ _ th2 ph2 :as q]] (e/+ (p1 q) (bob l2 th2 ph2)))]
-    (lagrangian-system {:L (lagrangian-from-positions [m1 m2] [p1 p2] g)
-                        :labels [:theta1 :phi1 :theta2 :phi2]
-                        :positions [p1 p2]
-                        :q0 [theta1 phi1 theta2 phi2]
-                        :qdot0 [theta1-dot phi1-dot theta2-dot phi2-dot]
-                        :compile? compile?})))
+    (lagrangian-system {:L (lagrangian-from-positions [m1 m2] [p1 p2] g), :labels [:theta1 :phi1 :theta2 :phi2], :positions [p1 p2], :q0 [theta1 phi1 theta2 phi2], :qdot0 [theta1-dot phi1-dot theta2-dot phi2-dot], :compile? compile?, :cache-key [:desargues.videos.lagrangian/spherical-double-pendulum l1 l2 m1 m2 g]})))
 
 (defn energy
   "Total energy T + V of a system with coordinate `labels` in `state`, from the

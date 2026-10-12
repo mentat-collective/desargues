@@ -41,3 +41,24 @@
       (doseq [[p1 p2] (take-nth 20 ps)]
         (is (< (Math/abs (- 1.0 (dist [0 0 0] p1))) 1e-9))
         (is (< (Math/abs (- 1.0 (dist p1 p2))) 1e-9))))))
+
+(deftest compiled-derivative-cache
+  (testing "same physical params reuse the compiled state derivative"
+    (let [a (lag/double-pendulum {:theta1 1.0})
+          b (lag/double-pendulum {:theta1 0.5 :omega2 1.0})]
+      (is (identical? (:state-derivative a) (:state-derivative b)))
+      (is (= [0.5 2.5] (:q b)))))
+  (testing "different physics never share one"
+    (is (not (identical? (:state-derivative (lag/double-pendulum {:l1 1.0}))
+                         (:state-derivative (lag/double-pendulum {:l1 2.0})))))
+    (is (not (identical? (:state-derivative (lag/double-pendulum {:g 9.8}))
+                         (:state-derivative (lag/double-pendulum {:g 9.81}))))))
+  (testing "a cached system integrates exactly like a freshly compiled one"
+    (let [fresh (lag/lagrangian-system
+                 (let [s (lag/double-pendulum {})]
+                   {:L (lag/lagrangian-from-positions [1.0 1.0] (:positions s) 9.8)
+                    :labels [:theta1 :theta2] :positions (:positions s)
+                    :q0 [2.0 2.5] :qdot0 [0.0 0.0]}))
+          cached (lag/double-pendulum {})
+          run #(mapv :state (phys/evolve % {:dt 0.01 :duration 0.5}))]
+      (is (= (run fresh) (run cached))))))
