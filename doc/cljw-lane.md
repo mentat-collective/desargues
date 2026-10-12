@@ -154,6 +154,32 @@ Two cljw FFI limits shaped the kernel. Both are documented and neither is a bug:
   When all three hold, ship the scene facade, the RecordingBackend and a wasm
   `TrajectorySolver` as a `cljw build` binary, with `parity.clj` as its gate.
 
+## Update 2026-10-12: the five issues are fixed in open ClojureWasm PRs
+
+The measurements above are on cljw 1.14.11. Fixes for all five issues listed below
+are on branches of `BuddhiLW/ClojureWasm`, open as pull requests and not yet in a
+release:
+
+| issue | fix | PR |
+|---|---|---|
+| 1, 2 | destructured method params shadow fields; `clojure.core/`-qualified `defmacro`/`binding`/`ns` | #52 |
+| 3 | a macro may return a class object (re-formed as its class symbol) | #53 (stacked on #52) |
+| 4, 5 | `java.util.Map$Entry` on a deftype via an `IMapEntry` protocol; script args reach `*command-line-args*` | #54 |
+
+On a cljw built from #53, `parity.clj` reports `steps cljw=82 jvm=82; differing
+leaves: 0` (it was 320): the recorded pendulum scene matches the JVM exactly, so
+revisit condition (a) holds once those PRs are released. Conditions (b) and (c) are
+unchanged, and so is the recommendation.
+
+Emmy now loads through `emmy.generic` without the `CLJW_PATCH_EMMY` workaround. It
+stops at `emmy.complex` (`emmy/complex/impl.cljc:149`): cljw's regex compiler caps a
+pattern at 7 capture groups and that pattern has 9. core.logic gets past its `Pair`
+type and stops at `logic.clj:716`, `(. clojure.lang.RT (nextID))`.
+
+Since these measurements the JVM side also moved: the 800-step pendulum takes about
+2–5 ms and the Emmy-derived planar double pendulum about 1–2 ms
+(see [benchmarks.md](benchmarks.md)).
+
 ## cljw issues found (reported here; ClojureWasm was not modified)
 
 1. Destructuring in a defrecord method's parameter vector does not shadow a record field

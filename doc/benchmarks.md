@@ -49,39 +49,46 @@ check. Raster rows, for example, appear only under `:dynamics`.
 
 ## Current numbers
 
-These are the baseline in `bench/results/baseline.edn`, measured 2026-10-11 on
-Linux amd64 with 22 cores, JDK 25.0.4.1 and Clojure 1.12.3. Each figure is the
-median per call, with the MAD after ±.
+These are the baseline in `bench/results/baseline.edn`, measured 2026-10-12 on
+Linux amd64 with 22 cores, JDK 25.0.4.1 and Clojure 1.12.3, while other jobs
+held the machine at a load of about 17. Each figure is the median per call,
+with the MAD after ±. The "2026-10-11" column is the first baseline, taken
+before the two performance passes.
 
-| group | subject | median | ± MAD |
-|---|---|---|---|
-| physics | clojure rk4, 800 steps | 7.24 ms | 1.64 |
-| physics | clojure euler, 800 steps | 1.49 ms | 0.54 |
-| physics | raster rk4, 800 steps | 2.84 ms | 0.28 |
-| solver | clojure rk4, 1000 steps | 13.5 ms | 1.86 |
-| solver | raster dp5, 10 s | 3.05 ms | 0.45 |
-| lagrangian | compile planar | 33.6 ms | 10.7 |
-| lagrangian | compile spherical | 459 ms | 69 |
-| lagrangian | evolve planar, rk4 ×800 | 33.4 ms | 8.4 |
-| lagrangian | evolve spherical, rk4 ×800 | 102 ms | 27 |
-| lagrangian | evolve planar, raster rk4 ×800 | 17.3 ms | 4.2 |
-| lagrangian | evolve spherical, raster rk4 ×800 | 66.6 ms | 5.1 |
-| pipeline | Emmy → LaTeX → Python, sin x | 23 µs | 12 |
-| pipeline | Emmy → LaTeX → Python, x⁵ + 3x³ − 2x | 80 µs | 12 |
-| emmy | derivative-spec, x⁵ + 3x³ − 2x | 0.42 ms | 0.24 |
-| scene | record landing pendulum (80 frames) | 109 ms | 11 |
-| scene | landing graph → EDN (530 kB) | 27.1 ms | 2.9 |
-| recording | render!, 3074 animations | 3.42 ms | 0.64 |
-| layout | resolve, 1024 elements | 8.48 ms | 1.45 |
-| h-cloud | 1000 points: Emmy / array / raster | 24.7 ms / 4.7 µs / 4.9 µs | |
-| geometry | fit-homography :projective, array / raster | 91.5 / 46.3 ms | 1.0 / 7.8 |
-| geometry | solve-keyframes 3, array / raster | 297 / 150 ms | 128 / 25 |
-| geometry | valid-trajectory? 3 × 24, array | 0.80 ms | 0.11 |
+| group | subject | median | ± MAD | 2026-10-11 |
+|---|---|---|---|---|
+| physics | clojure rk4, 800 steps | 2.33 ms | 0.34 | 7.24 ms |
+| physics | clojure euler, 800 steps | 0.66 ms | 0.12 | 1.49 ms |
+| physics | raster rk4, 800 steps | 3.82 ms | 0.69 | 2.84 ms |
+| solver | clojure rk4, 1000 steps | 2.83 ms | 0.31 | 13.5 ms |
+| solver | raster dp5, 10 s | 2.67 ms | 0.31 | 3.05 ms |
+| lagrangian | compile planar (cold) | 22.2 ms | 2.9 | 33.6 ms |
+| lagrangian | compile spherical (cold) | 343 ms | 57 | 459 ms |
+| lagrangian | construct planar / spherical (cached) | 1.9 / 2.2 µs | 0.5 | n/a |
+| lagrangian | evolve planar, rk4 ×800 | 2.16 ms | 0.28 | 33.4 ms |
+| lagrangian | evolve spherical, rk4 ×800 | 10.5 ms | 2.0 | 102 ms |
+| lagrangian | evolve planar, raster rk4 ×800 | 10.3 ms | 1.9 | 17.3 ms |
+| lagrangian | evolve spherical, raster rk4 ×800 | 24.7 ms | 3.9 | 66.6 ms |
+| pipeline | Emmy → LaTeX → Python, sin x | 8.2 µs | 1.5 | 23 µs |
+| pipeline | Emmy → LaTeX → Python, x⁵ + 3x³ − 2x | 88 µs | 22 | 80 µs |
+| emmy | derivative-spec, x⁵ + 3x³ − 2x | 0.15 ms | 0.06 | 0.42 ms |
+| scene | record landing pendulum (80 frames) | 9.9 ms | 1.0 | 109 ms |
+| scene | landing graph → EDN (530 kB) | 14.3 ms | 2.1 | 27.1 ms |
+| recording | render!, 3074 animations | 2.31 ms | 0.40 | 3.42 ms |
+| layout | resolve, 1024 elements | 5.06 ms | 0.67 | 8.48 ms |
+| h-cloud | 1000 points: Emmy / array / raster | 12.9 ms / 2.1 µs / 3.2 µs | | 24.7 ms / 4.7 µs / 4.9 µs |
+| geometry | fit-homography :projective, array / raster | 4.5 / 6.2 ms | 0.3 / 0.8 | 91.5 / 46.3 ms |
+| geometry | solve-keyframes 3, array / raster | 24.4 / 27.0 ms | 0.2 / 2.5 | 297 / 150 ms |
+| geometry | valid-trajectory? 3 × 24, array | 0.53 ms | 0.07 | 0.80 ms |
 
 `bench/results/baseline.edn` has every row, and `doc/bench/*.svg` charts them.
-These rows are the noisiest on this machine: `solve-keyframes` (a core.logic
-search) and the Lagrangian compile. The 3 × MAD rule is what keeps them from
-tripping the check.
+The two baselines were taken under different machine load, so rows that no
+code change touched (pipeline, layout, h-cloud) still moved; read a change of
+less than about 2x in those as noise. The large changes come from the code:
+primitive RK4 steps, double-array kernels for the Lagrangian state derivative,
+the array Nelder-Mead in the fits and the disposition solver, and the cached
+Lagrangian compile. The noisiest row is the cold Lagrangian compile; the
+3 × MAD rule is what keeps it from tripping the check.
 
 ## Reference: the cljw lane (not run by `bb bench`)
 
@@ -94,4 +101,4 @@ add no runtime dependency.
 | Zig wasm kernel via cljw FFI | 1.3–1.9 |
 | interpreted `phys/evolve` on cljw | 147–262 |
 | `phys/evolve` on the warm JVM (that doc) | 11 |
-| `phys/evolve` on the warm JVM (this baseline, `physics` clojure rk4 x800) | 7.2 |
+| `phys/evolve` on the warm JVM (this baseline, `physics` clojure rk4 x800) | 2.3 |
