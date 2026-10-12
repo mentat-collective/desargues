@@ -92,7 +92,8 @@ Lagrangian compile. The noisiest row is the cold Lagrangian compile; the
 
 ## The raster kernel solver (opt-in, `:dynamics`)
 
-`(desargues.infrastructure.raster-adapter/kernel-solver)` runs the whole RK4
+`(desargues.videos.physics/solver :raster {:kernel? true})` (the adapter's
+`kernel-solver`, reached through the backend key) runs the whole RK4
 integration inside one raster `deftm`: the Lagrangian state derivative is
 Emmy's compiled kernel source lowered to raster, and the damped pendulum has
 a hand-written kernel. Its trajectories are bit-identical to the array path
