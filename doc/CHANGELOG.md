@@ -21,6 +21,17 @@ All notable changes to desargues. The format follows
   `Math/sin`/`Math/cos`. The wasm kernels use it: raster's own wasm sin/cos
   (a 5e-6 minimax) moved a 3 s chaotic double-pendulum trajectory by 3e-3.
 
+- `:gpu` backend (`desargues.infrastructure.gpu-solver`): batched RK4 as one
+  `raster.par/map-void!` over trajectories (`raster-kernels/rk4-par-form`,
+  `gpu-kernel`, `pendulum-par-rk4`), compiled by raster to an OpenCL / Level
+  Zero kernel. Compiled Lagrangian systems and all-Double pendulums (with
+  per-trajectory g/L and damping) run in one launch per kind; the rest go to
+  the stepper. A solver owns one device session (`java.io.Closeable`),
+  compiles each kernel once and frees its buffers per call. RTX 4070 Laptop,
+  8192 pendulums x 800 steps: 79 ms vs 456 ms on the CPU kernel.
+  `device-available?` probes a device by building a kernel (raster opens
+  sessions lazily and does not check an `:ocl:N` index).
+
 ### Fixed
 - `raster-kernels/lower-emmy-kernel` indexed the state with doubles
   (`(aget s 0.0)`): its prewalk revisited the emitted `aget` and turned the

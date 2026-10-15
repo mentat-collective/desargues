@@ -209,6 +209,7 @@ Python files live in `py/` under the project root (root resolved by `desargues.c
 - `test/desargues/infrastructure/raster_adapter_test.clj`: solver conformance; the raster provider runs only under `-A:dynamics`, otherwise it skips loudly
 - `test/desargues/infrastructure/wasm_runtime_test.clj`: the `:wasm` backend (Emmy RK4 compiled to wasm by raster, run by Chicory) against the stepper; `-A:dynamics` only, skips loudly otherwise
 - `test/desargues/kernel/libm_test.clj`: fdlibm-grade sin/cos forms the wasm kernels use (pure)
+- `test/desargues/infrastructure/gpu_solver_test.clj`: the `:gpu` backend (raster.par RK4 kernels on OpenCL) against the stepper; needs `-A:dynamics` and an OpenCL ICD, skips loudly otherwise (the par kernels' JVM build is checked bit for bit whenever raster is present)
 - `test/desargues/videos/lagrangian_test.clj`: Emmy-derived double pendulums (energy conservation, rod lengths, compiled = uncompiled derivative)
 - `test/desargues/doctor_test.clj` (the `clojure -M:doctor` report, pure) and `test/desargues/bench/chart_test.clj` (bench charts, pure; `bench/` is on the `:test` classpath)
 - Run with `clojure -M:test` (cognitect test-runner); add `:dynamics` for raster

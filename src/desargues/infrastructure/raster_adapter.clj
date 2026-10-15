@@ -35,9 +35,11 @@
         ts       (mapv #(* % dt) (range (inc n)))]
     (if (< (- duration (peek ts)) (* 1e-9 dt)) ts (conj ts duration))))
 
-(defn- double-pendulum?
+(defn double-pendulum?
   "A physics/Pendulum whose state and parameters are all Doubles: the shape
-   the stepper's double fast path takes, so the kernel can match it bitwise."
+   the stepper's double fast path takes, so the kernel can match it bitwise.
+   The engines that run the hand-written pendulum kernels (this adapter's
+   kernel solver, the GPU solver) recognise it by this predicate."
   [system]
   (and (instance? desargues.videos.physics.Pendulum system)
        (every? #(instance? Double %) ((juxt :theta :omega :gravity :length :damping) system))))

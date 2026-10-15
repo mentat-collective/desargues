@@ -188,7 +188,7 @@ layout         desargues.layout.*       elm-ui layout algebra + pure extent meas
 pipeline       desargues.pipeline.emmy  Emmy → LaTeX → Python, pure CPPB conveyor
 backends       desargues.backend        backend key → provider namespaces, loaded on demand
 kernels        desargues.kernel         realize (by target), Emmy kernels as data, JVM kernel
-physics        desargues.videos.physics TrajectorySolver port; (solver :jvm | :raster | :wasm)
+physics        desargues.videos.physics TrajectorySolver port; (solver :jvm | :raster | :wasm | :gpu)
 boards         desargues.board          BoardSpec → wasm kernel + data for plato
 lagrangian     desargues.videos.lagrangian  Emmy derives q'' from L = T − V (double pendulums)
 manim          desargues.manim.*        low-level Manim mobject/animation bindings
@@ -262,6 +262,26 @@ within 2^-53 of `java.lang.Math`), so the module tracks the JVM stepper to
 it in 0.42 ms per trajectory and 6.5 ms for 64 in one call, close to the JVM
 raster kernel. Chicory takes about 10 ms; it is there to prove the module, not
 to race it.
+
+#### Trajectories on a GPU
+
+The same batched RK4 is also emitted as one `raster.par/map-void!` over
+trajectories, which raster compiles to an OpenCL (or Level Zero) kernel through
+Panama, no JNI. The `:gpu` backend runs compiled Lagrangian systems and
+all-Double pendulums (per-trajectory g/L and damping, so a parameter sweep is
+one launch); anything else goes to the JVM stepper:
+
+```clojure
+(with-open [gs (phys/solver :gpu)]            ; or [:gpu {:device :ze:0}]
+  (phys/evolve-batch sweep {:solver gs :dt 0.01 :duration 10}))
+```
+
+A solver owns one device session and compiles each kernel once; close it to
+release the device. Pendulums × 800 steps, CPU kernel vs RTX 4070 Laptop:
+64 → 3.5 vs 3.6 ms, 1024 → 67 vs 18 ms, 8192 → 456 vs 79 ms. Values track the
+CPU to ~1e-14 per pendulum and ~5e-13 over 3 s of a chaotic double pendulum
+(the device's sin and fused multiply-adds round differently). It needs
+`:dynamics` and an OpenCL ICD; `gpu-solver/device-available?` asks first.
 
 A new engine registers a key and adds methods in its own namespace:
 

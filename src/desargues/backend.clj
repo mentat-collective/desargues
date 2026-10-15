@@ -107,3 +107,8 @@
 (register-backend! :wasm
                    {:namespaces '[desargues.infrastructure.wasm-runtime]
                     :requires "the :dynamics alias (raster + com.dylibso.chicory/runtime, JDK 24+)"})
+
+;; Batched RK4 on a GPU: raster.par kernels compiled to OpenCL / Level Zero.
+(register-backend! :gpu
+                   {:namespaces '[desargues.infrastructure.gpu-solver]
+                    :requires "the :dynamics alias (raster, JDK 24+) and an OpenCL ICD or Level Zero driver"})

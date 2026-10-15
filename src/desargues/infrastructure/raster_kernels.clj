@@ -29,7 +29,8 @@
             [desargues.kernel.libm :as libm]
             [raster.arrays]
             [raster.compiler.pipeline :as pl]
-            [raster.core :refer [deftm]]))
+            [raster.core :refer [deftm]]
+            [raster.par]))
 
 ;; ── Emmy :primitive source -> raster vocabulary ─────────────────────────────
 
@@ -181,6 +182,61 @@
                (recur (+ ~'b 1)))
              ~'nb))))))
 
+(defn- upto
+  "(loop [i 0] (when (< i n) body.. (recur (+ i 1)))): dotimes spelled out.
+   raster's OpenCL emitter turns dotimes' (long n) into a call to an
+   undefined long_, so GPU kernels loop explicitly."
+  [i n & body]
+  (list 'loop [i 0] (list 'when (list '< i n) (cons 'do (concat body [(list 'recur (list '+ i 1))])))))
+
+(defn rk4-par-form
+  "deftm `nm` (u0s out st s ks steps dt nb) -> Void: the batched RK4 of
+   rk4-form as ONE raster.par/map-void! over trajectories, the shape raster
+   compiles to a GPU kernel (one work item per initial condition). Work item
+   b keeps its state, stage input and stages in slices of the work buffers
+   (st, s: nb*n; ks: nb*4n), and evaluates the derivative (`lowered`, from
+   lower-emmy-kernel, its (aget s k) shifted to b's slice) inlined once in a
+   four-stage loop, in rk4-form's operation order. On the JVM map-void! is a
+   sequential loop and the result is rk4-form's bit for bit; on a GPU the
+   device's sin/cos and its fused multiply-adds round differently."
+  [nm {:keys [bindings stores]} n]
+  (let [shift (fn [e] (walk/postwalk
+                       (fn [x] (if (and (seq? x) (= 'aget (first x)) (= 's (second x)))
+                                 (list 'aget 's (list '+ 'so (nth x 2)))
+                                 x))
+                       e))
+        deriv `(let ~(vec (mapcat (fn [[sym e]] [sym (shift e)]) bindings))
+                 ~@(map (fn [[j e]] (list 'aset 'ks (list '+ 'ko j) (shift e))) stores))
+        at (fn [base j] (list '+ base j))]
+    `(raster.core/deftm ~nm [~'u0s :- (~'Array ~'double) ~'out :- (~'Array ~'double)
+                             ~'st :- (~'Array ~'double) ~'s :- (~'Array ~'double) ~'ks :- (~'Array ~'double)
+                             ~'steps :- ~'Long ~'dt :- ~'Double ~'nb :- ~'Long] :- ~'Void
+       (raster.par/map-void! ~'b ~'nb
+         (let [~'h2 (/ ~'dt 2.0) ~'h6 (/ ~'dt 6.0) ~'rows (+ ~'steps 1)
+               ~'ob (* (* ~'b ~'rows) ~n) ~'so (* ~'b ~n) ~'kb (* ~'b ~(* 4 n))]
+           ~(upto 'j n
+                  `(let [~'v (aget ~'u0s ~(at 'so 'j))]
+                     (aset ~'st ~(at 'so 'j) ~'v)
+                     (aset ~'out ~(at 'ob 'j) ~'v)))
+           (loop [~'i 0]
+             (when (< ~'i ~'steps)
+               ~(upto 'stage 4
+                      `(if (< ~'stage 1)
+                         ~(upto 'j n `(aset ~'s ~(at 'so 'j) (aget ~'st ~(at 'so 'j))))
+                         (let [~'c (if (> ~'stage 2) ~'dt ~'h2) ~'off (+ ~'kb (* (- ~'stage 1) ~n))]
+                           ~(upto 'j n `(aset ~'s ~(at 'so 'j)
+                                              (+ (aget ~'st ~(at 'so 'j)) (* (aget ~'ks ~(at 'off 'j)) ~'c))))))
+                      `(let [~'ko (+ ~'kb (* ~'stage ~n))] ~deriv))
+               (let [~'base (+ ~'ob (* (+ ~'i 1) ~n))]
+                 ~(upto 'j n
+                        `(let [~'c (+ (+ (+ (aget ~'ks (+ ~'kb ~'j)) (* 2.0 (aget ~'ks (+ ~'kb (+ ~n ~'j)))))
+                                         (* 2.0 (aget ~'ks (+ ~'kb (+ ~(* 2 n) ~'j)))))
+                                      (aget ~'ks (+ ~'kb (+ ~(* 3 n) ~'j))))
+                               ~'v (+ (aget ~'st ~(at 'so 'j)) (* ~'c ~'h6))]
+                           (aset ~'st ~(at 'so 'j) ~'v)
+                           (aset ~'out ~(at 'base 'j) ~'v))))
+               (recur (+ ~'i 1)))))))))
+
 (defn rhs-form
   "An ftm right-hand side (du u t) for raster.ode's solvers, calling deriv
    deftm `d` directly: no Clojure fn and no state map per evaluation."
@@ -244,6 +300,52 @@
             module (pl/compile-wasm v :name "rk4" :dtype :double)
             k {:bytes (byte-array (:bytes module)) :export "rk4" :n n :work [n n (* 4 n)]}]
         (get (swap! compiled-wasm (fn [c] (if (contains? c src) c (assoc c src k)))) src))))
+
+(def ^:private compiled-par
+  "Emmy kernel source -> {:var :n}, its rk4-par-form deftm."
+  (atom {}))
+
+(defn gpu-kernel
+  "The rk4-par-form deftm of Emmy kernel source `src`, defined once per
+   source: {:var :n}. raster.gpu/compile! turns :var into a device kernel;
+   on the JVM it is an ordinary (sequential) deftm."
+  [src]
+  (or (get @compiled-par src)
+      (let [lowered (lower-emmy-kernel src)
+            n (count (:stores lowered))
+            nm (symbol (str "rk4-par-" (gensym "k")))
+            v (binding [*ns* (the-ns 'desargues.infrastructure.raster-kernels)]
+                (eval (rk4-par-form nm lowered n)))]
+        (get (swap! compiled-par (fn [c] (if (contains? c src) c (assoc c src {:var v :n n})))) src))))
+
+(deftm pendulum-par-rk4
+  "pendulum-rk4 as one raster.par/map-void! over trajectories (a GPU kernel):
+   work item b integrates theta' = omega, omega' = -(g/L) sin theta - mu omega
+   from u0s[2b..2b+1] with its own gl[b] and mu[b], in pendulum-rk4's
+   operation order."
+  [u0s :- (Array double) gl :- (Array double) mu :- (Array double)
+   out :- (Array double) steps :- Long dt :- Double nb :- Long] :- Void
+  (raster.par/map-void! b nb
+    (let [h2 (/ dt 2.0) h6 (/ dt 6.0) rows (+ steps 1)
+          g (aget gl b) m (aget mu b) ob (* (* b rows) 2)
+          th0 (aget u0s (* b 2)) om0 (aget u0s (+ (* b 2) 1))]
+      (aset out ob th0)
+      (aset out (+ ob 1) om0)
+      (loop [i 0 th th0 om om0]
+        (when (< i steps)
+          (let [k1a om k1b (- (- (* g (Math/sin th))) (* m om))
+                t2 (+ th (* k1a h2)) o2 (+ om (* k1b h2))
+                k2a o2 k2b (- (- (* g (Math/sin t2))) (* m o2))
+                t3 (+ th (* k2a h2)) o3 (+ om (* k2b h2))
+                k3a o3 k3b (- (- (* g (Math/sin t3))) (* m o3))
+                t4 (+ th (* k3a dt)) o4 (+ om (* k3b dt))
+                k4a o4 k4b (- (- (* g (Math/sin t4))) (* m o4))
+                nth (+ th (* (+ (+ (+ k1a (* 2.0 k2a)) (* 2.0 k3a)) k4a) h6))
+                nom (+ om (* (+ (+ (+ k1b (* 2.0 k2b)) (* 2.0 k3b)) k4b) h6))
+                base (+ ob (* (+ i 1) 2))]
+            (aset out base nth)
+            (aset out (+ base 1) nom)
+            (recur (+ i 1) nth nom)))))))
 
 ;; ── the damped pendulum ─────────────────────────────────────────────────────
 
