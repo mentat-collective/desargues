@@ -59,7 +59,11 @@
   ;; (tools.deps keeps the top-level pin otherwise); the top-level pin stays at
   ;; 1.3.0 because the :dev typecheck gate runs checker 1.3.0.
   ;;   clojure -M:test:dynamics     # runs the raster conformance suite too
+  ;; Chicory (pure-JVM wasm engine; the compiler turns wasm into JVM bytecode)
+  ;; runs the trajectory modules raster emits: the :wasm backend.
   :dynamics {:extra-deps {io.github.replikativ/raster {:git/tag "v0.2.258" :git/sha "d0fb8f7"}
-                          org.typedclojure/typed.clj.runtime {:mvn/version "1.4.0"}}
+                          org.typedclojure/typed.clj.runtime {:mvn/version "1.4.0"}
+                          com.dylibso.chicory/runtime {:mvn/version "1.5.1"}
+                          com.dylibso.chicory/compiler {:mvn/version "1.5.1"}}
              :jvm-opts ["--enable-native-access=ALL-UNNAMED"
                         "--add-modules=jdk.incubator.vector"]}}}

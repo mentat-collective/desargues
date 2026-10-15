@@ -79,10 +79,14 @@
             (rk/pendulum-rk4 u0s (long nb) (double-array (map first params)) (double-array (map second params))
                              out (long steps) (double dt)))}))
 
-(defn- run-group
+(defn run-group
   "Integrate systems sharing one kernel (their plans) in one kernel call. Each
    row of the kernel's output becomes {label value} over (:labels plan), built
-   straight from the output array."
+   straight from the output array. A plan is {:n :u0 :labels :params :run},
+   (run u0s nb out steps dt params) filling out with the batched-RK4 layout
+   (see desargues.infrastructure.raster-kernels); any engine that fills that
+   layout (a JVM kernel, a wasm module) shares this projection and the
+   stepper's time grid."
   [plans dt duration]
   (let [{:keys [n run]} (first plans)
         n (long n)

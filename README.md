@@ -188,7 +188,7 @@ layout         desargues.layout.*       elm-ui layout algebra + pure extent meas
 pipeline       desargues.pipeline.emmy  Emmy → LaTeX → Python, pure CPPB conveyor
 backends       desargues.backend        backend key → provider namespaces, loaded on demand
 kernels        desargues.kernel         realize (by target), Emmy kernels as data, JVM kernel
-physics        desargues.videos.physics TrajectorySolver port; (solver :jvm | :raster)
+physics        desargues.videos.physics TrajectorySolver port; (solver :jvm | :raster | :wasm)
 boards         desargues.board          BoardSpec → wasm kernel + data for plato
 lagrangian     desargues.videos.lagrangian  Emmy derives q'' from L = T − V (double pendulums)
 manim          desargues.manim.*        low-level Manim mobject/animation bindings
@@ -234,7 +234,36 @@ namespaces the first time it is named:
 ```
 
 `:raster` needs the `:dynamics` alias and JDK 24 or newer; without it the port
-says so. A new engine registers a key and adds methods in its own namespace:
+says so.
+
+#### Trajectories as WebAssembly
+
+A compiled Lagrangian system (`desargues.videos.lagrangian`) carries the Emmy
+source of its state derivative. raster compiles that source, with the whole
+batched RK4 loop around it, to a self-contained wasm module, and the `:wasm`
+backend runs the module on the JVM through Chicory:
+
+```clojure
+(require '[desargues.videos.lagrangian :as lag])
+(def dp (lag/double-pendulum {}))
+
+(phys/evolve dp {:solver :wasm :dt 0.01 :duration 10})   ; same grid, ~1e-13 from :jvm
+
+(require '[desargues.infrastructure.wasm-runtime :as wasm])
+(:bytes (wasm/trajectory-module dp))   ; the module a browser runs: export rk4, ABI in
+                                       ; raster-kernels/wasm-kernel
+```
+
+raster's wasm backend has no sin/cos opcode and lowers them to a 5e-6
+polynomial, which moved a 3 s chaotic trajectory by 3e-3. desargues rewrites
+them first with fdlibm's reduction and kernels (`desargues.kernel.libm`,
+within 2^-53 of `java.lang.Math`), so the module tracks the JVM stepper to
+~1e-13. Measured on the planar double pendulum, 300 steps: V8 (node 22) runs
+it in 0.42 ms per trajectory and 6.5 ms for 64 in one call, close to the JVM
+raster kernel. Chicory takes about 10 ms; it is there to prove the module, not
+to race it.
+
+A new engine registers a key and adds methods in its own namespace:
 
 ```clojure
 (backend/register-backend! :my-engine {:namespaces '[my.engine.desargues]})

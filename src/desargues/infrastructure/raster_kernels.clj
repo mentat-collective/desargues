@@ -9,21 +9,26 @@
      the algebra, raster runs every number;
    - the hand-written damped pendulum (desargues.videos.physics/Pendulum).
 
-   Every kernel performs the same IEEE operations in the same order as the
-   pure array path (physics/rk4-trajectory-arrays and rk4-step-doubles), so a
-   kernel trajectory equals the array trajectory bit for bit; the tests prove
-   it. Only desargues.infrastructure.raster-adapter requires this namespace,
-   and raster is on the classpath only under the :dynamics alias.
+   Every JVM kernel performs the same IEEE operations in the same order as
+   the pure array path (physics/rk4-trajectory-arrays and rk4-step-doubles),
+   so a kernel trajectory equals the array trajectory bit for bit; the tests
+   prove it. The Emmy kernels also compile to WebAssembly (wasm-kernel), with
+   sin/cos from desargues.kernel.libm. Only the adapters
+   desargues.infrastructure.raster-adapter and .wasm-runtime require this
+   namespace, and raster is on the classpath only under the :dynamics alias.
 
    Kernel ABI (fixed-step RK4, batched):
      (rk4 u0s nb out steps dt) -> nb
    u0s holds nb initial states of n doubles back to back; out receives, per
    trajectory b, steps+1 rows of n doubles starting at b*(steps+1)*n (row 0
    is the initial state). The pendulum kernel takes two more arrays, gl and
-   mu, the per-trajectory g/L and damping, so one call sweeps parameters."
+   mu, the per-trajectory g/L and damping, so one call sweeps parameters. The
+   wasm kernel takes three work arrays more (see rk4-wasm-form)."
   (:require [clojure.walk :as walk]
             [desargues.kernel :as kernel]
+            [desargues.kernel.libm :as libm]
             [raster.arrays]
+            [raster.compiler.pipeline :as pl]
             [raster.core :refer [deftm]]))
 
 ;; ── Emmy :primitive source -> raster vocabulary ─────────────────────────────
@@ -40,11 +45,14 @@
    store j = k-1 and out[0] (dt/dt) is dropped. clojure.core arithmetic
    becomes raster's typed +,*,-,/; integer literals become doubles, the
    value Clojure's mixed arithmetic would use anyway. Reads the source
-   through desargues.kernel/source->ir, like the JVM backend."
+   through desargues.kernel/source->ir, like the JVM backend.
+
+   Bottom-up (postwalk), so the integer index of an emitted (aget s j) is
+   never revisited: the JVM coerces a double index silently, wasm rejects it."
   [src]
   (let [{:keys [in bindings] :as ir} (kernel/source->ir src)
         fix (fn [form]
-              (walk/prewalk
+              (walk/postwalk
                (fn [x]
                  (cond
                    (and (seq? x) (= 'clojure.core/aget (first x)) (= in (second x)))
@@ -128,6 +136,51 @@
              (recur (+ ~'b 1)))
            ~'nb)))))
 
+(defn rk4-wasm-form
+  "deftm `nm` (u0s nb out steps dt st s ks) -> nb: the batched RK4 of
+   rk4-form in the shape raster's wasm backend compiles. Its v1 emitter takes
+   param-only kernels, so the work buffers are parameters (st, s: n doubles;
+   ks: 4n), and the derivative (`lowered`, from lower-emmy-kernel) is inlined
+   ONCE, inside a four-stage loop: stage i evaluates it at s and stores k_i at
+   ks[i*n]. s is the state for stage 0 and s + k_{i-1}*c after, c = dt/2, dt/2,
+   dt, so the operations and their order are rk4-form's. Every (Math/sin x),
+   (Math/cos x) is rewritten by desargues.kernel.libm, because raster lowers
+   its own to a minimax good only to 5e-6; those are within 2^-53 of Math, so
+   this kernel tracks rk4-form to rounding rather than bit for bit."
+  [nm {:keys [bindings stores]} n]
+  (let [deriv `(let ~(vec (mapcat (fn [[sym e]] [sym (libm/with-precise-trig e)]) bindings))
+                 ~@(map (fn [[j e]] (list 'aset 'ks (list '+ 'ko j) (libm/with-precise-trig e))) stores))]
+    `(raster.core/deftm ~nm [~'u0s :- (~'Array ~'double) ~'nb :- ~'Long ~'out :- (~'Array ~'double)
+                             ~'steps :- ~'Long ~'dt :- ~'Double
+                             ~'st :- (~'Array ~'double) ~'s :- (~'Array ~'double) ~'ks :- (~'Array ~'double)] :- ~'Long
+       (let [~'h2 (/ ~'dt 2.0) ~'h6 (/ ~'dt 6.0) ~'rows (+ ~'steps 1)]
+         (loop [~'b 0]
+           (if (< ~'b ~'nb)
+             (let [~'ob (* (* ~'b ~'rows) ~n)]
+               (dotimes [~'j ~n]
+                 (let [~'v (aget ~'u0s (+ (* ~'b ~n) ~'j))]
+                   (aset ~'st ~'j ~'v)
+                   (aset ~'out (+ ~'ob ~'j) ~'v)))
+               (loop [~'i 0]
+                 (when (< ~'i ~'steps)
+                   (dotimes [~'stage 4]
+                     (if (< ~'stage 1)
+                       (dotimes [~'j ~n] (aset ~'s ~'j (aget ~'st ~'j)))
+                       (let [~'c (if (> ~'stage 2) ~'dt ~'h2) ~'off (* (- ~'stage 1) ~n)]
+                         (dotimes [~'j ~n] (aset ~'s ~'j (+ (aget ~'st ~'j) (* (aget ~'ks (+ ~'off ~'j)) ~'c))))))
+                     (let [~'ko (* ~'stage ~n)] ~deriv))
+                   (let [~'base (+ ~'ob (* (+ ~'i 1) ~n))]
+                     (dotimes [~'j ~n]
+                       (let [~'c (+ (+ (+ (aget ~'ks ~'j) (* 2.0 (aget ~'ks (+ ~n ~'j))))
+                                       (* 2.0 (aget ~'ks (+ ~(* 2 n) ~'j))))
+                                    (aget ~'ks (+ ~(* 3 n) ~'j)))
+                             ~'v (+ (aget ~'st ~'j) (* ~'c ~'h6))]
+                         (aset ~'st ~'j ~'v)
+                         (aset ~'out (+ ~'base ~'j) ~'v))))
+                   (recur (+ ~'i 1))))
+               (recur (+ ~'b 1)))
+             ~'nb))))))
+
 (defn rhs-form
   "An ftm right-hand side (du u t) for raster.ode's solvers, calling deriv
    deftm `d` directly: no Clojure fn and no state map per evaluation."
@@ -166,6 +219,31 @@
   (or (get @compiled src)
       (let [k (build src)]
         (get (swap! compiled (fn [c] (if (contains? c src) c (assoc c src k)))) src))))
+
+(def ^:private compiled-wasm
+  "Emmy kernel source -> its wasm module (see wasm-kernel)."
+  (atom {}))
+
+(defn wasm-kernel
+  "The batched RK4 of Emmy kernel source `src` as a WebAssembly module (f64,
+   no imports), compiled once per source:
+     {:bytes byte[] :export \"rk4\" :n n :work [n n (* 4 n)]}
+   The export is (rk4 u0s nb out steps dt st s ks) -> nb, every array a byte
+   offset into the module's exported `memory` and nb, steps i32: the ABI of
+   rk4-form plus the work buffers st, s, ks whose sizes :work gives (see
+   rk4-wasm-form). The host lays out the arrays, grows memory to fit, calls
+   the export and reads out back; any wasm engine runs it (V8 in a browser,
+   Chicory on the JVM via desargues.infrastructure.wasm-runtime)."
+  [src]
+  (or (get @compiled-wasm src)
+      (let [lowered (lower-emmy-kernel src)
+            n (count (:stores lowered))
+            nm (symbol (str "rk4-wasm-" (gensym "k")))
+            v (binding [*ns* (the-ns 'desargues.infrastructure.raster-kernels)]
+                (eval (rk4-wasm-form nm lowered n)))
+            module (pl/compile-wasm v :name "rk4" :dtype :double)
+            k {:bytes (byte-array (:bytes module)) :export "rk4" :n n :work [n n (* 4 n)]}]
+        (get (swap! compiled-wasm (fn [c] (if (contains? c src) c (assoc c src k)))) src))))
 
 ;; ── the damped pendulum ─────────────────────────────────────────────────────
 

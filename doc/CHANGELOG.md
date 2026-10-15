@@ -6,6 +6,29 @@ All notable changes to desargues. The format follows
 
 ## [Unreleased]
 
+### Added
+- `:wasm` backend (`desargues.infrastructure.wasm-runtime`): a compiled
+  Lagrangian system's batched RK4 compiled to WebAssembly by raster
+  (`raster-kernels/wasm-kernel`, `rk4-wasm-form`) and run on the JVM by
+  Chicory (`com.dylibso.chicory/runtime` + `compiler`, under `:dynamics`).
+  `(phys/evolve dp {:solver :wasm})` answers the stepper's time grid exactly
+  and its values within ~1e-13; `trajectory-module` hands the same module to
+  a browser or any wasm engine. Systems without an Emmy kernel fall back to
+  the stepper.
+- `desargues.kernel.libm`: fdlibm sin/cos (3-part Cody-Waite reduction,
+  `__kernel_sin`/`__kernel_cos`) as pure kernel forms, within 2^-53 of
+  `java.lang.Math` for |x| < 1e5; `with-precise-trig` rewrites a form's
+  `Math/sin`/`Math/cos`. The wasm kernels use it: raster's own wasm sin/cos
+  (a 5e-6 minimax) moved a 3 s chaotic double-pendulum trajectory by 3e-3.
+
+### Fixed
+- `raster-kernels/lower-emmy-kernel` indexed the state with doubles
+  (`(aget s 0.0)`): its prewalk revisited the emitted `aget` and turned the
+  index into a double. The JVM coerced it silently; wasm rejects it. It now
+  lowers bottom-up.
+- `backend/load!` reports a provider whose imported Java class is missing as
+  `:absent` (it reported only a missing namespace file).
+
 ## [0.3.0] - 2026-10-12
 
 ### Added

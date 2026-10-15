@@ -50,8 +50,9 @@
 (defn load!
   "Require the provider namespaces of backend `k`; returns k. Throws ex-info
    with :reason :unknown (no such backend) or :absent (a namespace or one of
-   its libraries is not on the classpath). Any other load failure is rethrown
-   as it is: a provider that fails to compile must not read as absent."
+   its libraries is not on the classpath: a namespace file, or a Java class a
+   provider imports). Any other load failure is rethrown as it is: a provider
+   that fails to compile must not read as absent."
   [k]
   (let [{:keys [namespaces requires] :as spec} (get @registry k)]
     (when-not spec
@@ -63,7 +64,7 @@
         (doseq [n namespaces] (require n))
         (catch Throwable t
           (let [root (root-cause t)]
-            (if (instance? FileNotFoundException root)
+            (if (or (instance? FileNotFoundException root) (instance? ClassNotFoundException root))
               (throw (ex-info (str "Backend " (pr-str k) " is not on the classpath"
                                    (when requires (str "; it needs " requires))
                                    " (" (.getMessage root) ")")
@@ -100,3 +101,9 @@
                    {:namespaces '[desargues.infrastructure.raster-adapter
                                   desargues.infrastructure.raster-board]
                     :requires "the :dynamics alias (io.github.replikativ/raster, JDK 24+)"})
+
+;; Emmy-derived trajectories as WebAssembly (raster's wasm emitter), run on the
+;; JVM by Chicory; the same module runs in a browser.
+(register-backend! :wasm
+                   {:namespaces '[desargues.infrastructure.wasm-runtime]
+                    :requires "the :dynamics alias (raster + com.dylibso.chicory/runtime, JDK 24+)"})
