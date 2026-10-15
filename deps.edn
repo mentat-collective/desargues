@@ -49,6 +49,15 @@
                       ;; hot-reload infrastructure (devx.watcher, devx.reload; dev/ only)
                       com.nextjournal/beholder {:mvn/version "1.0.2"}
                       io.github.tonsky/clj-reload {:mvn/version "0.7.1"}}}
+  ;; `clojure -A:dev:studio` — the live player in a JavaFX window (studio/ holds
+  ;; the JavaFX host adapter and demo constructs; the player core in src/ is
+  ;; toolkit-free). Linux classifiers: tools.deps does not resolve OpenJFX's
+  ;; per-platform Maven profiles.
+  :studio {:extra-paths ["studio"]
+           :extra-deps {org.openjfx/javafx-base$linux     {:mvn/version "25.0.4"}
+                        org.openjfx/javafx-graphics$linux {:mvn/version "25.0.4"}
+                        org.openjfx/javafx-controls$linux {:mvn/version "25.0.4"}}
+           :jvm-opts ["--enable-native-access=ALL-UNNAMED"]}
   ;; `clojure -M:test` runs every suite (cognitect test-runner; -n ns / -v var to
   ;; narrow). The Manim suites need the conda env; realize_test skips without it.
   :test {:extra-paths ["test" "dev" "bench" "site"]
