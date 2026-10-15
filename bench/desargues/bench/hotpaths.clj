@@ -36,6 +36,20 @@
                     (catch Throwable _ nil))]
     (f)))
 
+(defn- backend-solver
+  "(phys/solver k) when backend k loads here (:dynamics), else nil."
+  [k]
+  (when ((requiring-resolve 'desargues.backend/available?) k)
+    (phys/solver k)))
+
+(defn- gpu-solver
+  "A :gpu solver when the backend loads AND a device builds a kernel, else
+   nil. The caller closes it."
+  []
+  (when (and ((requiring-resolve 'desargues.backend/available?) :gpu)
+             ((requiring-resolve 'desargues.infrastructure.gpu-solver/device-available?)))
+    (phys/solver :gpu)))
+
 (defn- tight-tsit5
   "raster Tsit5 at atol = rtol = 1e-8, resampled onto the dt grid (nil without :dynamics)."
   []
@@ -100,18 +114,33 @@
   (vec (for [i (range 64)] (lag/double-pendulum {:theta1 (+ 1.5 (* 0.01 i))}))))
 
 (defn run-batch
-  "evolve-batch over 64 systems, 800 steps each: mapped stepper vs one raster kernel call."
+  "evolve-batch over 64 systems, 800 steps each: mapped stepper vs one raster
+   kernel call, and, where present, one wasm module call (Chicory) and one GPU
+   launch."
   []
   (say "batch: 64 trajectories x 800 steps")
   (let [opts {:dt 0.01 :duration 8.0}
-        ks (kernel-solver)]
-    (cond-> [(row :batch "pendulum sweep x64 clojure" (smp/sample #(count (phys/evolve-batch sweep-pendulums opts)) slow))
-             (row :batch "planar x64 clojure" (smp/sample #(count (phys/evolve-batch sweep-planars opts)) slow))]
-      ks
-      (into [(row :batch "pendulum sweep x64 raster kernel"
-                  (smp/sample #(count (phys/evolve-batch sweep-pendulums (assoc opts :solver ks))) slow))
-             (row :batch "planar x64 raster kernel"
-                  (smp/sample #(count (phys/evolve-batch sweep-planars (assoc opts :solver ks))) slow))]))))
+        ks (kernel-solver)
+        ws (backend-solver :wasm)
+        gs (gpu-solver)]
+    (try
+      (cond-> [(row :batch "pendulum sweep x64 clojure" (smp/sample #(count (phys/evolve-batch sweep-pendulums opts)) slow))
+               (row :batch "planar x64 clojure" (smp/sample #(count (phys/evolve-batch sweep-planars opts)) slow))]
+        ks
+        (into [(row :batch "pendulum sweep x64 raster kernel"
+                    (smp/sample #(count (phys/evolve-batch sweep-pendulums (assoc opts :solver ks))) slow))
+               (row :batch "planar x64 raster kernel"
+                    (smp/sample #(count (phys/evolve-batch sweep-planars (assoc opts :solver ks))) slow))])
+        ws
+        (conj (row :batch "planar x64 wasm (Chicory)"
+                   (smp/sample #(count (phys/evolve-batch sweep-planars (assoc opts :solver ws))) slow)))
+        gs
+        (into [(row :batch "pendulum sweep x64 gpu"
+                    (smp/sample #(count (phys/evolve-batch sweep-pendulums (assoc opts :solver gs))) slow))
+               (row :batch "planar x64 gpu"
+                    (smp/sample #(count (phys/evolve-batch sweep-planars (assoc opts :solver gs))) slow))]))
+      (finally
+        (when gs (.close ^java.io.Closeable gs))))))
 
 (defn run-lagrangian []
   (say "lagrangian: compile")
