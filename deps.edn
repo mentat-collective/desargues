@@ -31,7 +31,9 @@
   org.clojure/data.json  {:mvn/version "2.5.1"}}
 
  :aliases
- {:run  {:main-opts ["-m" "desargues.core"]}
+ {;; desargues.core and the demos live in dev/, off the published :paths.
+  :run  {:extra-paths ["dev"]
+         :main-opts ["-m" "desargues.core"]}
   ;; `clojure -M:doctor` — is the JVM enough (yes, for the recording backend)
   ;; and is a Manim env reachable (conda prefix, manim import, latex, ffmpeg)?
   :doctor {:extra-deps {org.slf4j/slf4j-nop {:mvn/version "1.7.36"}}
@@ -50,7 +52,7 @@
                       org.typedclojure/typed.clj.checker {:mvn/version "1.3.0"}}}
   ;; `clojure -M:test` runs every suite (cognitect test-runner; -n ns / -v var to
   ;; narrow). The Manim suites need the conda env; realize_test skips without it.
-  :test {:extra-paths ["test" "bench" "site"]
+  :test {:extra-paths ["test" "dev" "bench" "site"]
          :extra-deps {io.github.cognitect-labs/test-runner {:git/tag "v0.5.1" :git/sha "dfb30dd"}}
          :jvm-opts ["-Dclojure.spec.check-asserts=true"]
          :main-opts ["-m" "cognitect.test-runner"]}

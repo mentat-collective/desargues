@@ -56,7 +56,7 @@ Manim (Python)          →  Beautiful animations
 ## Files
 
 ### Clojure Code
-- **`src/desargues/brachistochrone.clj`** - Main implementation
+- **`dev/desargues/brachistochrone.clj`** - Main implementation
   - Physics calculations (Lagrangian, action, descent time)
   - Curve definitions (straight, parabola, cycloid)
   - LaTeX generation from Emmy expressions

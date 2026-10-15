@@ -127,7 +127,7 @@ The conversion pipeline is critical to understand:
 
 **Key functions:**
 - `src/desargues/emmy_manim.clj`: `emmy->latex`, `latex->python`, `emmy->python`
-- Pipeline in `src/desargues/emmy_manim_examples.clj:create-derivative-animation`
+- Pipeline in `dev/desargues/emmy_manim_examples.clj:create-derivative-animation`
 
 ### Python Class Instantiation
 
@@ -188,13 +188,13 @@ When defining records that reference each other, use `declare`:
 ## File Organization
 
 ### Entry Points
-- `src/desargues/core.clj`: Main `-main` function (invoked by `clojure -M:run`)
+- `dev/desargues/core.clj`: Main `-main` function (invoked by `clojure -M:run`)
 - `src/desargues/api.clj`: Primary API for library users
 
 ### Integration Layers
 - `src/desargues/manim_quickstart.clj`: Basic Manim setup and initialization
 - `src/desargues/emmy_manim.clj`: Emmy ↔ Manim conversion utilities
-- `src/desargues/emmy_manim_examples.clj`: Complete example workflows
+- `dev/desargues/emmy_manim_examples.clj`: Complete example workflows
 
 ### Python Scene Definitions
 - `manim_examples.py`: Basic Manim scenes (CreateCircle, SquareToCircle)
