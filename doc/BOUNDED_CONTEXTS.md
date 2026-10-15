@@ -98,7 +98,7 @@ The `infrastructure/manim_adapter.clj` acts as an anti-corruption layer:
 
 ## 3. DevX Context (Developer Experience)
 
-**Location:** `src/desargues/devx/`
+**Location:** `dev/desargues/devx/`
 
 **Purpose:** Hot-reload workflow and incremental rendering for development.
 

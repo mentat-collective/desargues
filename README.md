@@ -205,12 +205,13 @@ interchangeable behind that facade (Liskov substitution), the neutrality is
 ```
 desargues/
 ├── src/desargues/        api, scene (+ manim, data backends), layout, pipeline,
-│                         domain, infrastructure (raster adapter), devx, videos, config
+│                         domain, infrastructure (raster adapter), physics, config
 ├── py/                   Python scene definitions importable via desargues.config
 ├── test/desargues/       pure suites + Python-guarded suites (skip without the env)
 ├── bench/                desargues.bench + charts        (clojure -M:bench)
 ├── site/                 the plato landing page deck     (bb site)
-├── dev/                  REPL helpers, typecheck gate
+├── dev/                  REPL helpers, typecheck gate, devx hot-reload, specs, videos
+│                         (clojure -A:dev)
 └── doc/                  guides, ADRs, changelog
 ```
 

@@ -20,7 +20,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # Run main animation demo (sin(x) derivative)
 clojure -M:run
 
-# Dev REPL (dev/ sources + orchestra + the Typed Clojure checker)
+# Dev REPL (dev/ sources incl. devx + specs, orchestra, the Typed Clojure checker)
 clojure -A:dev
 
 # Static Typed Clojure gate
@@ -553,8 +553,11 @@ The DevX module (`desargues.devx.*`) provides Figwheel-style hot-reload for Mani
 
 ### DevX File Structure
 
+DevX lives in `dev/` (off the published `:paths`): load it with `clojure -A:dev`.
+Its watcher/reload deps (beholder, clj-reload) are in the `:dev` and `:test` aliases.
+
 ```
-src/desargues/devx/
+dev/desargues/devx/
 ├── core.clj        # Pure API facade (stateless)
 ├── repl.clj        # Stateful REPL workflow (hot-reload commands)
 ├── segment.clj     # Segment record, states, hashing

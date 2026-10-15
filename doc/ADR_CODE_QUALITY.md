@@ -312,7 +312,7 @@ This Architecture Decision Record (ADR) documents the code quality standards, ar
 ### 8. Namespace Structure
 
 ```
-src/desargues/devx/
+dev/desargues/devx/
 ├── core.clj          ; API facade (public interface)
 ├── repl.clj          ; Stateful REPL workflow
 ├── graph.clj         ; Graph data structure
