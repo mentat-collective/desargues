@@ -26,7 +26,8 @@
            [javafx.scene.shape ArcType]
            [javafx.scene.text Font TextAlignment]
            [javafx.stage Stage]
-           [javax.imageio ImageIO]))
+           [javax.imageio ImageIO]
+[javafx.scene.layout Pane]))
 
 ;; ── Toolkit thread ──────────────────────────────────────────────────────────
 
@@ -211,17 +212,26 @@
     (on-fx
      (fn []
        (let [canvas   (Canvas. (double w) (double h))
+             ;; The canvas follows its pane, so a tiling window manager or a
+             ;; user resize re-lays the scene instead of cropping it.
+             pane     (doto (Pane.)
+                        (.setPrefSize (double w) (double h))
+                        (.setMinSize 0.0 0.0))
              controls (doto (VBox. 6.0)
                         (.setPadding (Insets. 14.0))
                         (.setPrefWidth 260.0)
+                        (.setMinWidth 220.0)
                         (.setStyle "-fx-background-color: #1b1b1f;"))
              root     (doto (BorderPane.)
-                        (.setCenter canvas)
+                        (.setCenter pane)
                         (.setRight controls)
                         (.setStyle "-fx-background-color: #000000;"))
              stage    (doto (Stage.)
                         (.setTitle (str title))
                         (.setScene (Scene. root)))]
+         (.add (.getChildren pane) canvas)
+         (.bind (.widthProperty canvas) (.widthProperty pane))
+         (.bind (.heightProperty canvas) (.heightProperty pane))
          (.show stage)
          (swap! state assoc :stage stage :canvas canvas :controls-box controls))))
     this)
