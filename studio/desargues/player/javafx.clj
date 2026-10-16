@@ -120,12 +120,16 @@
   (let [pts (mapv #(frame/->px vp %) (:points s))
         n   (long (Math/ceil (* (double (:draw s 1.0)) (count pts))))
         pts (cond-> (subvec pts 0 (min n (count pts)))
-              (get-in s [:opts :closed?]) (conj (first pts)))]
+              (get-in s [:opts :closed?]) (conj (first pts)))
+        xs  (double-array (map first pts))
+        ys  (double-array (map second pts))]
     (when (> (count pts) 1)
+      (when-let [f (and (get-in s [:opts :closed?]) (fill-color s))]
+        (.setFill gc f)
+        (.fillPolygon gc xs ys (count pts)))
       (.setStroke gc (stroke-color s))
       (.setLineWidth gc (stroke-px vp s))
-      (.strokePolyline gc (double-array (map first pts)) (double-array (map second pts))
-                       (count pts)))))
+      (.strokePolyline gc xs ys (count pts)))))
 
 (defn- paint-box! [^GraphicsContext gc vp s corner]
   (let [[cx cy] (center vp s)
@@ -161,6 +165,47 @@
 (defmethod paint! :decimal [gc vp s]
   (paint-text! gc vp s (format (str "%." (get-in s [:opts :num-decimal-places] 2) "f")
                                (double (:value s 0)))))
+
+(defn- tex-image*
+  "LaTeX `tex` typeset by JLaTeXMath at `px` pixels in #RRGGBB `hex`, as a
+   JavaFX image; nil when JLaTeXMath is absent or the source does not parse,
+   so the caller falls back to plain text. Reflective on purpose: the host
+   loads without JLaTeXMath on the classpath."
+  [tex px hex]
+  (try
+    (let [fcls    (Class/forName "org.scilab.forge.jlatexmath.TeXFormula")
+          formula (clojure.lang.Reflector/invokeConstructor fcls (object-array [(str tex)]))
+          style   (.get (.getField (Class/forName "org.scilab.forge.jlatexmath.TeXConstants")
+                                   "STYLE_DISPLAY") nil)
+          icon    (clojure.lang.Reflector/invokeInstanceMethod
+                   formula "createTeXIcon" (object-array [style (float px)]))
+          _       (clojure.lang.Reflector/invokeInstanceMethod
+                   icon "setForeground" (object-array [(java.awt.Color/decode hex)]))
+          ^javax.swing.Icon icon icon
+          w       (max 1 (.getIconWidth icon))
+          h       (max 1 (.getIconHeight icon))
+          bi      (BufferedImage. w h BufferedImage/TYPE_INT_ARGB)
+          g       (.createGraphics bi)]
+      (.setRenderingHint g java.awt.RenderingHints/KEY_ANTIALIASING
+                         java.awt.RenderingHints/VALUE_ANTIALIAS_ON)
+      (.paintIcon icon nil g 0 0)
+      (.dispose g)
+      (let [img (WritableImage. w h)
+            pw  (.getPixelWriter img)]
+        (dotimes [y h] (dotimes [x w] (.setArgb pw x y (.getRGB bi x y))))
+        img))
+    (catch Throwable _ nil)))
+
+(def ^:private tex-image (memoize tex-image*))
+
+(defmethod paint! :tex [^GraphicsContext gc vp s]
+  (let [[cx cy] (center vp s)
+        px  (Math/rint (* (emphasis-scale s) (double (get-in s [:opts :font-size] 48))
+                          (/ (double (:scale vp)) 120.0)))
+        hex (get frame/palette (or (get-in s [:opts :color]) :white) (frame/palette :white))]
+    (if-let [^WritableImage img (tex-image (str (:tex s)) px hex)]
+      (.drawImage gc img (- cx (/ (.getWidth img) 2.0)) (- cy (/ (.getHeight img) 2.0)))
+      (paint-text! gc vp s (str (:tex s))))))
 
 (defn- paint-frame! [^Canvas canvas f]
   (let [gc (.getGraphicsContext2D canvas)

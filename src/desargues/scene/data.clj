@@ -143,6 +143,9 @@
   (-fill! [b obj color opts]     (register! b (assoc obj :fill (merge {:color color} opts))))
   (-stroke! [b obj opts]         (register! b (assoc obj :stroke opts)))
 
+  p/ITex
+  (-tex [b s opts]               (node b :tex {:tex s :opts opts}))
+
   p/IAnimations
   (-appear [_ obj opts]          {:anim :appear    :target (ref-id obj) :opts opts})
   (-vanish [_ obj opts]          {:anim :vanish    :target (ref-id obj) :opts opts})

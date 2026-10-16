@@ -75,6 +75,13 @@
 (defn rounded-rectangle [& {:as opts}] (p/-rounded-rectangle (backend) opts))
 (defn decimal  [value & {:as opts}] (p/-decimal (backend) value opts))
 
+(defn tex
+  "A LaTeX math label (math mode, no $ delimiters). opts: :color :font-size.
+   A backend without TeX support (no p/ITex) renders it as plain text."
+  [s & {:as opts}]
+  (let [b (backend)]
+    (if (satisfies? p/ITex b) (p/-tex b s opts) (p/-text b s opts))))
+
 (defn line
   "A straight segment between two points [x y (z)]. opts: :color :width."
   [from to & {:as opts}]

@@ -46,6 +46,11 @@
   (-fill! [backend obj color opts]     "Set fill color/opacity. Returns obj.")
   (-stroke! [backend obj opts]         "Set stroke :color/:width/:opacity. Returns obj."))
 
+(defprotocol ITex
+  "TeX-typeset labels. Its own protocol (ISP): a backend without TeX still
+   satisfies IMobjects, and the facade falls back to plain text for it."
+  (-tex [backend s opts] "A LaTeX math label (math mode; :color :font-size)."))
+
 (defprotocol IAnimations
   "Build animations (opaque handles) from mobjects. Nothing plays until an
    animation is handed to IStage/-play!."
