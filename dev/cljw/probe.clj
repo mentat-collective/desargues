@@ -17,8 +17,12 @@
     desargues.geometry.fit
     desargues.geometry.scene
     desargues.pipeline.emmy
-    desargues.videos.physics
-    desargues.videos.lagrangian
+    desargues.physics.protocols
+    desargues.physics.systems
+    desargues.physics.integrators
+    desargues.physics.stepper
+    desargues.physics.trajectory
+    desargues.physics
     desargues.brachistochrone-pure
     emmy.env])
 

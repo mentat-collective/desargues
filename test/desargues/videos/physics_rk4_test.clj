@@ -2,7 +2,7 @@
   "The all-Double RK4 path must land on the same doubles as the generic
    map-merging step it short-circuits (golden bits recorded from v0.2.0)."
   (:require [clojure.test :refer [deftest is testing]]
-            [desargues.videos.physics :as phys]))
+            [desargues.physics :as phys]))
 
 (defn- hex-state [state]
   (update-vals state #(Long/toHexString (Double/doubleToRawLongBits %))))

@@ -36,7 +36,7 @@
 (defn require-physics!
   "Load physics simulation namespace."
   []
-  (require '[desargues.videos.physics :as phys])
+  (require '[desargues.physics :as phys])
   (println "✓ Physics loaded"))
 
 (defn require-all!

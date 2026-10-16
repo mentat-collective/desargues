@@ -6,7 +6,7 @@
    checks run against both providers; raster's run is skipped (loudly) when
    the :dynamics alias is not on the classpath."
   (:require [clojure.test :refer [deftest is testing]]
-            [desargues.videos.physics :as phys]))
+            [desargues.physics :as phys]))
 
 (def ^:private raster-solver
   "The raster provider, or nil when raster is not on the classpath. A load

@@ -54,6 +54,11 @@
            `(do (def ~n ~s)
                 (alter-meta! (var ~n) merge '~m)))))
 
+;; ── the ports themselves, as values: (satisfies? phys/Force f), and a reify or
+;; defrecord naming phys/TrajectorySolver, keep working through the facade.
+(re-export p/PhysicalSystem p/ArraySystem p/Oscillator p/Force p/Constraint
+           p/Integrator p/TrajectorySolver p/BatchTrajectorySolver)
+
 ;; ── ports (call sites; implementers require desargues.physics.protocols) ────
 (re-export p/get-state p/set-state p/derivatives p/state-labels
            p/force-value p/force-name p/step p/integrator-name

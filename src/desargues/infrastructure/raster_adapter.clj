@@ -1,6 +1,6 @@
 (ns desargues.infrastructure.raster-adapter
   "Boundary adapter: the raster engine (io.github.replikativ/raster) as
-   - a TrajectorySolver provider for desargues.videos.physics, and
+   - a TrajectorySolver provider for desargues.physics, and
    - a GeometryKernel provider for desargues.geometry.kernel (batched
      homography-over-cloud and leaf-space lerp grids, as deftm loops).
 
@@ -11,7 +11,7 @@
    the classpath under the :dynamics alias."
   (:require [desargues.geometry.kernel :as kernel]
             [desargues.kernel.emmy :as emmy-modes]
-            [desargues.videos.physics :as phys]
+            [desargues.physics :as phys]
             [raster.arrays :as ra]
             [raster.core :refer [deftm ftm]]
             [raster.ode :as ode]
@@ -41,7 +41,7 @@
    The engines that run the hand-written pendulum kernels (this adapter's
    kernel solver, the GPU solver) recognise it by this predicate."
   [system]
-  (and (instance? desargues.videos.physics.Pendulum system)
+  (and (instance? desargues.physics.systems.Pendulum system)
        (every? #(instance? Double %) ((juxt :theta :omega :gravity :length :damping) system))))
 
 (defn- kernel-source

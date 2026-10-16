@@ -3,11 +3,11 @@
    step loop run inside raster, with no Clojure call per step.
 
    Two sources of derivatives:
-   - an Emmy :primitive kernel source (what desargues.videos.lagrangian
+   - an Emmy :primitive kernel source (what desargues.physics.lagrangian
      compiles, kept on the system as :kernel-source), lowered to raster's
      vocabulary the way the board kernels lower Emmy expressions: Emmy does
      the algebra, raster runs every number;
-   - the hand-written damped pendulum (desargues.videos.physics/Pendulum).
+   - the hand-written damped pendulum (desargues.physics.systems/Pendulum).
 
    Every JVM kernel performs the same IEEE operations in the same order as
    the pure array path (physics/rk4-trajectory-arrays and rk4-step-doubles),

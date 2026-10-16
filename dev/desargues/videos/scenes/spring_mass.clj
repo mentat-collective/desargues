@@ -7,7 +7,7 @@
    - Velocity and force vectors
    - Equation derivation with TransformMatchingTex
    - Number line tracking"
-  (:require [desargues.videos.physics :as phys]
+  (:require [desargues.physics :as phys]
             [desargues.videos.math-objects :as mo]
             [desargues.videos.timeline :as tl]
             [desargues.videos.typography :as typ]))

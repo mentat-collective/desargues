@@ -8,7 +8,7 @@
             [desargues.board.compiler :as compiler]
             [desargues.geometry.kernel :as gk]
             [desargues.kernel :as kernel]
-            [desargues.videos.physics :as phys]))
+            [desargues.physics :as phys]))
 
 (defrecord RecordingSolver [calls]
   phys/TrajectorySolver

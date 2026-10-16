@@ -11,7 +11,7 @@
    that exercise the system without hitting edge cases like singularities."
   (:require [clojure.test.check.generators :as gen]
             [clojure.spec.alpha :as s]
-            [desargues.videos.physics :as phys]))
+            [desargues.physics :as phys]))
 
 ;; =============================================================================
 ;; Numeric Generators

@@ -34,7 +34,7 @@
 (defn- path->namespace
   "Convert a file path to a namespace symbol.
    
-   Example: 'src/desargues/videos/physics.clj' -> 'desargues.videos.physics"
+   Example: 'src/desargues/physics/stepper.cljc' -> 'desargues.physics.stepper"
   [path source-paths]
   (let [path-str (str path)
         source-path (first (filter #(str/starts-with? path-str %) source-paths))]

@@ -10,8 +10,8 @@
             [desargues.pipeline.emmy :as pipe]
             [desargues.scene :as s]
             [desargues.scene.data :as rec]
-            [desargues.videos.lagrangian :as lag]
-            [desargues.videos.physics :as phys]
+            [desargues.physics :as lag]
+            [desargues.physics :as phys]
             [emmy.env :as e]))
 
 (def slow

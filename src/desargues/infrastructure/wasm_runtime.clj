@@ -18,7 +18,7 @@
    :dynamics alias, with raster."
   (:require [desargues.infrastructure.raster-adapter :as ra]
             [desargues.infrastructure.raster-kernels :as rk]
-            [desargues.videos.physics :as phys])
+            [desargues.physics :as phys])
   (:import (com.dylibso.chicory.runtime ExportFunction Instance Memory)
            (com.dylibso.chicory.wasm Parser WasmModule)))
 

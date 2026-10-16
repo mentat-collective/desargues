@@ -7,7 +7,7 @@
 
    Each port owns a multimethod dispatching on the backend key:
 
-     desargues.videos.physics/solver            key, opts -> TrajectorySolver
+     desargues.physics.solver/solver            key, opts -> TrajectorySolver
      desargues.geometry.kernel/provider         key       -> GeometryKernel
      desargues.board.compiler/kernel-compiler   key, opts -> KernelCompiler
      desargues.kernel/compile-kernel            key, plan -> compiled kernel

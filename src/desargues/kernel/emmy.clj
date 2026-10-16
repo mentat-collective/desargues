@@ -12,7 +12,7 @@
    On an Emmy without the multimethod (v0.32.0 and earlier) `open-compiler?`
    is false and `register-mode!` registers nothing; callers there ask Emmy
    for :mode :source and hand the source to the kernel compiler themselves,
-   as desargues.videos.lagrangian does."
+   as desargues.physics.lagrangian does."
   (:require [desargues.kernel :as kernel]
             [emmy.expression.compile]))
 

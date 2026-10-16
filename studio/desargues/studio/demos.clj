@@ -6,7 +6,7 @@
    Physics comes from the physics domain's `evolve`; pass {:solver :raster}
    (with the :dynamics alias) to integrate on raster instead of the JVM RK4."
   (:require [desargues.scene :as s]
-            [desargues.videos.physics :as phys]))
+            [desargues.physics :as phys]))
 
 (def pendulum-controls
   "Widget specs for `pendulum`, one per parameter."

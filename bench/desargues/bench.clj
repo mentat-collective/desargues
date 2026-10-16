@@ -25,7 +25,7 @@
             [desargues.pipeline.emmy :as pipe]
             [desargues.scene :as s]
             [desargues.scene.data :as rec]
-            [desargues.videos.physics :as phys]
+            [desargues.physics :as phys]
             [emmy.env :as e]
             [desargues.bench.check :as check])
   (:gen-class))

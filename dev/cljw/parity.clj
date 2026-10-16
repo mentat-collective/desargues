@@ -29,7 +29,7 @@
                    (count (:steps cw)) (count (:steps jvm)) (count ds)))
   (doseq [d (take 5 ds)] (prn d))
   ;; The Zig wasm kernel (dev/cljw/kernel_bench.clj) against JVM phys/evolve.
-  (require '[desargues.videos.physics :as phys])
+  (require '[desargues.physics :as phys])
   (when (.exists (java.io.File. "target/cljw/kernel.edn"))
     (let [ks  (edn/read-string (slurp "target/cljw/kernel.edn"))
           p   ((resolve 'phys/make-pendulum)

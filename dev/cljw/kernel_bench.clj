@@ -1,7 +1,7 @@
 ;; The pendulum trajectory through a Zig wasm kernel vs interpreted phys/evolve,
 ;; both on cljw. Run from the repo root after building dev/cljw/kernel/pendulum.wasm:
 ;;   cljw -cp src dev/cljw/kernel_bench.clj
-(require '[desargues.videos.physics :as phys])
+(require '[desargues.physics :as phys])
 
 (defn now-ms [] (/ (double (System/nanoTime)) 1e6))
 

@@ -25,7 +25,7 @@
    not know fails at once, as ex-info {:reason :no-device :device ..}."
   (:require [desargues.infrastructure.raster-adapter :as ra]
             [desargues.infrastructure.raster-kernels :as rk]
-            [desargues.videos.physics :as phys]
+            [desargues.physics :as phys]
             [raster.gpu :as gpu]))
 
 (def default-device

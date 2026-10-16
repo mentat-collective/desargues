@@ -6,7 +6,7 @@
 ;; The construct fn is site/desargues/site/deck.clj pendulum-construct, verbatim.
 (require '[desargues.scene :as s]
          '[desargues.scene.data :as rec]
-         '[desargues.videos.physics :as phys]
+         '[desargues.physics :as phys]
          '[clojure.java.io :as io])
 
 (def tag (or (first *command-line-args*) "cljw"))
