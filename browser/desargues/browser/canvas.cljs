@@ -3,7 +3,8 @@
 
    Implements every port of desargues.player.protocols over one DOM element:
    ISurface (a Canvas2D), IWindow (the element, PNG snapshots as data URLs),
-   IControls (input type=range in a side panel) and IClock
+   IControls (widgets in a side panel), IPointer (pointer events on the
+   canvas, hit-tested with desargues.player.hit) and IClock
    (requestAnimationFrame). It is the browser twin of
    studio/desargues/player/javafx.clj: same node kinds, same units (scene
    units through desargues.player.frame/viewport, Manim stroke widths at
@@ -14,6 +15,7 @@
    canvas, since KaTeX typesets to DOM), else plain canvas text."
   (:require [clojure.string :as str]
             [desargues.player.frame :as frame]
+            [desargues.player.hit :as hit]
             [desargues.player.protocols :as p]
             [goog.object :as gobj]
             [desargues.player.controls :as controls]))
@@ -452,6 +454,32 @@
     (when-let [err (get-in @state [:widgets id :error])]
       (set! (.-textContent err) (str msg))
       (set! (.. err -style -display) (if msg "block" "none")))
+    this)
+
+  p/IPointer
+  (-on-pointer! [this f]
+    ;; Pointer events over the stage canvas in scene units, hit-tested on the
+    ;; frame last painted (a 3D frame is already flattened by then). Moves
+    ;; are reported only while a button is held.
+    (when-let [canvas (:canvas @state)]
+      (let [send! (fn [type e]
+                    (let [{:keys [w h last-frame]} @state
+                          r  (.getBoundingClientRect canvas)
+                          px [(- (.-clientX e) (.-left r)) (- (.-clientY e) (.-top r))]
+                          vp (frame/viewport w h)]
+                      (try (f {:type type :at (frame/px->scene vp px)
+                               :hit (when last-frame (hit/hit-px last-frame vp px 8))})
+                           (catch :default err (swap! state assoc :tick-error err)))))]
+        (set! (.. canvas -style -touchAction) "none")
+        (.addEventListener canvas "pointerdown"
+                           (fn [e]
+                             (.preventDefault e)
+                             (.setPointerCapture canvas (.-pointerId e))
+                             (send! :down e)))
+        (.addEventListener canvas "pointermove"
+                           (fn [e] (when (pos? (.-buttons e)) (send! :move e))))
+        (.addEventListener canvas "pointerup" (fn [e] (send! :up e)))
+        (.addEventListener canvas "pointercancel" (fn [e] (send! :up e)))))
     this)
 
   p/IClock

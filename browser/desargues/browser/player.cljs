@@ -9,26 +9,32 @@
      open-graph!   a recorded scene graph (EDN data, e.g. written by
                    `clojure -M:browser-record` or desargues.player/record), so
                    viewing needs no JVM.
-     open!         a parametric construct (fn [params] (fn [stage] ...)) over
-                   desargues.browser.stage, re-recorded in the page on every
-                   parameter change.
+     open!         a parametric construct (fn [params] (fn [stage] ...)),
+                   re-recorded in the page through desargues.scene.record on
+                   every parameter change.
      load-graph!   fetch an EDN scene graph by URL, then open-graph!.
 
-   REPL surface: play!, pause!, seek!, set-param!, params, snapshot!, close!.
-   One atom per player is the only state."
+   Pointer input (a host with IPointer) goes through the same pure
+   desargues.player.pointer/step as on the JVM: drag specs move their shapes,
+   and a press on empty space of a 3D frame orbits the camera.
+
+   REPL surface: play!, pause!, seek!, set-param!, set-camera!, params,
+   snapshot!, close!. One atom per player is the only state."
   (:require [cljs.reader :as reader]
             [desargues.scene.record :as recorder]
             [desargues.player.graph-source :as graph-source]
             [desargues.player.protocols :as p]
             [desargues.player.session :as session]
             [desargues.player.controls :as controls]
-            [desargues.player.present :as present]))
+            [desargues.player.pointer :as pointer]
+            [desargues.player.present :as present]
+            [desargues.player.space :as space]))
 
 (defn- source-for [{:keys [source-fn params]}] (source-fn params))
 
 (defn- present!
-  "Show the current frame; a 3D frame is projected to 2D for a 2D host
-   (desargues.player.present)."
+  "Show the current frame, seen through the orbited camera when there is one;
+   a 3D frame is projected to 2D for a 2D host (desargues.player.present)."
   [{:keys [host state]}]
   (present/present! host (session/current-frame (:session @state)) (:camera @state)))
 
@@ -37,6 +43,8 @@
   (present! player))
 
 (declare set-param!)
+
+(declare set-params!)
 
 (declare control-input!)
 
@@ -50,11 +58,35 @@
                    (controls/widget-spec spec (:params @(:state player)))
                    (fn [id raw] (control-input! player id raw))))))
 
+(defn on-pointer
+  "Feed one pointer `event` ({:type :at :hit}, scene units) to `player`
+   through desargues.player.pointer/step: a drag re-records the source with
+   the new params, an orbit turns the camera. Returns the player."
+  [player controls event]
+  (let [st  @(:state player)
+        out (pointer/step st controls (session/current-frame (:session st)) event)]
+    (swap! (:state player) assoc :drag (:drag out) :orbit (:orbit out))
+    (when-let [ps (:params out)]
+      (set-params! player ps))
+    (when-let [cam (:camera out)]
+      (swap! (:state player) assoc :camera cam)
+      (present! player))
+    player))
+
+(defn- bind-pointer!
+  "Wire the host's pointer to the drag specs in `controls` and, for a 3D
+   source, to the orbit, if the host takes pointer input (ISP)."
+  [player controls]
+  (when (and (satisfies? p/IPointer (:host player))
+             (pointer/wants-pointer? controls (session/current-frame (:session @(:state player)))))
+    (p/-on-pointer! (:host player) (fn [ev] (on-pointer player controls ev)))))
+
 (defn open-source!
   "Play `source-fn` (fn [params] ISource) in `host`.
    opts: {:title :w :h :params {} :controls [widget-spec] :autoplay? true}.
    Widget kinds: desargues.player.controls (:slider :toggle :select :text
-   :button); params not given start at each control's default."
+   :button); params not given start at each control's default. A control
+   spec with :drag is moved by the pointer (desargues.player.drag)."
   [host source-fn {:keys [title w h params controls autoplay?]
                    :or {title "desargues" w 1280 h 720 params {} autoplay? true}}]
   (let [controls (controls/validate (vec controls))
@@ -64,9 +96,20 @@
         player   {:host host :state (atom (assoc spec :session sess))}]
     (p/-show! host {:title title :w w :h h})
     (bind-controls! player controls)
+    (bind-pointer! player controls)
     (p/-on-tick! host (fn [dt] (on-tick player dt)))
     (present! player)
     player))
+
+(defn set-camera!
+  "Look at a 3D source through camera `cam` (merged over the current one:
+   {:yaw :pitch :distance :target :projection}), as an orbit drag does.
+   nil returns to the source's own camera."
+  [player cam]
+  (swap! (:state player) update :camera
+         #(when cam (merge (or % (space/camera (session/current-frame (:session @(:state player))))) cam)))
+  (present! player)
+  player)
 
 (defn open-graph!
   "Play recorded scene graph `graph` (EDN data) in `host`. Same opts as

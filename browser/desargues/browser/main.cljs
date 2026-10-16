@@ -1,15 +1,17 @@
 (ns desargues.browser.main
   "BOUNDARY: the demo page's entry. Reads ?demo=<key> (one of the eight
    studio object demos, desargues.studio.objects-demos, the same registry the
-   JavaFX stage opens, played live with sliders) or ?scene=<url> (a recorded
+   JavaFX stage opens, played live with sliders, or a 3D source from
+   `spaces`, orbited by dragging on empty space) or ?scene=<url> (a recorded
    EDN scene graph, e.g. scenes/pendulum.edn), builds a menu and mounts the
    canvas host into #stage.
 
    window.desargues exposes the player and a paint probe for the headless
-   check (browser/check.mjs): desargues.status() -> {demo, t, painted}."
+   check (browser/check.mjs): desargues.status() -> {demo, t, painted, yaw}."
   (:require [clojure.string :as str]
             [desargues.browser.canvas :as canvas]
             [desargues.browser.player :as player]
+            [desargues.player.space-demos :as space-demos]
             [desargues.studio.objects-demos :as demos]))
 
 (defonce ^:private current (atom nil))
@@ -17,6 +19,11 @@
 (def scenes
   "Recorded scene graphs shipped beside the page (EDN, no JVM at view time)."
   {"pendulum" {:title "damped pendulum (recorded)" :url "scenes/pendulum.edn"}})
+
+(def spaces
+  "3D sources the page plays as they are (ISources, not constructs)."
+  {:space {:title "saddle and curve (3D)" :source-fn space-demos/source-fn
+           :params space-demos/defaults :controls space-demos/controls}})
 
 (defn- query []
   (let [ps (js/URLSearchParams. (.. js/window -location -search))]
@@ -27,7 +34,7 @@
     (set! (.-innerHTML nav)
           (str/join " | "
                     (concat
-                     (for [[k {:keys [title]}] (sort-by key demos/demos)]
+                     (for [[k {:keys [title]}] (sort-by key (merge demos/demos spaces))]
                        (str "<a href=\"?demo=" (name k) "\">" title "</a>"))
                      (for [[k {:keys [title]}] scenes]
                        (str "<a href=\"?scene=" k "\">" title "</a>")))))))
@@ -45,13 +52,22 @@
   (menu!)
   (let [mount (.getElementById js/document "stage")
         {:keys [demo scene t]} (query)
-        host  (canvas/host mount)]
-    (if scene
+        host  (canvas/host mount)
+        k     (keyword (or demo "tangent"))]
+    (cond
+      scene
       (let [{:keys [title url]} (get scenes scene {:title scene :url scene})]
         (-> (player/load-graph! host url (opts title))
             (.then #(after-open! % t))))
-      (let [k (keyword (or demo "tangent"))
-            {:keys [title construct controls]} (get demos/demos k (:tangent demos/demos))]
+
+      (contains? spaces k)
+      (let [{:keys [title source-fn params controls]} (spaces k)]
+        (after-open! (player/open-source! host source-fn
+                                          (assoc (opts title) :params params :controls controls))
+                     t))
+
+      :else
+      (let [{:keys [title construct controls]} (get demos/demos k (:tangent demos/demos))]
         (after-open! (player/open! host construct
                                    (assoc (opts title)
                                           :params (demos/defaults k)
@@ -60,8 +76,9 @@
 
 (defn ^:export status
   "What the headless check reads: the current time, how many pixels of the
-   stage canvas differ from the background, and how many KaTeX labels the
-   overlay shows (TeX typesets to DOM, not to the canvas)."
+   stage canvas differ from the background, how many KaTeX labels the
+   overlay shows (TeX typesets to DOM, not to the canvas), and the orbited
+   camera's yaw (null until an orbit)."
   []
   (if-let [p @current]
     (let [{:keys [canvas tex-cache tick-error]} @(:state (:host p))]
@@ -69,6 +86,7 @@
            "painted" (if canvas (canvas/painted-pixels canvas) 0)
            "tex" (count (filter #(not= "none" (.. % -style -display))
                                 (vals (some-> tex-cache deref))))
+           "yaw" (some-> (:camera @(:state p)) :yaw)
            "tickError" (some-> tick-error str)})
     #js {"t" nil "painted" 0 "tex" 0}))
 
