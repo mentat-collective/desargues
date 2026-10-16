@@ -19,9 +19,10 @@
 
 (def shape-kinds
   "The node kinds a Frame can carry. Closed on purpose: a renderer must know
-   how to draw every member. A :tex shape carries :tex (LaTeX source); hosts
-   without a TeX engine paint it as plain text."
-  #{:text :tex :circle :dot :rectangle :rounded-rectangle :decimal :line :path})
+   how to draw every member. :svg-path carries an SVG path `:d` string in
+   scene units (y up), so sources that think in SVG (alexandria's medium
+   scenes) keep their curves exactly."
+  #{:text :tex :circle :dot :rectangle :rounded-rectangle :decimal :line :path :svg-path})
 
 (def palette
   "Semantic color keyword -> #RRGGBB, Manim's palette, so a live frame matches
