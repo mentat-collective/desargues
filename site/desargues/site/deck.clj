@@ -12,7 +12,7 @@
             [plato.content :as content]
             [plato.deck :as deck]
             [plato.desargues :as desargues]
-            [desargues.videos.physics :as phys]
+            [desargues.physics :as phys]
             [clojure.string :as str]
             [desargues.site.pendulum3d :as pendulum3d]))
 
@@ -199,7 +199,7 @@ clojure -M:doctor             # JVM ok? Manim env ok? LaTeX? ffmpeg?")
 ;;     :deriv-latex     \"\\\\cos\\\\left(x\\\\right)\\\\,e^{\\\\sin\\\\left(x\\\\right)}\"}")
 
 (def solver-source
-  "(require '[desargues.videos.physics :as phys]
+  "(require '[desargues.physics :as phys]
          '[desargues.infrastructure.raster-adapter :as ra])
 
 (def pendulum (phys/make-pendulum {:length 3.0 :damping 0.1}))
@@ -245,7 +245,7 @@ clojure -M:doctor             # JVM ok? Manim env ok? LaTeX? ffmpeg?")
 (def double-pendulum-graph pendulum3d/graph)
 
 (def lagrangian-source
-  "(require '[desargues.videos.lagrangian :as lag])
+  "(require '[desargues.physics :as lag])
 
 ;; Cartesian positions of the two bobs as functions of q = [th1 ph1 th2 ph2]
 (def sys (lag/spherical-double-pendulum {:l1 1.4 :l2 1.2 :theta1 1.2 :theta2 2.2}))

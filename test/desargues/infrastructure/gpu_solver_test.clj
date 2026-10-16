@@ -7,8 +7,8 @@
    for bit whenever raster is present, device or not."
   (:require [clojure.test :refer [deftest is testing]]
             [desargues.backend :as backend]
-            [desargues.videos.lagrangian :as lag]
-            [desargues.videos.physics :as phys]))
+            [desargues.physics :as lag]
+            [desargues.physics :as phys]))
 
 (def ^:private raster? (backend/available? :gpu))
 

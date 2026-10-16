@@ -1,7 +1,7 @@
 ;; Localise the cljw/JVM trajectory divergence: print the system, one derivative
 ;; evaluation, and the first two RK4 states with full precision on each runtime.
 ;;   cljw -cp src dev/cljw/rk4_diag.clj   |   clojure -M dev/cljw/rk4_diag.clj
-(require '[desargues.videos.physics :as phys])
+(require '[desargues.physics :as phys])
 
 (def p (phys/make-pendulum {:length 3.0 :damping 0.12 :initial-theta 1.1 :top-point [0 2.2 0]}))
 

@@ -12,7 +12,7 @@
             [clojure.test.check.clojure-test :refer [defspec]]
             [clojure.test.check.properties :as prop]
             [clojure.test.check.generators :as gen]
-            [desargues.videos.physics :as phys]
+            [desargues.physics :as phys]
             [desargues.specs.generators :as g]))
 
 ;; =============================================================================
@@ -98,7 +98,7 @@
 (defspec pendulum-creation-always-valid 100
   (prop/for-all [opts g/gen-pendulum-opts]
                 (let [pendulum (phys/make-pendulum opts)]
-                  (and (instance? desargues.videos.physics.Pendulum pendulum)
+                  (and (instance? desargues.physics.systems.Pendulum pendulum)
                        (pos? (:length pendulum))
                        (pos? (:gravity pendulum))
                        (>= (:damping pendulum) 0)))))
@@ -154,7 +154,7 @@
 (defspec spring-mass-creation-always-valid 100
   (prop/for-all [opts g/gen-spring-mass-opts]
                 (let [spring (phys/make-spring-mass opts)]
-                  (and (instance? desargues.videos.physics.SpringMass spring)
+                  (and (instance? desargues.physics.systems.SpringMass spring)
                        (pos? (:k spring))
                        (pos? (:mass spring))
                        (>= (:mu spring) 0)))))

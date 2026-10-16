@@ -8,7 +8,7 @@
    - Typography (equations with t2c)
    - Animation timeline composition
    - Pi creature integration"
-  (:require [desargues.videos.physics :as phys]
+  (:require [desargues.physics :as phys]
             [desargues.videos.math-objects :as mo]
             [desargues.videos.timeline :as tl]
             [desargues.videos.typography :as typ]

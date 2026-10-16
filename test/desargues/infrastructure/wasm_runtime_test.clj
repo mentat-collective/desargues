@@ -6,8 +6,8 @@
    Needs -A:dynamics; without raster and Chicory every test skips loudly."
   (:require [clojure.test :refer [deftest is testing]]
             [desargues.backend :as backend]
-            [desargues.videos.lagrangian :as lag]
-            [desargues.videos.physics :as phys]))
+            [desargues.physics :as lag]
+            [desargues.physics :as phys]))
 
 (def ^:private wasm?
   (let [ok (backend/available? :wasm)]

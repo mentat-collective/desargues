@@ -4,8 +4,8 @@
    IEEE operations in the stepper's order, so trajectories are compared with
    `=`, times included. evolve-batch's mapping path runs without :dynamics."
   (:require [clojure.test :refer [deftest is testing]]
-            [desargues.videos.lagrangian :as lag]
-            [desargues.videos.physics :as phys]))
+            [desargues.physics :as lag]
+            [desargues.physics :as phys]))
 
 (def ^:private kernel-solver
   "raster-adapter/kernel-solver, or nil when raster is not on the classpath

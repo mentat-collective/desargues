@@ -10,7 +10,7 @@
    Includes s/fdef function specs for instrumentation."
   (:require [clojure.spec.alpha :as s]
             [desargues.specs.common :as c]
-            [desargues.videos.physics :as phys]))
+            [desargues.physics :as phys]))
 
 ;; =============================================================================
 ;; Pendulum System Specs
@@ -40,7 +40,7 @@
                    ::initial-theta ::initial-omega ::top-point]))
 
 ;; A pendulum system record
-(s/def ::pendulum #(instance? desargues.videos.physics.Pendulum %))
+(s/def ::pendulum #(instance? desargues.physics.systems.Pendulum %))
 
 ;; =============================================================================
 ;; Spring-Mass System Specs
@@ -74,7 +74,7 @@
                    ::equilibrium-position ::direction]))
 
 ;; A spring-mass system record
-(s/def ::spring-mass #(instance? desargues.videos.physics.SpringMass %))
+(s/def ::spring-mass #(instance? desargues.physics.systems.SpringMass %))
 
 ;; =============================================================================
 ;; Physical System Protocol Specs

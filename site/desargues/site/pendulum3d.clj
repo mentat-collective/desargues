@@ -6,8 +6,8 @@
    the moving camera every sample."
   (:require [desargues.scene :as s]
             [desargues.scene.data :as rec]
-            [desargues.videos.lagrangian :as lag]
-            [desargues.videos.physics :as phys]))
+            [desargues.physics :as lag]
+            [desargues.physics :as phys]))
 
 (def spherical
   "Two chained spherical pendulums; Emmy derives the equations of motion from

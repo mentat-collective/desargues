@@ -30,7 +30,7 @@
    (def phase (phase-space pendulum {:x :theta :y :omega}))
    ```"
   (:require [clojure.spec.alpha :as s]
-            [desargues.videos.physics :as phys]))
+            [desargues.physics :as phys]))
 
 ;; =============================================================================
 ;; Protocols

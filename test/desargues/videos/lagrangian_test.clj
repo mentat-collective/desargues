@@ -2,8 +2,8 @@
   "Emmy-derived systems behave like physics: energy is conserved, rods keep
    their length, and the state contract matches the integrators."
   (:require [clojure.test :refer [deftest is testing]]
-            [desargues.videos.lagrangian :as lag]
-            [desargues.videos.physics :as phys]))
+            [desargues.physics :as lag]
+            [desargues.physics :as phys]))
 
 (defn- dist [[x1 y1 z1] [x2 y2 z2]]
   (Math/sqrt (+ (Math/pow (- x2 x1) 2) (Math/pow (- y2 y1) 2) (Math/pow (- z2 z1) 2))))

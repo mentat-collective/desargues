@@ -14,7 +14,6 @@ This DSL provides high-level abstractions for creating mathematical animations i
 
 ```
 desargues.videos/
-├── physics.clj       # Physical systems (pendulum, spring-mass)
 ├── timeline.clj      # Animation composition and timing
 ├── math_objects.clj  # Mathematical objects (axes, graphs)
 ├── typography.clj    # LaTeX rendering and equation morphing
@@ -131,7 +130,12 @@ Create coordinate systems, graphs, and geometric objects.
 (mo/get-phase-trajectory axes state-fn dt total-time)
 ```
 
-### 3. Physics DSL (`physics.clj`)
+### 3. Physics (moved to `desargues.physics`)
+
+The physics is its own bounded context now, `desargues.physics.*` in
+src/desargues/physics/ (see its README.md). The sketch below predates the
+move; the current names are `make-pendulum`, `make-spring-mass`, `evolve`
+and `rk4`, all on the `desargues.physics` facade.
 
 Simulate physical systems with ODE integration.
 
