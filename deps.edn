@@ -116,4 +116,14 @@
                         "--add-modules=jdk.incubator.vector"]}
   :ansatz {:extra-paths ["ansatz"]
            :extra-deps {org.replikativ/ansatz {:mvn/version "0.2.115"}}
-           :jvm-opts ["--enable-native-access=ALL-UNNAMED"]}}}
+           :jvm-opts ["--enable-native-access=ALL-UNNAMED"]}
+  :notebooks {:extra-paths ["notebooks" "studio"]
+              :extra-deps {io.github.mentat-collective/emmy-viewers {:git/url "https://github.com/BuddhiLW/emmy-viewers.git" :git/tag "v0.4.0-fork.1" :git/sha "a19b1e3"}
+                           org.mentat/clerk-utils {:mvn/version "0.6.0"}
+                           org.scilab.forge/jlatexmath {:mvn/version "1.0.7"}
+                           io.github.nextjournal/clerk {:git/sha "a67a5d1e25fc9601e9f8a6d8006aaf7eed1a7761"}
+                           io.github.nextjournal/clerk.render {:git/url "https://github.com/nextjournal/clerk"
+                                                               :git/sha "a67a5d1e25fc9601e9f8a6d8006aaf7eed1a7761"
+                                                               :deps/root "render"}
+                           org.babashka/sci {:git/url "https://github.com/babashka/sci"
+                                             :git/sha "c556f4474303c61da72e7a07eef496dcbf66a56e"}}}}}
