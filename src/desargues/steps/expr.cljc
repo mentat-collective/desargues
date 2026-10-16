@@ -8,12 +8,20 @@
   (:require [emmy.env :as e]
             [emmy.expression :as x]))
 
+(defn ->list
+  "Any nested seq (lazy, cons) as nested lists, the shape Emmy reads, with
+   integral BigInts as longs (so 1N and 1 are one constant to the matcher)."
+  [form]
+  (cond (seq? form) (apply list (map ->list form))
+        #?@(:clj [(instance? clojure.lang.BigInt form) (if (< (abs form) Long/MAX_VALUE) (long form) form)])
+        :else form))
+
 (defn simp
   "Emmy's simplification of a frozen form, frozen again."
   [form]
   (if (number? form)
-    form
-    (e/freeze (e/simplify (e/literal-number form)))))
+    (->list form)
+    (->list (e/freeze (e/simplify (e/literal-number (->list form)))))))
 
 (defn free-of?
   "True when `form` does not contain the variable `v`."
@@ -32,12 +40,15 @@
   "`form` as a one-argument function of `v`, built from Emmy's generic
    operators (so Emmy's D differentiates it and a number evaluates it)."
   [form v]
-  (fn [t] (x/evaluate form {v t} ops)))
+  (let [form (->list form)]
+    (fn [t] (x/evaluate form {v t} ops))))
 
 (defn evaluate
   "The value of `form` with `v` bound to `t` (a number or a form)."
   [form v t]
-  (let [r ((->fn form v) t)] (if (number? r) r (e/freeze r))))
+  (let [t (if (seq? t) (e/literal-number (->list t)) t)
+        r ((->fn form v) t)]
+    (if (number? r) r (e/freeze r))))
 
 (defn- drop-log-abs
   "(log (abs u)) -> (log u): the same derivative, u'/u, on every branch.

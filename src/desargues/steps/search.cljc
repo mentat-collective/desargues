@@ -18,7 +18,11 @@
   (:require [desargues.steps.protocols :as p]
             [desargues.steps.tactics :as t]))
 
-(def ^:dynamic *max-depth* 9)
+(def ^:dynamic *max-depth*
+  "How deep the search goes below the top goal. Each level multiplies the
+   moves tried; 5 covers the textbook chapter (substitution inside parts
+   inside linearity) in well under a second per problem."
+  5)
 
 (defrecord Solution [goal answer steps cost rules cited move])
 

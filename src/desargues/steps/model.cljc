@@ -45,7 +45,9 @@
   [x]
   (and (satisfies? IForm x) (not= :expr (form-kind x))))
 
-(defn- lit [form] (e/literal-number form))
+(defn- ->list [form] (if (seq? form) (apply list (map ->list form)) form))
+
+(defn- lit [form] (e/literal-number (->list form)))
 
 (defn integral
   "∫ integrand d var, or with bounds [a b] the definite integral."
@@ -80,9 +82,10 @@
 (defn op
   "Emmy arithmetic over math forms: (op :- (* u v) (integral v u)) is
    u v - ∫ v du. `op` is :+ :- or :*; kept so a derivation reads as it is
-   written, it is (e/- ...) etc."
+   written, it is (e/- ...) etc. Frozen forms are accepted as arguments."
   [op & args]
-  (apply (case op :+ e/+ :- e/- :* e/*) args))
+  (apply (case op :+ e/+ :- e/- :* e/*)
+         (map #(if (seq? %) (lit %) %) args)))
 
 (defn integral-parts
   "[integrand var a b] of an integral form (a b nil when indefinite), else nil."
