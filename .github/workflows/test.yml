@@ -61,9 +61,18 @@ jobs:
             ~/.gitlibs
           key: dynamics-${{ runner.os }}-${{ hashFiles('deps.edn') }}
           restore-keys: dynamics-${{ runner.os }}-
+      # The :gpu backend's tests need an OpenCL platform. Runners have no GPU,
+      # so install the ICD loader and POCL (CPU OpenCL) and ask raster for a
+      # CPU device; the GPU code path then runs for real in CI.
+      - name: Install OpenCL (ICD loader + POCL)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ocl-icd-libopencl1 pocl-opencl-icd
       # JVM flags (--add-modules=jdk.incubator.vector,
       # --enable-native-access=ALL-UNNAMED) come from the :dynamics alias.
       - run: clojure -M:test:dynamics
+        env:
+          RASTER_OCL_DEVICE_TYPE: cpu
 
   typecheck:
     name: typecheck
