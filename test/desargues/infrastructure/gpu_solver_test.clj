@@ -13,10 +13,14 @@
 (def ^:private raster? (backend/available? :gpu))
 
 (def ^:private device?
+  "One probe for the whole namespace: does a kernel actually run on the
+   default device? False without raster, without an OpenCL ICD loader, or
+   without a platform that has a device of the requested type."
   (let [ok (and raster? ((requiring-resolve 'desargues.infrastructure.gpu-solver/device-available?)))]
     (cond
       (not raster?) (println "[gpu-solver-test] :gpu backend not on classpath (use -A:dynamics); skipping")
-      (not ok) (println "[gpu-solver-test] no GPU device (an OpenCL ICD is needed); skipping device tests"))
+      (not ok) (println "[gpu-solver-test] no OpenCL platform loads (no ICD loader, driver or device);"
+                        "skipping device tests, checking the CPU fallback only"))
     ok))
 
 (def ^:private opts {:dt 0.01 :duration 3.0})
@@ -63,8 +67,18 @@
             (is (< (max-diff ref g) tolerance))))))))
 
 (deftest gpu-batches-sweeps-and-falls-back
-  (if-not device?
-    (is true)
+  (cond
+    (not raster?) (is true)
+
+    (not device?)
+    (testing "no device: systems without a GPU kernel still go to the stepper, and the device is never opened"
+      (with-open [gs ^java.io.Closeable (phys/solver :gpu)]
+        (let [cpu-only [(phys/make-spring-mass {:initial-x 1.0}) (phys/make-spring-mass {:initial-x 0.5})]
+              out (phys/evolve-batch cpu-only (assoc opts :solver gs))]
+          (is (= (mapv #(vec (phys/evolve % opts)) cpu-only) out))
+          (is (nil? @(:session gs))))))
+
+    :else
     (with-open [gs ^java.io.Closeable (phys/solver :gpu)]
       (let [sweep (vec (for [i (range 6)]
                          (phys/make-pendulum {:length (+ 1.0 (* 0.5 i)) :damping (* 0.05 i)
