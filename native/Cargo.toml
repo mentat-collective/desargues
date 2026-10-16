@@ -1,0 +1,30 @@
+[package]
+name = "desargues-native"
+description = "Native player host for desargues: a cljrs (clojurust) runtime running the player's pure .cljc strata, painting Frames with tiny-skia into a winit + softbuffer window"
+version = "0.1.0"
+edition = "2024"
+license = "EPL-1.0"
+publish = false
+
+# Standalone: not a member of any workspace.
+[workspace]
+
+# The cljrs crates resolve to the sibling clojurust checkout ($HOME/PP/clojurust),
+# for the reason video-processing-cljrs gives: the interop crate the exports
+# compile against must be the very crate the runtime uses. Edit these paths if
+# clojurust lives elsewhere (cargo has no env expansion in paths).
+[dependencies]
+cljrs-interop = { path = "../../../../../../clojurust/crates/cljrs-interop" }
+cljrs-runtime = { path = "../../../../../../clojurust/crates/cljrs-runtime" }
+cljrs-stdlib  = { path = "../../../../../../clojurust/crates/cljrs-stdlib" }
+cljrs-value   = { path = "../../../../../../clojurust/crates/cljrs-value" }
+cljrs-reader  = { path = "../../../../../../clojurust/crates/cljrs-reader" }
+cljrs-gc      = { path = "../../../../../../clojurust/crates/cljrs-gc" }
+
+tiny-skia  = "0.11"
+ab_glyph   = "0.2"
+winit      = { version = "0.30", default-features = false, features = ["x11", "rwh_06"] }
+softbuffer = { version = "0.4", default-features = false, features = ["x11"] }
+
+[profile.release]
+debug = false

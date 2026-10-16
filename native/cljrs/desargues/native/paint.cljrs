@@ -1,0 +1,251 @@
+(ns desargues.native.paint
+  "BOUNDARY stratum (cljrs): paints a desargues.player.frame Frame onto a
+   desargues.native.gfx canvas (tiny-skia).
+
+   Paint semantics mirror the headless host (src/desargues/player/headless.clj)
+   node for node and unit for unit, so a canvas here matches the golden PNG:
+   palette keywords or CSS colours, Manim stroke widths (pixels at 1080p),
+   :svg-path in scene units y up, text anchors and baselines, :dash, the
+   Frame's :background. One `paint!` method per node kind (OCP).
+
+   Paths cross into Rust as one flat number vector: op codes 0 move, 1 line,
+   2 quad, 3 cubic, 4 close, each followed by its coordinates."
+  (:require [clojure.edn :as edn]
+            [clojure.string :as str]
+            [desargues.player.frame :as frame]
+            [desargues.player.svg-path :as svg-path]
+            [desargues.native.gfx :as gfx]))
+
+;; ── Colours ──────────────────────────────────────────────────────────────
+
+(def ^:private css-names
+  {"white" "#FFFFFF" "black" "#000000" "red" "#FF0000" "green" "#008000"
+   "blue" "#0000FF" "yellow" "#FFFF00" "orange" "#FFA500" "purple" "#800080"
+   "gray" "#808080" "grey" "#808080" "gold" "#FFD700" "pink" "#FFC0CB"
+   "teal" "#008080" "maroon" "#800000" "cyan" "#00FFFF" "magenta" "#FF00FF"
+   "transparent" "#00000000"})
+
+(def ^:private hex-digit
+  (zipmap "0123456789abcdef" (range 16)))
+
+(defn- hex-byte [s i]
+  (let [s (str/lower-case s)]
+    (+ (* 16 (hex-digit (nth s i) 0)) (hex-digit (nth s (inc i)) 0))))
+
+(defn- clamp255 [v] (max 0 (min 255 (Math/round (double v)))))
+
+(defn- parse-hex [s]
+  (let [h (subs s 1)
+        h (if (#{3 4} (count h)) (apply str (mapcat (fn [c] [c c]) h)) h)]
+    (case (count h)
+      6 [(hex-byte h 0) (hex-byte h 2) (hex-byte h 4) 255]
+      8 [(hex-byte h 0) (hex-byte h 2) (hex-byte h 4) (hex-byte h 6)]
+      nil)))
+
+(defn- parse-rgb [s]
+  (when-let [[_ body] (re-matches #"(?i)rgba?\((.*)\)" s)]
+    (let [[r g b a] (map #(edn/read-string (str/replace % "%" ""))
+                         (remove str/blank? (str/split body #"[,\s/]+")))]
+      (mapv clamp255 [r g b (* 255.0 (double (or a 1.0)))]))))
+
+(defn css-color
+  "[r g b a] 0-255 from a palette keyword or a CSS colour string; white when
+   unknown, as in the JavaFX and headless hosts."
+  [k]
+  (or (if (string? k)
+        (let [s (str/trim k)]
+          (try (cond (str/starts-with? s "#") (parse-hex s)
+                     (re-find #"(?i)^rgb" s)   (parse-rgb s)
+                     :else (some-> (css-names (str/lower-case s)) parse-hex))
+               (catch Exception _ nil)))
+        (parse-hex (get frame/palette k (frame/palette :white))))
+      [255 255 255 255]))
+
+(defn- lerp-color [a b t]
+  (mapv (fn [x y] (clamp255 (+ x (* (double t) (- y x))))) a b))
+
+(defn- stroke-color [s]
+  (if (and (contains? (:stroke s) :color) (nil? (get-in s [:stroke :color])))
+    [0 0 0 0]
+    (let [c (css-color (or (get-in s [:stroke :color]) (get-in s [:opts :color]) :white))]
+      (if-let [{:keys [to alpha]} (:recolor s)]
+        (lerp-color c (css-color to) alpha)
+        c))))
+
+(defn- fill-color [s]
+  (when-let [{:keys [color opacity]} (:fill s)]
+    (let [[r g b a] (css-color color)]
+      [r g b (clamp255 (* a (double (or opacity 1.0))))])))
+
+(def ^:dynamic *opacity* 1.0)
+
+(defn- with-opacity [[r g b a]] [r g b (* a (double *opacity*))])
+
+;; ── Geometry ─────────────────────────────────────────────────────────────
+
+(defn- units->px [vp u] (* (double (:scale vp)) (double u)))
+
+(defn- stroke-px [vp s]
+  (max 1.0 (* (double (or (get-in s [:stroke :width]) (get-in s [:opts :width]) 4))
+              (/ (double (:scale vp)) 135.0))))
+
+(defn- emphasis-scale [s] (+ 1.0 (* 0.25 (double (:emphasis s 0.0)))))
+
+(defn- center [vp s] (frame/->px vp (:at s [0 0])))
+
+(defn- dash-px [vp s]
+  (when-let [d (:dash s)]
+    (let [xs (if (string? d)
+               (edn/read-string (str "[" (str/replace d "," " ") "]"))
+               d)
+          px (map #(units->px vp %) (filter number? xs))]
+      (when (and (seq px) (some pos? px)) (vec px)))))
+
+(def ^:private kappa 0.5522847498307936)
+
+(defn- ellipse-segs [cx cy r]
+  (let [k (* kappa r)]
+    [0 (+ cx r) cy
+     3 (+ cx r) (+ cy k) (+ cx k) (+ cy r) cx (+ cy r)
+     3 (- cx k) (+ cy r) (- cx r) (+ cy k) (- cx r) cy
+     3 (- cx r) (- cy k) (- cx k) (- cy r) cx (- cy r)
+     3 (+ cx k) (- cy r) (+ cx r) (- cy k) (+ cx r) cy
+     4]))
+
+(defn- arc-segs
+  "Open arc from 12 o'clock clockwise over `frac` of a turn (Arc2D 90, -360 frac)."
+  [cx cy r frac]
+  (let [n (max 2 (long (Math/ceil (* 128 frac))))
+        a0 (/ Math/PI 2.0)
+        sweep (* -2.0 Math/PI frac)]
+    (vec (mapcat (fn [i]
+                   (let [a (+ a0 (* sweep (/ (double i) n)))]
+                     [(if (zero? i) 0 1) (+ cx (* r (Math/cos a))) (- cy (* r (Math/sin a)))]))
+                 (range (inc n))))))
+
+(defn- polyline-segs [pts]
+  (vec (mapcat (fn [i [x y]] [(if (zero? i) 0 1) (double x) (double y)]) (range) pts)))
+
+(defn- round-rect-segs [x y w h r]
+  (let [r (min r (/ w 2.0) (/ h 2.0)) k (* kappa r) x2 (+ x w) y2 (+ y h)]
+    (if (<= r 0.0)
+      [0 x y 1 x2 y 1 x2 y2 1 x y2 4]
+      [0 (+ x r) y 1 (- x2 r) y
+       3 (+ (- x2 r) k) y x2 (- (+ y r) k) x2 (+ y r)
+       1 x2 (- y2 r)
+       3 x2 (+ (- y2 r) k) (+ (- x2 r) k) y2 (- x2 r) y2
+       1 (+ x r) y2
+       3 (- (+ x r) k) y2 x (+ (- y2 r) k) x (- y2 r)
+       1 x (+ y r)
+       3 x (- (+ y r) k) (- (+ x r) k) y (+ x r) y
+       4])))
+
+(defn- fill! [c [r g b a] segs] (gfx/fill-path! c segs r g b a))
+
+(defn- stroke! [c vp s segs]
+  (let [[r g b a] (with-opacity (stroke-color s))]
+    (when (pos? a)
+      (gfx/stroke-path! c segs r g b a (stroke-px vp s) (dash-px vp s)))))
+
+(defn- fill-op! [c col segs] (when col (fill! c (with-opacity col) segs)))
+
+;; ── Painting: one method per node kind (OCP) ─────────────────────────────
+
+(defmulti paint!
+  "Paint shape `s` on canvas `c` under viewport `vp`. Unknown kinds paint nothing."
+  (fn [_c _vp s] (:node s)))
+
+(defmethod paint! :default [_ _ _] nil)
+
+(defmethod paint! :dot [c vp s]
+  (let [[cx cy] (center vp s)
+        r (* (units->px vp (get-in s [:opts :radius] 0.08)) (emphasis-scale s))]
+    (fill-op! c (or (fill-color s) (stroke-color s)) (ellipse-segs cx cy r))))
+
+(defmethod paint! :circle [c vp s]
+  (let [[cx cy] (center vp s)
+        r (* (units->px vp (get-in s [:opts :radius] 1.0)) (emphasis-scale s))]
+    (fill-op! c (fill-color s) (ellipse-segs cx cy r))
+    (stroke! c vp s (arc-segs cx cy r (double (:draw s 1.0))))))
+
+(defmethod paint! :line [c vp s]
+  (let [[x0 y0] (frame/->px vp (:from s))
+        [x1 y1] (frame/->px vp (:to s))
+        d (double (:draw s 1.0))]
+    (stroke! c vp s [0 x0 y0 1 (+ x0 (* d (- x1 x0))) (+ y0 (* d (- y1 y0)))])))
+
+(defmethod paint! :path [c vp s]
+  (let [pts     (mapv #(frame/->px vp %) (:points s))
+        n       (long (Math/ceil (* (double (:draw s 1.0)) (count pts))))
+        closed? (get-in s [:opts :closed?])
+        pts     (cond-> (subvec pts 0 (min n (count pts)))
+                  (and closed? (seq pts)) (conj (first pts)))]
+    (when (> (count pts) 1)
+      (let [segs (polyline-segs pts)]
+        (when closed? (fill-op! c (fill-color s) segs))
+        (stroke! c vp s segs)))))
+
+(defn- paint-box! [c vp s corner]
+  (let [[cx cy] (center vp s)
+        k (emphasis-scale s)
+        w (* k (units->px vp (get-in s [:opts :width] 4.0)))
+        h (* k (units->px vp (get-in s [:opts :height] 2.0)))
+        segs (round-rect-segs (- cx (/ w 2)) (- cy (/ h 2)) w h (units->px vp corner))]
+    (fill-op! c (fill-color s) segs)
+    (stroke! c vp s segs)))
+
+(defmethod paint! :rectangle [c vp s] (paint-box! c vp s 0.0))
+
+(defmethod paint! :rounded-rectangle [c vp s]
+  (paint-box! c vp s (get-in s [:opts :corner-radius] 0.25)))
+
+(defn- font-px [vp s]
+  (* (emphasis-scale s) (double (get-in s [:opts :font-size] 48))
+     (/ (double (:scale vp)) 120.0)))
+
+(defn- paint-text! [c vp s text]
+  (let [[cx cy] (center vp s)
+        px (font-px vp s)
+        [w asc desc] (gfx/text-metrics text px)
+        x (case (get-in s [:opts :anchor])
+            "start" cx
+            "end"   (- cx w)
+            (- cx (/ w 2.0)))
+        y (if (get-in s [:opts :size]) cy (+ cy (/ (- asc desc) 2.0)))
+        [r g b a] (with-opacity (stroke-color s))]
+    (gfx/fill-text! c text x y px r g b a)))
+
+(defmethod paint! :text [c vp s] (paint-text! c vp s (str (:text s))))
+
+(defmethod paint! :decimal [c vp s]
+  (paint-text! c vp s (format (str "%." (get-in s [:opts :num-decimal-places] 2) "f")
+                              (double (:value s 0)))))
+
+;; No TeX typesetter on this host: :tex falls back to its source as text,
+;; as the headless host does without JLaTeXMath.
+(defmethod paint! :tex [c vp s] (paint-text! c vp s (str (:tex s))))
+
+(defmethod paint! :svg-path [c vp s]
+  (let [{:keys [w h scale]} vp
+        hx (/ (double w) 2.0) hy (/ (double h) 2.0) k (double scale)
+        px (fn [x y] [(+ hx (* k x)) (- hy (* k y))])
+        segs (vec (mapcat (fn [[op & xs]]
+                            (let [pts (mapcat (fn [[x y]] (px x y)) (partition 2 xs))]
+                              (cons (case op :move 0 :line 1 :quad 2 :cubic 3 :close 4) pts)))
+                          (svg-path/segments (:d s))))]
+    (fill-op! c (fill-color s) segs)
+    (stroke! c vp s segs)))
+
+;; ── Frames ───────────────────────────────────────────────────────────────
+
+(defn paint-frame!
+  "Paint Frame `f` onto canvas `c` sized `w` x `h`: the :background (default
+   black), then each visible shape in draw order at its :opacity. Returns `c`."
+  [c w h f]
+  (let [vp (frame/viewport w h)
+        [r g b a] (if-let [bg (:background f)] (css-color bg) [0 0 0 255])]
+    (gfx/clear! c r g b a)
+    (doseq [s (frame/visible-shapes f)]
+      (binding [*opacity* (max 0.0 (min 1.0 (double (:opacity s))))]
+        (paint! c vp s)))
+    c))

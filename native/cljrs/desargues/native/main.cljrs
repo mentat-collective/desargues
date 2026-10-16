@@ -1,0 +1,107 @@
+(ns desargues.native.main
+  "Entry point of desargues-native (cljrs). Three modes:
+
+     play <graph.edn> [secs]   play a recorded scene graph natively: the pure
+                               player strata (graph-source, session, frame)
+                               run on cljrs, the NativeHost shows them.
+                               DESARGUES_NATIVE_SNAPSHOT=<png> snapshots the
+                               stage when playback stops.
+     snapshot <graph.edn> <t> <w> <h> <out.png>
+                               paint the frame at t offscreen to a PNG (the
+                               golden comparison against the headless host).
+     serve                     the bridge: the JVM player drives this host's
+                               ports over stdin/stdout, one EDN map per line
+                               (desargues.player.native is the JVM side).
+
+   Serve protocol. In:  {:op :show :title :w :h :offscreen?} {:op :present
+   :frame F} {:op :control :spec S} {:op :set-control :id :value}
+   {:op :snapshot :path} {:op :ticks :on? b} {:op :close}.
+   Out: {:ev :ready :window? b} {:ev :tick :dt s} {:ev :change :id :value}
+   {:ev :snapshot :path} {:ev :closed}."
+  (:require [clojure.edn :as edn]
+            [desargues.player.protocols :as p]
+            [desargues.player.graph-source :as gs]
+            [desargues.player.session :as session]
+            [desargues.native.host :as host]
+            [desargues.native.gfx :as gfx]
+            [desargues.native.paint :as paint]
+            [desargues.native.stdin :as stdin]
+            [desargues.native.sys :as sys]))
+
+(defn- emit! [m] (println (pr-str m)))
+
+(defn- read-graph [path] (edn/read-string (slurp path)))
+
+;; ── play ─────────────────────────────────────────────────────────────────
+
+(defn play
+  "Play graph file `path` in a native window for `secs` (default: until the
+   window closes). The player loop here is session + ports only."
+  [path secs]
+  (let [graph (read-graph path)
+        src   (gs/graph-source graph)
+        h     (host/host)
+        st    (atom (session/play (session/session src)))]
+    (p/-show! h {:title "desargues (native)" :w 1280 :h 720})
+    (p/-on-tick! h (fn [dt]
+                     (swap! st session/tick dt)
+                     (p/-present! h (session/current-frame @st))))
+    (p/-present! h (session/current-frame @st))
+    (let [n (host/run! h {:until (fn [_] (and secs (>= (:t @st) secs)))})]
+      (when-let [png (sys/getenv "DESARGUES_NATIVE_SNAPSHOT")] (p/-snapshot! h png))
+      (emit! {:ev :played :steps (count (:steps graph)) :ticks n
+              :window? (boolean (:window? @(:state h)))
+              :t (:t @st) :duration (p/-duration src)})
+      (p/-close! h))))
+
+;; ── snapshot ─────────────────────────────────────────────────────────────
+
+(defn snapshot
+  "Frame at `t` of graph file `path` painted on a `w` x `h` canvas, to `out`."
+  [path t w h out]
+  (let [graph (read-graph path)
+        src   (gs/graph-source graph)
+        f     (p/-frame-at src (min (double t) (double (p/-duration src))))
+        c     (gfx/canvas w h)]
+    (paint/paint-frame! c w h f)
+    (gfx/save-png! c out)
+    (emit! {:ev :snapshot :path out :steps (count (:steps graph))
+            :shapes (count (:shapes f)) :duration (p/-duration src)})))
+
+;; ── serve ────────────────────────────────────────────────────────────────
+
+(defn- dispatch! [h ticks? line]
+  (let [{:keys [op] :as m} (edn/read-string line)]
+    (case op
+      :show        (do (p/-show! h m)
+                       (emit! {:ev :ready :window? (boolean (:window? @(:state h)))}))
+      :present     (p/-present! h (:frame m))
+      :control     (p/-control! h (:spec m)
+                                (fn [id v] (emit! {:ev :change :id id :value v})))
+      :set-control (p/-set-control! h (:id m) (:value m))
+      :snapshot    (emit! {:ev :snapshot :path (p/-snapshot! h (:path m))})
+      :ticks       (reset! ticks? (boolean (:on? m)))
+      :close       (do (p/-close! h) (emit! {:ev :closed}))
+      nil)))
+
+(defn serve []
+  (let [h (host/host)
+        ticks? (atom false)
+        eof? (atom false)]
+    (p/-on-tick! h (fn [dt] (when @ticks? (emit! {:ev :tick :dt dt}))))
+    (host/run! h {:until (fn [_]
+                           (doseq [l (stdin/poll-lines)]
+                             (if (= l :eof) (reset! eof? true) (dispatch! h ticks? l)))
+                           @eof?)})
+    (when (host/closed? h) (emit! {:ev :closed}))))
+
+(defn- parse-num [s] (edn/read-string s))
+
+(defn -main []
+  (let [[mode & args] (sys/args)]
+    (case mode
+      "play"     (play (first args) (some-> (second args) parse-num))
+      "snapshot" (let [[path t w h out] args]
+                   (snapshot path (parse-num t) (parse-num w) (parse-num h) out))
+      "serve"    (serve)
+      (println "usage: desargues-native desargues.native.main play|snapshot|serve ..."))))

@@ -1,0 +1,181 @@
+(ns desargues.native.host
+  "BOUNDARY stratum (cljrs): the native host for the player.
+
+   Implements every port of desargues.player.protocols over one winit +
+   softbuffer window drawn by tiny-skia: ISurface (a canvas, painted by
+   desargues.native.paint), IWindow (the window; PNG snapshots of the stage),
+   IControls (sliders painted in a side panel, dragged with the mouse) and
+   IClock (the host's frame loop, `run!`). The player cannot tell it from the
+   JavaFX host (LSP): the same ports over the same Frame data.
+
+   cljrs values never leave the interpreter thread, so the clock is a loop
+   this namespace owns: `run!` pumps window events, feeds the sliders, calls
+   the tick fn with elapsed seconds and presents. :offscreen? true in -show!
+   opts skips the window (CI, golden checks): every port still works."
+  (:require [desargues.player.protocols :as p]
+            [desargues.native.gfx :as gfx]
+            [desargues.native.paint :as paint]
+            [desargues.native.window :as win]
+            [clojure.edn :as edn]))
+
+(def panel-w
+  "Width of the controls panel, pixels (the JavaFX host uses 260)."
+  260)
+
+(def ^:private row-h 46)
+
+;; ── Controls panel (pure layout + painting) ──────────────────────────────
+
+(defn- slider-geom [i]
+  {:label-y (+ 30 (* i row-h)) :track-y (+ 44 (* i row-h)) :x0 14 :x1 (- panel-w 14)})
+
+(defn- slider-frac [{:keys [min max value]}]
+  (let [span (- (double max) (double min))]
+    (if (pos? span) (/ (- (double value) (double min)) span) 0.0)))
+
+(defn- paint-panel! [c x0 h sliders]
+  (gfx/fill-path! c [0 x0 0 1 (+ x0 panel-w) 0 1 (+ x0 panel-w) h 1 x0 h 4] 27 27 31 255)
+  (doseq [[i {:keys [label value] :as s}] (map-indexed vector sliders)]
+    (let [{:keys [label-y track-y] sx0 :x0 sx1 :x1} (slider-geom i)
+          kx (+ x0 sx0 (* (slider-frac s) (- sx1 sx0)))]
+      (gfx/fill-text! c (format "%s  %.3f" label (double value)) (+ x0 sx0) label-y 13 216 216 216 255)
+      (gfx/stroke-path! c [0 (+ x0 sx0) track-y 1 (+ x0 sx1) track-y] 90 90 98 255 3 nil)
+      (gfx/fill-path! c [0 (+ x0 sx0) track-y 1 kx track-y] 0 0 0 0)
+      (gfx/stroke-path! c [0 (+ x0 sx0) track-y 1 kx track-y] 88 196 221 255 3 nil)
+      (gfx/fill-path! c [0 (+ kx 7) track-y
+                         3 (+ kx 7) (+ track-y 3.9) (+ kx 3.9) (+ track-y 7) kx (+ track-y 7)
+                         3 (- kx 3.9) (+ track-y 7) (- kx 7) (+ track-y 3.9) (- kx 7) track-y
+                         3 (- kx 7) (- track-y 3.9) (- kx 3.9) (- track-y 7) kx (- track-y 7)
+                         3 (+ kx 3.9) (- track-y 7) (+ kx 7) (- track-y 3.9) (+ kx 7) track-y 4]
+                      230 230 236 255))))
+
+(defn slider-at
+  "Index of the slider under panel-local pixel [x y], or nil."
+  [sliders [x y]]
+  (let [i (long (Math/floor (/ (- (double y) 14) row-h)))]
+    (when (and (<= 0 i) (< i (count sliders)) (<= 0 x panel-w)) i)))
+
+(defn slider-value
+  "Value of `slider` for a pointer at panel-local x."
+  [{:keys [min max]} x]
+  (let [{sx0 :x0 sx1 :x1} (slider-geom 0)
+        f (/ (- (double x) sx0) (- sx1 sx0))
+        f (if (< f 0.0) 0.0 (if (> f 1.0) 1.0 f))]
+    (+ (double min) (* f (- (double max) (double min))))))
+
+;; ── Compositing ──────────────────────────────────────────────────────────
+
+(defn- recompose! [state]
+  (let [{:keys [stage stage-w stage-h screen sliders frame window?]} @state]
+    (when frame (paint/paint-frame! stage stage-w stage-h frame))
+    (when screen
+      (gfx/clear! screen 0 0 0 255)
+      (gfx/blit! screen stage 0 0)
+      (paint-panel! screen stage-w stage-h sliders)
+      (when window? (win/show! screen)))))
+
+;; ── Input ────────────────────────────────────────────────────────────────
+
+(defn- set-slider! [state i v fire?]
+  (swap! state assoc-in [:sliders i :value] v)
+  (when fire?
+    (let [{:keys [id on-change]} (get-in @state [:sliders i])]
+      (when on-change (on-change id v)))))
+
+(defn handle-event!
+  "Apply one window event map ({:type :down|:move|:up|:close|:key :px [x y]})."
+  [state {:keys [type px] :as ev}]
+  (let [{:keys [stage-w sliders drag]} @state
+        [x y] px
+        local [(- (double (or x 0)) stage-w) (double (or y 0))]]
+    (case type
+      :down (when-let [i (slider-at sliders local)]
+              (swap! state assoc :drag i)
+              (set-slider! state i (slider-value (nth sliders i) (first local)) true))
+      :move (when drag (set-slider! state drag (slider-value (nth sliders drag) (first local)) true))
+      :up   (swap! state assoc :drag nil)
+      :close (swap! state assoc :closed? true)
+      nil)
+    (when-let [f (:on-event @state)] (f ev))))
+
+;; ── The host ─────────────────────────────────────────────────────────────
+
+(defrecord NativeHost [state]
+  p/ISurface
+  (-present! [this f]
+    (swap! state assoc :frame f :dirty? true)
+    this)
+  (-size [_] [(:stage-w @state) (:stage-h @state)])
+
+  p/IWindow
+  (-show! [this {:keys [title w h offscreen?]}]
+    (let [w (long (or w 1280)) h (long (or h 720))
+          window? (and (not offscreen?) (win/open! (str title) (+ w panel-w) h))]
+      (swap! state assoc :stage (gfx/canvas w h) :stage-w w :stage-h h
+             :screen (gfx/canvas (+ w panel-w) h) :window? window?
+             :offscreen? (not window?)))
+    this)
+  (-close! [this]
+    (when (:window? @state) (win/close!))
+    (swap! state assoc :closed? true :window? false)
+    this)
+  (-snapshot! [_ path]
+    (recompose! state)
+    (gfx/save-png! (:stage @state) (str path)))
+
+  p/IControls
+  (-control! [this {:keys [id label min max value]} on-change]
+    (swap! state update :sliders (fnil conj [])
+           {:id id :label (or label (name id)) :min min :max max :value value
+            :on-change on-change})
+    (swap! state assoc :dirty? true)
+    this)
+  (-set-control! [this id v]
+    (swap! state update :sliders
+           (fn [ss] (mapv #(if (= id (:id %)) (assoc % :value v) %) ss)))
+    (swap! state assoc :dirty? true)
+    this)
+
+  p/IClock
+  (-on-tick! [this f] (swap! state assoc :tick f) this)
+  (-stop-ticks! [this] (swap! state assoc :tick nil) this))
+
+(defn host
+  "A fresh, unopened native host. Hand it to desargues.native.stage/open!."
+  []
+  (->NativeHost (atom {:sliders [] :frames 0})))
+
+(defn closed? [h] (boolean (:closed? @(:state h))))
+
+(defn step!
+  "One turn of the host loop: drain window events, run the tick fn with `dt`
+   seconds, repaint if anything changed. Returns the host."
+  [h dt]
+  (let [state (:state h)]
+    (when (:window? @state)
+      (doseq [s (win/pump!)]
+        (handle-event! state (edn/read-string s)))
+      (when-not (win/open?) (swap! state assoc :closed? true)))
+    (when-let [f (:tick @state)] (f dt))
+    (when (:dirty? @state)
+      (recompose! state)
+      (swap! state #(-> % (assoc :dirty? false) (update :frames inc)))))
+  h)
+
+(defn run!
+  "The IClock: step `h` about every `frame-ms` until the window closes, the
+   tick fn is stopped and `until` (fn [host] bool) says so, or `max-frames`
+   steps ran. Returns the number of steps."
+  ([h] (run! h {}))
+  ([h {:keys [frame-ms max-frames until] :or {frame-ms 16}}]
+   (loop [last (win/now-ms) n 0]
+     (if (or (closed? h)
+             (and max-frames (>= n max-frames))
+             (and until (until h)))
+       n
+       (let [now (win/now-ms)
+             dt  (/ (- now last) 1000.0)]
+         (step! h dt)
+         (let [spent (- (win/now-ms) now)]
+           (when (< spent frame-ms) (win/sleep-ms! (- frame-ms spent))))
+         (recur now (inc n)))))))

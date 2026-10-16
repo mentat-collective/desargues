@@ -1,0 +1,11 @@
+(ns desargues.native.selfcheck
+  "Lists which native exports resolve: `desargues-native desargues.native.selfcheck`."
+  (:require [desargues.native.gfx]
+            [desargues.native.window]
+            [desargues.native.sys]
+            [desargues.native.stdin]))
+
+(defn -main []
+  (doseq [ns '[desargues.native.gfx desargues.native.window
+               desargues.native.sys desargues.native.stdin]]
+    (println ns (sort (map str (keys (ns-publics ns)))))))

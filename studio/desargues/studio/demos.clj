@@ -9,19 +9,33 @@
             [desargues.physics :as phys]))
 
 (def pendulum-controls
-  "Widget specs for `pendulum`, one per parameter."
+  "Widget specs for `pendulum`, one per parameter. The :raster row picks the
+   integrator: 0 is the JVM RK4, 1 (any value >= 0.5) is raster's RK4 (needs
+   the :dynamics alias). It is a :toggle; hosts that only draw sliders show it
+   as a 0..1 slider, which means the same thing."
   [{:id :length  :label "length (m)"     :min 0.5 :max 3.0 :value 2.0}
    {:id :damping :label "damping"        :min 0.0 :max 1.0 :value 0.15}
-   {:id :theta0  :label "theta0 (rad)"   :min 0.1 :max 3.0 :value 1.2}])
+   {:id :theta0  :label "theta0 (rad)"   :min 0.1 :max 3.0 :value 1.2}
+   {:id :raster  :label "raster solver"  :kind :toggle :min 0.0 :max 1.0 :value 0.0}])
+
+(defn solver-for
+  "The :solver for pendulum `params`: an explicit :solver wins, else the
+   :raster control row (true, or a number >= 0.5) selects :raster, else :jvm."
+  [{:keys [solver raster]}]
+  (or solver
+      (if (or (true? raster) (and (number? raster) (>= (double raster) 0.5)))
+        :raster
+        :jvm)))
 
 (defn- pendulum-samples
   "Bob positions every `every` s over `duration` s, integrated at dt 0.01."
-  [{:keys [length damping theta0 solver duration every]
-    :or {length 2.0 damping 0.15 theta0 1.2 solver :jvm duration 10.0 every 0.05}}]
+  [{:keys [length damping theta0 duration every]
+    :or {length 2.0 damping 0.15 theta0 1.2 duration 10.0 every 0.05}
+    :as params}]
   (let [top  [0 2.2 0]
         sys  (phys/make-pendulum {:length length :damping damping
                                   :initial-theta theta0 :top-point top})
-        traj (phys/evolve sys {:dt 0.01 :duration duration :solver solver})
+        traj (phys/evolve sys {:dt 0.01 :duration duration :solver (solver-for params)})
         step (max 1 (long (Math/round (/ every 0.01))))]
     {:top top
      :every every
