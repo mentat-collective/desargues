@@ -83,24 +83,60 @@
 
 ;; 4. Partial fractions: ∫ dx / (x² − 1) ------------------------------------
 (def partial-fractions
-  (let [f (fn [x] (e// 1 (e/- (e/square x) 1)))
-        F (fn [x] (e/* (e// 1 2) (e/- (e/log (e/- x 1)) (e/log (e/+ x 1)))))]
+  (let [f     (fn [x] (e// 1 (e/- (e/square x) 1)))
+        F     (fn [x] (e/* (e// 1 2) (e/- (e/log (e/- x 1)) (e/log (e/+ x 1)))))
+        prob  (m/problem {:id :recip :kind :integral :integrand f})
+        split (m/op :- (m/op :* (e// 1 2) (m/integral (e// 1 (e/- x 1)) x))
+                    (m/op :* (e// 1 2) (m/integral (e// 1 (e/+ x 1)) x)))
+        finish [(step :integral/linearity :split (m/integral (f x) x) split)
+                (step :integral/table :table nil (m/plus-c (F x)))]]
     {:id :recip :title "Partial fractions" :section "Integration of rational functions"
      :f f :F F :points [1.5 2.0 3.7]
      :figure {:a 1.5 :b 4}
      :derivation
      (m/derivation
-      (m/problem {:id :recip :kind :integral :integrand f})
-      [(step :integral/partial-fractions :rewrite (m/integral (f x) x)
-             (m/eq (f x) (e/+ (e// 'A (e/- x 1)) (e// 'B (e/+ x 1))))
-             :bindings {:identity (m/eq (e/- (e/square x) 1) (e/* (e/- x 1) (e/+ x 1)))})
-       (step :integral/partial-fractions :then nil (m/eq 'A (e// 1 2))
-             :text "Clear denominators: 1 = A(x + 1) + B(x − 1). At x = 1, A = 1/2; at x = −1, B = −1/2.")
-       (step :integral/linearity :split (m/integral (f x) x)
-             (m/op :- (m/op :* (e// 1 2) (m/integral (e// 1 (e/- x 1)) x))
-                   (m/op :* (e// 1 2) (m/integral (e// 1 (e/+ x 1)) x))))
-       (step :integral/table :table nil (m/plus-c (F x)))]
-      (m/plus-c (F x)))}))
+      prob
+      (into [(step :integral/partial-fractions :rewrite (m/integral (f x) x)
+                   (m/eq (f x) (e/+ (e// 'A (e/- x 1)) (e// 'B (e/+ x 1))))
+                   :bindings {:identity (m/eq (e/- (e/square x) 1) (e/* (e/- x 1) (e/+ x 1)))})
+             (step :integral/partial-fractions :then nil (m/eq 'A (e// 1 2))
+                   :text "Clear denominators: 1 = A(x + 1) + B(x − 1). At x = 1, A = 1/2; at x = −1, B = −1/2.")]
+            finish)
+      (m/plus-c (F x)))
+     :alternatives
+     [{:title "No unknowns: write the numerator as a difference of the factors"
+       :derivation
+       (m/derivation
+        prob
+        (into [(step :integral/numerator-split :rewrite (m/integral (f x) x)
+                     (m/eq (f x)
+                           (e/* (e// 1 2) (e// (e/- (e/+ x 1) (e/- x 1)) (e/* (e/- x 1) (e/+ x 1))))
+                           (e/* (e// 1 2) (e/- (e// 1 (e/- x 1)) (e// 1 (e/+ x 1)))))
+                     :bindings {:identity (m/eq 1 (e/* (e// 1 2) (e/- (e/+ x 1) (e/- x 1))))})]
+              finish)
+        (m/plus-c (F x)))}
+      {:title "Heaviside's cover-up: each coefficient is one evaluation"
+       :derivation
+       (m/derivation
+        prob
+        (into [(step :integral/cover-up :cover-up (f x) (m/eq 'A (e// 1 2))
+                     :bindings {:factor (e/- x 1) :root 1 :rest (e// 1 (e/+ x 1)) :coef 'A})
+               (step :integral/cover-up :cover-up (f x) (m/eq 'B (e// -1 2))
+                     :bindings {:factor (e/+ x 1) :root -1 :rest (e// 1 (e/- x 1)) :coef 'B})]
+              finish)
+        (m/plus-c (F x)))}
+      {:title "Straight from the table: ∫ dx/(x² − a²) with a = 1"
+       :derivation
+       (m/derivation
+        prob
+        [(step :integral/table :apply-formula (m/integral (f x) x)
+               (m/plus-c (e/* (e// 1 2) (e/log (e// (e/- x 1) (e/+ x 1)))))
+               :bindings {:formula (m/eq (m/integral (e// 1 (e/- (e/square x) (e/square 'a))) x)
+                                         (m/plus-c (e/* (e// 1 (e/* 2 'a))
+                                                        (e/log (e// (e/- x 'a) (e/+ x 'a))))))})
+         (step :integral/note :hence nil (m/plus-c (F x))
+               :text "The same answer: ln((x − 1)/(x + 1)) = ln(x − 1) − ln(x + 1).")]
+        (m/plus-c (F x)))}]}))
 
 ;; 5. A definite integral and its area: ∫₀^π sin x dx ------------------------
 (def area

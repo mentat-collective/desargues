@@ -20,11 +20,12 @@
 ;; renderer below only lays the parts out; the blackboard window takes the
 ;; same parts.
 
-(defn- step-view [i s]
-  (clerk/html
-   [:div {:style {:display "flex" :gap "0.8em" :align-items "baseline" :margin "0.35em 0"}}
-    [:span {:style {:color "#888" :min-width "1.6em" :font-family "monospace"}} (str (inc i) ".")]
-    [:div (clerk/tex (render/parts->tex (phrase/parts s)))]]))
+(defn- step-hiccup [i s]
+  [:div {:style {:display "flex" :gap "0.8em" :align-items "baseline" :margin "0.35em 0"}}
+   [:span {:style {:color "#888" :min-width "1.6em" :font-family "monospace"}} (str (inc i) ".")]
+   [:div (clerk/tex (render/parts->tex (phrase/parts s)))]])
+
+(defn- step-view [i s] (clerk/html (step-hiccup i s)))
 
 (defn- badge [{:keys [ok? symbolic? numeric?]}]
   (clerk/html
@@ -66,14 +67,28 @@
     (let [[a b] bounds] (verify/definite (fn [x] (f x)) a b value))
     (verify/antiderivative f F points)))
 
-(defn- problem-view [{:keys [title section derivation figure f] :as example}]
+(defn- steps-view [derivation]
+  (apply clerk/col (map-indexed step-view (:steps derivation))))
+
+(defn- pathway-view [{:keys [title derivation]}]
+  (clerk/html
+   (into [:details {:style {:margin "0.4em 0" :padding "0.3em 0.8em" :border-left "3px solid #4aa3c7"}}
+          [:summary {:style {:cursor "pointer" :color "#4aa3c7"}} title]]
+         (concat (map-indexed step-hiccup (:steps derivation))
+                 [[:div (clerk/tex (str "\\boxed{" (render/tex (:answer derivation)) "}"))]]))))
+
+(defn- problem-view [{:keys [title section derivation alternatives figure f] :as example}]
   (let [v (verdict example)]
-    (clerk/col
-     (clerk/md (str "## " title "\n*" section "*"))
-     (clerk/tex (render/tex (-> derivation :steps first :from)))
-     (apply clerk/col (map-indexed step-view (:steps derivation)))
-     (clerk/row (clerk/tex (str "\\boxed{" (render/tex (:answer derivation)) "}")) (badge v))
-     (area-svg f (:a figure) (:b figure)))))
+    (apply clerk/col
+           (concat
+            [(clerk/md (str "## " title "\n*" section "*"))
+             (clerk/tex (render/tex (-> derivation :steps first :from)))
+             (steps-view derivation)
+             (clerk/row (clerk/tex (str "\\boxed{" (render/tex (:answer derivation)) "}")) (badge v))]
+            (when (seq alternatives)
+              (cons (clerk/md (str "**Other pathways** (" (count alternatives) "), each reaching the same answer:"))
+                    (map pathway-view alternatives)))
+            [(area-svg f (:a figure) (:b figure))]))))
 
 ;; ## The problems
 ^{:nextjournal.clerk/visibility {:result :show}}

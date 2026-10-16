@@ -79,6 +79,11 @@
 (defmethod phrase :verify [s]
   [(text "Check: differentiating gives back the integrand, ") (math (:to s))])
 
+(defmethod phrase :cover-up [s]
+  (let [{:keys [factor root rest]} (:bindings s)]
+    [(text "Cover the factor ") (math factor) (text " and set ") (math 'x) (text " = ") (math root)
+     (text " in what is left, ") (math rest) (text ": ") (math (:to s))]))
+
 (defn parts
   "The parts a renderer shows for `s`: its own :text when it has one."
   [s]
