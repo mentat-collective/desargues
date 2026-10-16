@@ -143,7 +143,10 @@
           (fn [{:keys [kind f var] :as g}]
             (when (= :integral kind)
               (let [[p q] (ratio-parts f) num (coefficients p var) den (coefficients q var)]
-                (when (and num den (>= (count den) 3))
+                ;; a denominator of degree >= 2, or an improper fraction
+                ;; (deg num >= deg den), which division reduces first
+                (when (and num den (>= (count den) 2)
+                           (or (>= (count den) 3) (>= (count num) (count den))))
                   (when-let [terms (decompose num den var)]
                     (when (> (count terms) 1)
                       [(t/move {:rule :integral/partial-fractions :cost 2
