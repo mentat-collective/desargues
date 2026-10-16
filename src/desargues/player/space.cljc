@@ -50,13 +50,13 @@
   {:target [0.0 0.0 0.0] :distance 12.0 :yaw -1.0 :pitch 0.45 :projection :perspective})
 
 (def near
-  "Primitives with a vertex closer than this (scene units) to the eye are culled."
-  0.05)
+  "Primitives with a vertex closer than this (scene units) to the eye are culled." 0.05)
 
+(declare primitives)
 (defn three-d-shape?
-  "A shape of one of the 3D kinds."
+  "A shape of a 3D kind: one of shape-kinds, or any kind with a `primitives` method (OCP)."
   [s]
-  (contains? shape-kinds (:node s)))
+  (let [k (:node s)] (or (contains? shape-kinds k) (contains? (methods primitives) k))))
 
 (defn three-d?
   "A frame carrying a camera or any 3D shape."

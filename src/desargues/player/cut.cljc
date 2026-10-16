@@ -100,7 +100,9 @@
     [(mapv #(reduce min %) cols) (mapv #(reduce max %) cols)]))
 
 (defn- boxes-overlap? [[lo1 hi1] [lo2 hi2]]
-  (every? true? (map #(and (<= %1 %4) (<= %3 %2)) lo1 hi1 lo2 hi2)))
+  (and (<= (lo1 0) (hi2 0)) (<= (lo2 0) (hi1 0))
+       (<= (lo1 1) (hi2 1)) (<= (lo2 1) (hi1 1))
+       (<= (lo1 2) (hi2 2)) (<= (lo2 2) (hi1 2))))
 
 (defn cutting-planes
   "{index [plane ...]}: for every polygon of `faces` that passes through
@@ -109,22 +111,27 @@
   [faces]
   (let [faces (vec faces)
         bs    (mapv bounds faces)
-        order (vec (sort-by #(get-in bs [% 0 0]) (range (count faces))))]
+        x0    (mapv #((first %) 0) bs)
+        x1    (mapv #((second %) 0) bs)
+        order (vec (sort-by x0 (range (count faces))))
+        n     (count order)]
     (reduce
      (fn [acc k]
-       (let [i (order k)]
-         (reduce (fn [acc j]
-                   (if (and (boxes-overlap? (bs i) (bs j))
-                            (faces-intersect? (faces i) (faces j)))
-                     (-> acc
-                         (update i (fnil conj []) (plane-of (faces j)))
-                         (update j (fnil conj []) (plane-of (faces i))))
-                     acc))
-                 acc
-                 (take-while #(<= (get-in bs [% 0 0]) (get-in bs [i 1 0]))
-                             (map order (range (inc k) (count order)))))))
+       (let [i  (order k)
+             hi (x1 i)]
+         (loop [acc acc m (inc k)]
+           (if (or (= m n) (> (x0 (order m)) hi))
+             acc
+             (let [j (order m)]
+               (recur (if (and (boxes-overlap? (bs i) (bs j))
+                               (faces-intersect? (faces i) (faces j)))
+                        (-> acc
+                            (update i (fnil conj []) (plane-of (faces j)))
+                            (update j (fnil conj []) (plane-of (faces i))))
+                        acc)
+                      (inc m)))))))
      {}
-     (range (count order)))))
+     (range n))))
 
 (defn pieces
   "Polygon `ps` cut by every plane of `planes` it straddles."
