@@ -10,6 +10,16 @@
             [desargues.steps.model :as model]
             [emmy.env :as e]))
 
+(defn textbook
+  "A frozen Emmy expression in textbook notation before typesetting:
+   (exp u) is written e^u. Candidate for Emmy's own TeX renderer
+   (doc/emmy-upstream.md)."
+  [form]
+  (cond (and (seq? form) (= 'exp (first form)) (= 2 (count form)))
+        (list 'expt 'e (textbook (second form)))
+        (seq? form) (apply list (map textbook form))
+        :else form))
+
 (defmulti tex
   "TeX of a math form."
   (fn [form] (cond (model/form? form)              (model/form-kind form)
@@ -17,7 +27,7 @@
                    (string? form)                  :string
                    :else                           :expr)))
 
-(defmethod tex :expr [x] (e/->TeX x))
+(defmethod tex :expr [x] (e/->TeX (textbook (e/freeze x))))
 
 (defmethod tex :string [s] (str "\\text{" s "}"))
 
@@ -49,6 +59,16 @@
                     (case kind
                       :text (str "\\text{" (escape-text v) "}")
                       :math (tex v)))
+                  parts)))
+
+(defn parts->md
+  "Markdown for phrase parts: text as prose, math inline ($...$), so a long
+   step wraps like a sentence instead of overflowing a display block."
+  [parts]
+  (apply str (map (fn [[kind v]]
+                    (case kind
+                      :text (str/replace v #"([*_`\[\]$])" "\\\\$1")
+                      :math (str "$" (tex v) "$")))
                   parts)))
 
 (defn parts->text

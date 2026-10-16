@@ -21,9 +21,9 @@
 ;; same parts.
 
 (defn- step-hiccup [i s]
-  [:div {:style {:display "flex" :gap "0.8em" :align-items "baseline" :margin "0.35em 0"}}
+  [:div {:style {:display "flex" :gap "0.8em" :align-items "baseline" :margin "0.2em 0"}}
    [:span {:style {:color "#888" :min-width "1.6em" :font-family "monospace"}} (str (inc i) ".")]
-   [:div (clerk/tex (render/parts->tex (phrase/parts s)))]])
+   [:div {:style {:flex "1" :min-width "0"}} (clerk/md (render/parts->md (phrase/parts s)))]])
 
 (defn- step-view [i s] (clerk/html (step-hiccup i s)))
 
