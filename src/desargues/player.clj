@@ -38,8 +38,12 @@
 
 (defn- source-for [{:keys [source-fn params]}] (source-fn params))
 
-(defn- present! [{:keys [host state]}]
-  (p/-present! host (session/current-frame (:session @state))))
+(defn- present!
+  "Show the session's current frame on the host, seen through the orbited
+   camera when there is one (desargues.player.present picks the port)."
+  [{:keys [host state]}]
+  (let [{:keys [session camera]} @state]
+    (present/present! host (session/current-frame session) camera)))
 
 (defn- on-tick [player dt]
   (swap! (:state player) update :session session/tick dt)
@@ -65,25 +69,33 @@
 (declare set-params!)
 
 (defn on-pointer
-  "Feed one pointer `event` to `player`'s drag state: a drag on a shape named
-   by a drag spec in `controls` re-records the construct with the new params,
-   like a slider. Returns the player. Hosts call it through IPointer; tests
-   and the REPL call it directly with scene-unit events."
+  "Feed one pointer `event` to `player`: a drag on a shape named by a drag
+   spec in `controls` re-records the construct with the new params, like a
+   slider; on a 3D frame, a drag on empty space orbits the camera
+   (desargues.player.orbit). Returns the player. Hosts call it through
+   IPointer; tests and the REPL call it directly with scene-unit events."
   [player controls event]
-  (let [{:keys [drag params session]} @(:state player)
+  (let [{:keys [drag params session camera orbit]} @(:state player)
         f   (session/current-frame session)
         out (drag/pointer drag controls f params event)]
     (swap! (:state player) assoc :drag (:drag out))
     (when-let [ps (:params out)]
       (set-params! player ps))
+    (when (and (nil? (:drag out)) (space/three-d? f))
+      (let [o (orbit/pointer orbit (or camera (space/camera f)) event)]
+        (swap! (:state player) assoc :orbit (:orbit o))
+        (when-let [cam (:camera o)]
+          (swap! (:state player) assoc :camera cam)
+          (present! player))))
     player))
 
 (defn- bind-pointer!
-  "Wire the host's pointer to the drag specs in `controls`, if the host takes
-   pointer input (ISP) and any spec is draggable."
+  "Wire the host's pointer to the drag specs in `controls` and, for a 3D
+   source, to the orbit, if the host takes pointer input (ISP)."
   [player controls]
   (when (and (satisfies? p/IPointer (:host player))
-             (some drag/drag-spec? controls))
+             (or (some drag/drag-spec? controls)
+                 (space/three-d? (session/current-frame (:session @(:state player))))))
     (p/-on-pointer! (:host player) (fn [ev] (on-pointer player controls ev)))))
 
 (defn open-source!

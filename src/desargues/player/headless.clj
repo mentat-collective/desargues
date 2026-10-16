@@ -32,7 +32,8 @@
             [clojure.string :as str]
             [desargues.player.frame :as frame]
             [desargues.player.protocols :as p]
-            [desargues.player.svg-path :as svg-path])
+            [desargues.player.svg-path :as svg-path]
+            [desargues.player.space :as space])
   (:import [java.awt AlphaComposite BasicStroke Color Font Graphics2D RenderingHints Shape]
            [java.awt.geom AffineTransform Arc2D Arc2D$Double Ellipse2D$Double
             Line2D$Double Path2D$Double RoundRectangle2D$Double]
@@ -311,9 +312,11 @@
 (defn paint-frame!
   "Paint Frame `f` onto BufferedImage `img`: the frame's :background
    (palette keyword or CSS colour, default black), then each visible shape
-   in draw order at its :opacity. Returns `img`."
+   in draw order at its :opacity. A 3D frame (desargues.player.space) is
+   projected to 2D first, so this 2D host renders it too. Returns `img`."
   ^BufferedImage [^BufferedImage img f]
-  (let [g  (.createGraphics img)
+  (let [f  (space/->2d f)
+        g  (.createGraphics img)
         w  (.getWidth img)
         h  (.getHeight img)
         vp (frame/viewport w h)]
