@@ -25,12 +25,19 @@
    desargues.player.protocols/ISpace (ISP: 2D hosts are untouched). Every
    other host is handed `->2d` of the frame: the 3D shapes become ordinary 2D
    shapes (closed :path faces, :line segments, :dot points, :text labels),
-   depth sorted back to front (painter's algorithm), so golden images, the
-   headless PNG host and the browser canvas render 3D frames unchanged.
-   2D shapes in a 3D frame are an overlay drawn after the 3D content.
+   depth sorted back to front (painter's algorithm, with faces that pass
+   through each other cut apart first), so golden images, the headless PNG
+   host and the browser canvas render 3D frames unchanged. 2D shapes in a 3D
+   frame are an overlay drawn after the 3D content.
+
+   `unproject` inverts `project`: a scene point becomes the world ray it
+   shows, and `ray-plane` meets that ray with a plane, which is how a point
+   is dragged in space (desargues.player.drag).
 
    Host-free .cljc: no interop, no reader conditionals."
-  (:require [desargues.player.frame :as frame]))
+  (:require [desargues.player.cut :as cut]
+            [desargues.player.frame :as frame]
+            [desargues.player.vec3 :as vec3]))
 
 ;; ── Vocabulary ─────────────────────────────────────────────────────────────
 
@@ -66,19 +73,15 @@
   [f cam]
   (if cam (assoc f :camera (merge (camera f) cam)) f))
 
-;; ── Vector math ────────────────────────────────────────────────────────────
+;; ── Vector math (desargues.player.vec3, re-exported) ────────────────────────
 
-(defn v+ [a b] (mapv + a b))
-(defn v- [a b] (mapv - a b))
-(defn v* [k a] (mapv #(* (double k) (double %)) a))
-(defn dot3 [[a b c] [x y z]] (+ (* a x) (* b y) (* c z)))
-(defn cross [[a b c] [x y z]] [(- (* b z) (* c y)) (- (* c x) (* a z)) (- (* a y) (* b x))])
-(defn norm [a] (Math/sqrt (double (dot3 a a))))
-
-(defn unit
-  "`a` scaled to length 1 (or `a` itself when it has none)."
-  [a]
-  (let [n (norm a)] (if (zero? n) a (v* (/ 1.0 n) a))))
+(def v+ vec3/v+)
+(def v- vec3/v-)
+(def v* vec3/v*)
+(def dot3 vec3/dot3)
+(def cross vec3/cross)
+(def norm vec3/norm)
+(def unit vec3/unit)
 
 ;; ── Camera and projection ──────────────────────────────────────────────────
 
@@ -117,6 +120,33 @@
        {:at [x y] :depth z :scale 1.0}
        (let [k (/ (double (:distance cam)) (max near z))]
          {:at [(* k x) (* k y)] :depth z :scale k})))))
+
+;; ── Unprojection (scene point -> world ray) ─────────────────────────────────
+
+(defn unproject
+  "The world ray {:origin :dir} of everything camera `cam` (or a precomputed
+   basis `b`) shows at scene point [sx sy]; the inverse of `project`. Under
+   perspective the ray leaves the eye through the scene point on the target
+   plane (origin eye, dir along sx right + sy up + distance forward); under
+   orthographic it leaves the eye's plane at sx right + sy up and runs along
+   forward. :dir has length 1."
+  ([cam at] (unproject cam (basis cam) at))
+  ([cam {:keys [eye right up forward]} [sx sy]]
+   (let [cam  (merge default-camera cam)
+         side (v+ (v* sx right) (v* sy up))]
+     (if (= :orthographic (:projection cam))
+       {:origin (v+ eye side) :dir forward}
+       {:origin eye :dir (unit (v+ side (v* (:distance cam) forward)))}))))
+
+(defn ray-plane
+  "Where ray {:origin :dir} meets plane {:point :normal}, or nil when the ray
+   runs parallel to the plane or meets it behind its origin."
+  [{:keys [origin dir]} {:keys [point normal]}]
+  (let [den (double (dot3 normal dir))]
+    (when (> (Math/abs den) 1e-12)
+      (let [t (/ (double (dot3 normal (v- point origin))) den)]
+        (when (>= t 0.0)
+          (v+ origin (v* t dir)))))))
 
 ;; ── Builders (pure data) ──────────────────────────────────────────────────
 
@@ -263,7 +293,9 @@
 
 (defmulti primitives
   "The 2D primitives of 3D shape `s` under camera `cam` and basis `b`: 2D
-   shapes (desargues.player.frame kinds) each with a :depth for sorting.
+   shapes (desargues.player.frame kinds) each with a :depth for sorting. A
+   face also carries its :world vertices, so faces that pass through each
+   other can be cut apart before sorting (`split-intersecting`).
    One method per 3D kind (OCP)."
   (fn [_cam _b s] (:node s)))
 
@@ -295,7 +327,8 @@
              {:node :path :points (mapv :at ps) :opts {:closed? true}
               :fill {:color (shade color lit) :opacity alpha}
               :stroke (if wire {:color wire :width 1} {:color nil})
-              :draw 1.0 :depth (mean (map :depth ps))}))))
+              :draw 1.0 :depth (mean (map :depth ps))
+              :world (mapv #(mapv double (vertices %)) face)}))))
 
 (def ^:private line-bias
   "Lines sort this much nearer (scene units) than faces at the same depth, so
@@ -344,10 +377,20 @@
          (merge (carry s) {:node :text :text label :at at :draw 1.0 :depth (- depth line-bias)
                            :opts {:font-size 30 :color color}}))))))
 
+(defn split-intersecting
+  "Primitives `prims` (as `primitives` makes them under camera `cam` and
+   basis `b`) with faces that pass through each other cut apart along their
+   common line (desargues.player.cut), so a depth sort orders the pieces."
+  [cam b prims]
+  (cut/split-intersecting #(let [q (project cam b %)] (when (> (double (:depth q)) near) q))
+                          prims))
+
 (defn ->2d
   "Frame `f` with its 3D shapes projected to 2D primitives, back to front,
-   followed by its 2D shapes in their own order (an overlay). A frame with no
-   3D content is returned unchanged; the :camera is dropped from the result."
+   followed by its 2D shapes in their own order (an overlay). Faces that pass
+   through each other are cut apart first (`split-intersecting`). A frame
+   with no 3D content is returned unchanged; the :camera is dropped from the
+   result."
   [f]
   (if-not (three-d? f)
     f
@@ -356,8 +399,9 @@
           shown (filter #(pos? (double (:opacity % 0.0))) (:shapes f))
           prims (->> (filter three-d-shape? shown)
                      (mapcat #(primitives cam b %))
+                     (split-intersecting cam b)
                      (sort-by :depth >)
-                     (map #(dissoc % :depth)))]
+                     (map #(dissoc % :depth :world)))]
       (-> f
           (dissoc :camera)
           (assoc :shapes (vec (concat prims (remove three-d-shape? (:shapes f)))))))))
