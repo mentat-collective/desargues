@@ -31,8 +31,17 @@
   (player/seek! p 4.0)
   (player/play! p)
 
-  ;; 4. Integrate on raster instead of the JVM RK4 (needs the :dynamics alias).
-  (player/set-param! p :solver :raster)
+  ;; 4. Integrate on raster instead of the JVM RK4 (needs the :dynamics alias):
+  ;;    flip the "raster solver" row in the panel, or from the REPL:
+  (player/set-param! p :raster 1.0)
+  (player/set-param! p :solver :raster)  ; an explicit :solver wins over the row
+
+  ;; 4b. The same player, native: desargues-native (cljrs, tiny-skia, winit)
+  ;;     implements the same ports. Build once: cargo build --release in native/.
+  ;;     (require '[desargues.player.native :as native])
+  ;;     (def n (player/open! (native/host) demos/pendulum
+  ;;                          {:params {:raster 1.0} :controls demos/pendulum-controls}))
+  ;;     (player/close! n)
 
   ;; 5. Look inside: the scene graph is plain EDN, the frame at t is plain data.
   (def g (player/record "Pendulum" (demos/pendulum (player/params p))))
