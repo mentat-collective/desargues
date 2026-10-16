@@ -17,7 +17,7 @@ and puts two probe-only shims first (`dev/cljw/shim/`).
 | namespace | `-cp src` | + jars + shims | decisive error |
 |---|---|---|---|
 | `desargues.scene.protocols`, `scene.data`, `scene`, `layout.core` | ok | ok | |
-| `desargues.videos.physics` (RK4, `TrajectorySolver`) | ok | ok | loads, but computes the wrong numbers (see below) |
+| `desargues.physics` (RK4, `TrajectorySolver`; measured as `desargues.videos.physics`, since moved) | ok | ok | loads, but computes the wrong numbers (see below) |
 | `desargues.domain.number-theory(-services)` | FAIL / ok | ok | `typed.clojure` missing; with the real runtime: `Unable to resolve symbol: 'clojure.lang.RT'` |
 | `desargues.domain.protocols` | FAIL | ok with the typed shim | as above |
 | `desargues.domain.math`, `math-expression`, `services` | FAIL | FAIL | Emmy |

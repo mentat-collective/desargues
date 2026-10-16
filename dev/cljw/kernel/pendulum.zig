@@ -1,5 +1,5 @@
 //! Damped-pendulum RK4 kernel for cljw's core-module FFI (wasm/load + wasm/call).
-//! Same model and stepping as desargues.videos.physics (Pendulum + RK4Integrator):
+//! Same model and stepping as desargues.physics (Pendulum + RK4Integrator):
 //!   theta' = omega,  omega' = -(g/L) sin(theta) - mu*omega
 //! Samples (theta, omega) every `every` steps into a guest-owned f64 buffer.
 //!
