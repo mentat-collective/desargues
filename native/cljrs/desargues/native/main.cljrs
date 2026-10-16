@@ -4,6 +4,8 @@
      play <graph.edn> [secs]   play a recorded scene graph natively: the pure
                                player strata (graph-source, session, frame)
                                run on cljrs, the NativeHost shows them.
+                               DESARGUES_NATIVE_SNAPSHOT=<png> snapshots the
+                               stage when playback stops.
      snapshot <graph.edn> <t> <w> <h> <out.png>
                                paint the frame at t offscreen to a PNG (the
                                golden comparison against the headless host).
@@ -36,20 +38,19 @@
   "Play graph file `path` in a native window for `secs` (default: until the
    window closes). The player loop here is session + ports only."
   [path secs]
-  (let [src  (gs/graph-source (read-graph path))
-        h    (host/host)
-        st   (atom (session/play (session/session src)))
-        frames (atom 0)]
+  (let [graph (read-graph path)
+        src   (gs/graph-source graph)
+        h     (host/host)
+        st    (atom (session/play (session/session src)))]
     (p/-show! h {:title "desargues (native)" :w 1280 :h 720})
     (p/-on-tick! h (fn [dt]
                      (swap! st session/tick dt)
-                     (swap! frames inc)
                      (p/-present! h (session/current-frame @st))))
     (p/-present! h (session/current-frame @st))
-    (let [t0 (sys/getenv "DESARGUES_NATIVE_SNAPSHOT")
-          n (host/run! h {:until (fn [_] (and secs (>= (:t @st) secs)))})]
-      (when t0 (p/-snapshot! h t0))
-      (emit! {:ev :played :steps (count (:steps (:graph src))) :ticks n
+    (let [n (host/run! h {:until (fn [_] (and secs (>= (:t @st) secs)))})]
+      (when-let [png (sys/getenv "DESARGUES_NATIVE_SNAPSHOT")] (p/-snapshot! h png))
+      (emit! {:ev :played :steps (count (:steps graph)) :ticks n
+              :window? (boolean (:window? @(:state h)))
               :t (:t @st) :duration (p/-duration src)})
       (p/-close! h))))
 
@@ -58,12 +59,14 @@
 (defn snapshot
   "Frame at `t` of graph file `path` painted on a `w` x `h` canvas, to `out`."
   [path t w h out]
-  (let [src (gs/graph-source (read-graph path))
-        f   (p/-frame-at src (min (double t) (double (p/-duration src))))
-        c   (gfx/canvas w h)]
+  (let [graph (read-graph path)
+        src   (gs/graph-source graph)
+        f     (p/-frame-at src (min (double t) (double (p/-duration src))))
+        c     (gfx/canvas w h)]
     (paint/paint-frame! c w h f)
     (gfx/save-png! c out)
-    (emit! {:ev :snapshot :path out :shapes (count (:shapes f))})))
+    (emit! {:ev :snapshot :path out :steps (count (:steps graph))
+            :shapes (count (:shapes f)) :duration (p/-duration src)})))
 
 ;; ── serve ────────────────────────────────────────────────────────────────
 
