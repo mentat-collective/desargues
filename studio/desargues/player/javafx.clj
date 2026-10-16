@@ -225,13 +225,31 @@
 
 (def ^:private tex-image (memoize tex-image*))
 
+(defn- tex-hex
+  "#RRGGBB of a :tex shape's colour: a palette keyword or a #RRGGBB string."
+  [s]
+  (let [c (or (get-in s [:opts :color]) :white)]
+    (if (and (string? c) (re-matches #"#[0-9a-fA-F]{6}" c))
+      c
+      (get frame/palette c (frame/palette :white)))))
+
 (defmethod paint! :tex [^GraphicsContext gc vp s]
+  ;; :opts :anchor "start" puts the left edge at :at; :opts :write clips the
+  ;; image to its :draw fraction, left to right (chalk being written).
   (let [[cx cy] (center vp s)
         px  (Math/rint (* (emphasis-scale s) (double (get-in s [:opts :font-size] 48))
-                          (/ (double (:scale vp)) 120.0)))
-        hex (get frame/palette (or (get-in s [:opts :color]) :white) (frame/palette :white))]
-    (if-let [^WritableImage img (tex-image (str (:tex s)) px hex)]
-      (.drawImage gc img (- cx (/ (.getWidth img) 2.0)) (- cy (/ (.getHeight img) 2.0)))
+                          (/ (double (:scale vp)) 120.0)))]
+    (if-let [^WritableImage img (tex-image (str (:tex s)) px (tex-hex s))]
+      (let [w  (.getWidth img)
+            h  (.getHeight img)
+            x  (if (= "start" (get-in s [:opts :anchor])) cx (- cx (/ w 2.0)))
+            y  (- cy (/ h 2.0))
+            wf (if (get-in s [:opts :write])
+                 (max 0.0 (min 1.0 (double (:draw s 1.0))))
+                 1.0)
+            sw (Math/ceil (* wf w))]
+        (when (pos? sw)
+          (.drawImage gc img 0.0 0.0 sw h x y sw h)))
       (paint-text! gc vp s (str (:tex s))))))
 
 (defn- dash-px
