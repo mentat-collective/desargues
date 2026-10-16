@@ -27,7 +27,8 @@
   (:require [desargues.player.frame :as frame]
             [desargues.player.javafx :as fx]
             [desargues.player.protocols :as p]
-            [desargues.player.space :as space])
+            [desargues.player.space :as space]
+            [desargues.player.space-extras :as sx])
   (:import [javafx.application Platform]
            [javafx.geometry Point3D]
            [javafx.scene AmbientLight Group Node PerspectiveCamera PointLight
@@ -103,7 +104,9 @@
   "JavaFX nodes for 3D shape `s` under basis `b`, `k` pixels per unit."
   (fn [_b _k s] (:node s)))
 
-(defmethod node! :default [_ _ _] [])
+(defmethod node! :default [b k s]
+  ;; a composite kind (desargues.player.space-extras) is drawn as its expansion
+  (mapcat #(node! b k %) (sx/expand s)))
 
 (defn- triangle-mesh ^TriangleMesh [b k {:keys [vertices faces]}]
   (let [mesh (TriangleMesh.)
