@@ -73,6 +73,7 @@ fn key_name(k: &Key) -> Option<String> {
     match k {
         Key::Character(s) => Some(s.to_string()),
         Key::Named(NamedKey::Space) => Some(" ".into()),
+        Key::Named(NamedKey::Super) => Some("Meta".into()),
         Key::Named(n) => Some(format!("{n:?}")),
         _ => None,
     }
