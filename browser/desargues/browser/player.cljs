@@ -1,8 +1,10 @@
 (ns desargues.browser.player
   "BOUNDARY / composition stratum: the stage in a browser. The ClojureScript
-   twin of desargues.player (which is .clj because it records through the JVM
-   scene facade): plays any desargues.player.protocols/ISource in any host
-   implementing the host ports, with the same pure session underneath.
+   twin of desargues.player: plays any desargues.player.protocols/ISource in
+   any host implementing the host ports, with the same pure session
+   underneath. Constructs record through the same facade and RecordingBackend
+   as on the JVM (desargues.scene.record), so a construct yields the same
+   scene graph here as there.
 
    Entry points:
      open-source!  a source-fn (fn [params] ISource): anything at all.
@@ -10,17 +12,17 @@
                    `clojure -M:browser-record` or desargues.player/record), so
                    viewing needs no JVM.
      open!         a parametric construct (fn [params] (fn [stage] ...)) over
-                   desargues.browser.stage, re-recorded in the page on every
+                   the desargues.scene facade, re-recorded in the page on every
                    parameter change.
      load-graph!   fetch an EDN scene graph by URL, then open-graph!.
 
    REPL surface: play!, pause!, seek!, set-param!, params, snapshot!, close!.
    One atom per player is the only state."
   (:require [cljs.reader :as reader]
-            [desargues.browser.stage :as stage]
             [desargues.player.graph-source :as graph-source]
             [desargues.player.protocols :as p]
-            [desargues.player.session :as session]))
+            [desargues.player.session :as session]
+            [desargues.scene.record :as recorder]))
 
 (defn- source-for [{:keys [source-fn params]}] (source-fn params))
 
@@ -61,11 +63,11 @@
 (defn construct-source
   "A source-fn re-recording parametric construct `construct-fn` in the page."
   [construct-fn]
-  (fn [params] (graph-source/graph-source (stage/record (construct-fn params)))))
+  (fn [params] (graph-source/graph-source (recorder/record (construct-fn params)))))
 
 (defn open!
   "Play parametric construct `construct-fn` (fn [params] (fn [stage] ...))
-   over desargues.browser.stage in `host`. Same opts as open-source!."
+   over the desargues.scene facade in `host`. Same opts as open-source!."
   [host construct-fn opts]
   (open-source! host (construct-source construct-fn) opts))
 

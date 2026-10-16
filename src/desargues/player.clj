@@ -19,15 +19,14 @@
   (:require [desargues.player.graph-source :as graph-source]
             [desargues.player.protocols :as p]
             [desargues.player.session :as session]
-            [desargues.scene :as scene]
-            [desargues.scene.data :as data]
+            [desargues.scene.record :as recorder]
             [desargues.player.drag :as drag]))
 
 (defn record
-  "The EDN scene graph of construct `construct` (fn [stage]), named `scene-name`."
+  "The EDN scene graph of construct `construct` (fn [stage]), named `scene-name`
+   (desargues.scene.record, the recorder every host shares)."
   [scene-name construct]
-  (scene/with-backend (data/recording-backend)
-    (scene/render! scene-name construct)))
+  (recorder/record scene-name construct))
 
 (defn construct-source
   "A source-fn playing parametric construct `construct-fn`

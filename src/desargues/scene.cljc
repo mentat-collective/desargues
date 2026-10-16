@@ -1,21 +1,23 @@
 (ns desargues.scene
-  "Backend-neutral animation FACADE — the single DIP seam a presentation depends
-   on.
+  "Backend-neutral animation FACADE: the single DIP seam a presentation depends
+   on. Host-free .cljc: the same facade runs on the JVM and in a browser.
 
    A consumer (e.g. an econ money-creation animation) requires ONLY this
    namespace plus its own domain code. It never sees Manim, libpython, a Python
-   object, or a rendering backend. It speaks in semantic terms — make a `dot`,
-   `glide` it to a point, `play!` it on a stage, `render!` the scene — and colors
-   are keywords (:gold, :teal). Which backend realizes those calls (Manim today,
-   a browser/raster backend tomorrow) is decided HERE, behind the facade, so
+   object, or a rendering backend. It speaks in semantic terms (make a `dot`,
+   `glide` it to a point, `play!` it on a stage, `render!` the scene) and colors
+   are keywords (:gold, :teal). Which backend realizes those calls (Manim, the
+   RecordingBackend, a browser recorder) is decided HERE, behind the facade, so
    swapping it changes nothing for any consumer (Dependency Inversion + OCP).
 
    Backend selection:
-     - default: the Manim backend, lazily required on first use (so merely
-       loading this facade pulls in NO Python).
+     - default on the JVM: the Manim backend, lazily required on first use (so
+       merely loading this facade pulls in NO Python). Other hosts have no
+       implicit default.
      - override globally: (set-backend! my-backend)
      - override dynamically: (with-backend my-backend (render! ...))"
-  (:require [desargues.scene.protocols :as p]))
+  (:require [desargues.scene.protocols :as p])
+  #?(:cljs (:require-macros [desargues.scene])))
 
 ;; ============================================================================
 ;; Backend selection (the inversion point)
@@ -27,10 +29,14 @@
 
 (defn- lazy-default
   "Require + construct the Manim backend on demand. Kept out of this ns's
-   :require so the facade itself stays Python-free."
+   :require so the facade itself stays Python-free. The Manim backend is
+   JVM-only: on any other host there is no implicit default, so bind one with
+   `with-backend` or install it with `set-backend!`."
   []
-  (require 'desargues.scene.manim)
-  ((resolve 'desargues.scene.manim/manim-backend)))
+  #?(:clj  (do (require 'desargues.scene.manim)
+               ((resolve 'desargues.scene.manim/manim-backend)))
+     :cljs (throw (ex-info "desargues.scene: no default backend on this host; use with-backend or set-backend!"
+                           {:host :cljs}))))
 
 (defonce ^:private default-backend* (delay (lazy-default)))
 
@@ -43,12 +49,14 @@
 (defn set-backend!
   "Install `b` as the global default backend."
   [b]
-  (alter-var-root #'*backend* (constantly b)))
+  #?(:clj  (alter-var-root #'*backend* (constantly b))
+     :cljs (set! *backend* b)))
 
-(defmacro with-backend
-  "Evaluate body with `b` as the active backend."
-  [b & body]
-  `(binding [*backend* ~b] ~@body))
+#?(:clj
+   (defmacro with-backend
+     "Evaluate body with `b` as the active backend."
+     [b & body]
+     `(binding [desargues.scene/*backend* ~b] ~@body)))
 
 ;; ============================================================================
 ;; Lifecycle
