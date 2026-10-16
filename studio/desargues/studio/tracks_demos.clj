@@ -49,6 +49,26 @@
                           :params params
                           :controls controls})))
 
+(defn -main
+  "Snapshot every lesson to `out-dir` (default doc/tracks): opens each in a
+   JavaFX window, seeks to t = 3 s, writes <lesson>.png, closes, exits.
+     clojure -M:studio -m desargues.studio.tracks-demos [out-dir]"
+  [& [out-dir]]
+  (let [out-dir (or out-dir "doc/tracks")
+        host-fn (requiring-resolve 'desargues.player.javafx/host)]
+    (.mkdirs (java.io.File. ^String out-dir))
+    (doseq [k (keys demos)]
+      (let [p (open-lesson! (host-fn) k {})]
+        (player/pause! p)
+        (player/seek! p 3.0)
+        (Thread/sleep 1500)
+        (let [path (str out-dir "/" (name k) ".png")]
+          (player/snapshot! p path)
+          (println "wrote" path))
+        (player/close! p)))
+    (shutdown-agents)
+    (System/exit 0)))
+
 (comment
   (require '[desargues.player.javafx :as fx])
   (def p (open-lesson! (fx/host) :pendulum {}))
