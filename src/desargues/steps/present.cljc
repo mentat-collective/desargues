@@ -44,11 +44,53 @@
   "Rewrites applied to every frozen math expression, in order."
   [exp->e log->ln])
 
+(defn- right-at
+  "Index of the \\right that closes the \\left starting at index i of TeX
+   string s (nil when unbalanced)."
+  [s i]
+  (loop [j (+ i 5) depth 1]
+    (let [l (str/index-of s "\\left" j)
+          r (str/index-of s "\\right" j)]
+      (cond (nil? r)             nil
+            (and l (< l r))      (recur (+ l 5) (inc depth))
+            (= depth 1)          r
+            :else                (recur (+ r 6) (dec depth))))))
+
+(defn- rewrite-groups
+  "Rewrite each head\\left( inner \\right) in TeX string s to (f inner);
+   f answers nil to leave a group as it is."
+  [s head f]
+  (loop [s s from 0]
+    (if-let [k (str/index-of s (str head "\\left(") from)]
+      (let [open (+ k (count head))
+            r    (right-at s open)
+            rep  (when (and r (= \) (get s (+ r 6)))) (f (subs s (+ open 6) r)))]
+        (if rep
+          (recur (str (subs s 0 k) rep (subs s (+ r 7))) k)
+          (recur s (inc k))))
+      s)))
+
+(defn abs-bars
+  "TeX fix: Emmy writes |u| as \\mathsf{abs}(u); set it between bars."
+  [s]
+  (rewrite-groups s "\\mathsf{abs}" #(str "\\left|" % "\\right|")))
+
+(defn ln-of-bars
+  "TeX fix: \\ln(|u|) written \\ln|u|, as a textbook does; the bars already
+   delimit the argument."
+  [s]
+  (rewrite-groups s "\\ln"
+                  (fn [inner]
+                    (when (and (str/starts-with? inner "\\left|")
+                               (= (right-at inner 0) (- (count inner) 7)))
+                      (str "\\ln" inner)))))
+
 (def default-tex-fixes
-  "Rewrites of the TeX string Emmy produces: operators Emmy does not know
-   come out sans-serif (\\mathsf{ln}); textbooks set them upright (\\ln).
-   Candidate for Emmy's renderer (doc/emmy-upstream.md)."
-  [#(clojure.string/replace % "\\mathsf{ln}" "\\ln")])
+  "Rewrites of the TeX string Emmy produces, in order: operators Emmy does
+   not know come out sans-serif (\\mathsf{ln}, \\mathsf{abs}); textbooks
+   set ln upright (\\ln) and |u| between bars, and drop the parentheses of
+   ln|u|. Candidates for Emmy's renderer (doc/emmy-upstream.md)."
+  [#(str/replace % "\\mathsf{ln}" "\\ln") abs-bars ln-of-bars])
 
 (defn- tex-of [form]
   (reduce (fn [s f] (f s)) (render/tex form) default-tex-fixes))

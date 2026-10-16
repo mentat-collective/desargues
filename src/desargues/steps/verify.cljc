@@ -13,12 +13,21 @@
 
 (defn- close? [a b] (< (Math/abs (- (double a) (double b))) (* 1e-6 (max 1.0 (Math/abs (double b))))))
 
+(defn- symbolic-residual
+  "simplify (F' - f) at the symbol x, or :undecided when Emmy cannot
+   differentiate F symbolically: its autodiff abs needs the sign of the
+   argument, so ln|u| has no symbolic derivative at a bare x."
+  [dF f]
+  (try (e/simplify (e/- (dF 'x) (f 'x)))
+       (catch #?(:clj Exception :cljs :default) _ :undecided)))
+
 (defn antiderivative
   "Verdict for F as an antiderivative of f (both one-argument functions),
-   checked at `points`."
+   checked at `points`. With logs of absolute values, put points on every
+   interval of the domain: the check then covers each branch."
   [f F points]
   (let [dF       (e/D F)
-        residual (e/simplify (e/- (dF 'x) (f 'x)))
+        residual (symbolic-residual dF f)
         numeric  (every? (fn [x] (close? (dF x) (f x))) points)]
     {:symbolic? (and (number? residual) (zero? residual))
      :numeric?  numeric
