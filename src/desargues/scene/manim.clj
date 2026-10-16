@@ -115,6 +115,9 @@
   (-fill! [_ obj color opts]     (kw-apply man-mob/set-fill   [obj (resolve-const color)] (resolve-opts opts)))
   (-stroke! [_ obj opts]         (kw-apply man-mob/set-stroke [obj]                       (resolve-opts opts)))
 
+  p/ITex
+  (-tex [_ s opts]               (kw-apply man-mob/math-tex [s] (resolve-opts opts)))
+
   p/IAnimations
   (-appear [_ obj opts]          (kw-apply man-anim/fade-in  [obj] (resolve-opts opts)))
   (-vanish [_ obj opts]          (kw-apply man-anim/fade-out [obj] (resolve-opts opts)))
