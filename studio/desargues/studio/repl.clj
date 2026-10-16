@@ -9,7 +9,8 @@
             [desargues.player.javafx :as fx]
             [desargues.player.session :as session]
             [desargues.player.timeline :as timeline]
-            [desargues.studio.demos :as demos]))
+            [desargues.studio.demos :as demos]
+            [desargues.studio.objects-demos :as od]))
 
 (comment
   ;; 1. Open a window. The host is the only toolkit-specific value here: any
@@ -40,4 +41,37 @@
 
   ;; 6. Picture to disk, then close.
   (player/snapshot! p "studio.png")
-  (player/close! p))
+  (player/close! p)
+
+  ;; 7. The math object vocabulary (desargues.objects): one demo per object,
+  ;;    each with its own sliders. Keys: :axes :plot :parametric :polar
+  ;;    :field :tangent :riemann :tex.
+  (defn open-demo [k]
+    (let [{:keys [construct controls title]} (od/demos k)]
+      (player/open! (fx/host) construct {:title (str "desargues: " title)
+                                         :scene-name (name k)
+                                         :params (od/defaults k)
+                                         :controls controls})))
+  (def q (open-demo :tangent))
+  (player/set-param! q :x0 -1.0)
+  (player/set-param! q :h 0.1)          ; the secant closes onto the tangent
+  (player/close! q)
+
+  (def q (open-demo :riemann))
+  (player/set-param! q :n 30)
+  (player/set-param! q :rule 1)         ; midpoint rule
+  (player/close! q)
+
+  (def q (open-demo :field))
+  (player/set-param! q :curl 0.0)       ; a pure source
+  (player/close! q)
+
+  (doseq [k [:axes :plot :parametric :polar :tex]]
+    (let [q (open-demo k)] (Thread/sleep 4000) (player/close! q)))
+
+  ;; The same objects build any construct, on any backend:
+  ;;   (o/add! stage (ax/axes cs {:x-label "x"}))
+  ;;   (o/sweep! stage handle #(calc/tangent cs f %) [0.0 0.5 1.0])
+  ;; and the step count matches the RecordingBackend graph the stage plays:
+  (count (:steps (player/record "Tangent" ((:construct (od/demos :tangent))
+                                          (od/defaults :tangent))))))
