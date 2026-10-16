@@ -67,3 +67,9 @@
   [{:keys [w h scale]} [x y]]
   [(+ (/ w 2.0) (* scale (double x)))
    (- (/ h 2.0) (* scale (double y)))])
+
+(defn px->scene
+  "Scene point [x y] under pixel [px py] of viewport `vp`: the inverse of ->px."
+  [{:keys [w h scale]} [px py]]
+  [(/ (- (double px) (/ w 2.0)) scale)
+   (/ (- (/ h 2.0) (double py)) scale)])
