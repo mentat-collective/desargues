@@ -1,0 +1,9 @@
+;; cljs.main build options for `clojure -M:browser` (see deps.edn :browser).
+;; Advanced compilation: one self-contained browser/public/js/main.js.
+{:main          desargues.browser.main
+ :output-to     "browser/public/js/main.js"
+ :output-dir    "target/browser"
+ :optimizations :advanced
+ :target        :browser
+ :infer-externs true
+ :pretty-print  false}

@@ -60,6 +60,18 @@
                         ;; :tex nodes paint through JLaTeXMath (plain-text fallback)
                         org.scilab.forge/jlatexmath {:mvn/version "1.0.7"}}
            :jvm-opts ["--enable-native-access=ALL-UNNAMED"]}
+  ;; `clojure -M:browser`: the stage in a browser: compiles the player .cljc
+  ;; strata, desargues.objects and the Canvas2D host (browser/) with the plain
+  ;; ClojureScript compiler into browser/public/js/main.js (no npm at build
+  ;; time). `clojure -M:browser-record` re-records the demo scene graphs the
+  ;; static page plays (browser/public/scenes/*.edn) on the JVM; viewing them
+  ;; needs no JVM. `browser/check.sh` serves the page and asserts it paints.
+  :browser {:extra-paths ["browser"]
+            :extra-deps {org.clojure/clojurescript {:mvn/version "1.12.134"}}
+            :main-opts ["-m" "cljs.main" "-co" "browser/build.edn" "-c"]}
+  :browser-record {:extra-paths ["browser" "studio"]
+                   :extra-deps {org.slf4j/slf4j-nop {:mvn/version "1.7.36"}}
+                   :main-opts ["-m" "desargues.browser.record"]}
   ;; `clojure -M:test` runs every suite (cognitect test-runner; -n ns / -v var to
   ;; narrow). The Manim suites need the conda env; realize_test skips without it.
   :test {:extra-paths ["test" "dev" "bench" "site"]

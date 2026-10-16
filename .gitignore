@@ -23,3 +23,7 @@ __pycache__/*
 .clojure-mcp/
 /videos/
 /dist/
+
+# browser host: npm deps of the headless check, compiled bundle
+node_modules/
+/browser/public/js/

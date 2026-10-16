@@ -73,10 +73,20 @@
 (defn unit [v] (let [n (norm v)] (if (zero? n) [0.0 0.0] (v* (/ 1.0 n) v))))
 (defn rot90 [[a b]] [(- (double b)) (double a)])
 
+(defn- rint
+  "Math/rint (round half to even). ClojureScript's Math has no rint."
+  [x]
+  #?(:clj (Math/rint x)
+     :cljs (let [f (Math/floor x) d (- x f)]
+             (cond (< d 0.5) f
+                   (> d 0.5) (inc f)
+                   (even? f) f
+                   :else (inc f)))))
+
 (defn format-number
   "A tick label: integers without a decimal point, others with up to 2."
   [x]
   (let [x (double x)]
-    (if (== x (Math/rint x))
-      (str (long (Math/rint x)))
-      (let [s (str (/ (Math/rint (* 100.0 x)) 100.0))] s))))
+    (if (== x (rint x))
+      (str (long (rint x)))
+      (let [s (str (/ (rint (* 100.0 x)) 100.0))] s))))
