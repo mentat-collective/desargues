@@ -31,9 +31,27 @@
         (seq? form) (apply list (map exp->e form))
         :else form))
 
+(defn log->ln
+  "(log u) written ln u: Emmy's log is the natural logarithm, and a reader
+   may take a bare log for base 10."
+  [form]
+  (cond (and (seq? form) (= 'log (first form)) (= 2 (count form)))
+        (list 'ln (log->ln (second form)))
+        (seq? form) (apply list (map log->ln form))
+        :else form))
+
 (def default-notation
   "Rewrites applied to every frozen math expression, in order."
-  [exp->e])
+  [exp->e log->ln])
+
+(def default-tex-fixes
+  "Rewrites of the TeX string Emmy produces: operators Emmy does not know
+   come out sans-serif (\\mathsf{ln}); textbooks set them upright (\\ln).
+   Candidate for Emmy's renderer (doc/emmy-upstream.md)."
+  [#(clojure.string/replace % "\\mathsf{ln}" "\\ln")])
+
+(defn- tex-of [form]
+  (reduce (fn [s f] (f s)) (render/tex form) default-tex-fixes))
 
 (defn- promote-value
   "Rewrite every Emmy expression inside `v`: a bare expression, or the
@@ -58,7 +76,7 @@
 (defn ->segments
   "Phrase parts to segments: text stays text, math becomes TeX."
   [parts]
-  (mapv (fn [[kind v]] (if (= kind :math) [:tex (render/tex v)] [:text v])) parts))
+  (mapv (fn [[kind v]] (if (= kind :math) [:tex (tex-of v)] [:text v])) parts))
 
 (def ^:private joiners
   "Short connectives that belong inside a formula between two math pieces."
@@ -108,4 +126,4 @@
   ([form] (present-form form default-notation))
   ([form rewrites]
    (let [[[_ v]] ((notation rewrites) [[:math form]])]
-     (render/tex v))))
+     (tex-of v))))
