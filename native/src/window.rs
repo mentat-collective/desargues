@@ -15,8 +15,9 @@ use cljrs_interop::export;
 use cljrs_value::Value;
 use winit::application::ApplicationHandler;
 use winit::dpi::{LogicalSize, PhysicalPosition};
-use winit::event::{ElementState, MouseButton, WindowEvent};
+use winit::event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, EventLoop};
+use winit::keyboard::{Key, ModifiersState, NamedKey};
 use winit::platform::pump_events::{EventLoopExtPumpEvents, PumpStatus};
 use winit::window::{Window, WindowId};
 
@@ -31,6 +32,56 @@ struct App {
     closed: bool,
     events: Vec<String>,
     cursor: (f64, f64),
+    mods: ModifiersState,
+}
+
+// ── Raw input as EDN ────────────────────────────────────────────────────
+// Pixels are physical window pixels, which are canvas pixels (show! copies
+// the canvas 1:1 from the top-left). Units and signs stay winit's; the pure
+// desargues.player.native-input (JVM) turns these into IPointer / IKeyboard
+// events, so there is one translation and one hit test.
+
+fn mods_edn(m: ModifiersState) -> String {
+    let mut v = Vec::new();
+    if m.shift_key() {
+        v.push(":shift");
+    }
+    if m.alt_key() {
+        v.push(":alt");
+    }
+    if m.control_key() {
+        v.push(":ctrl");
+    }
+    if m.super_key() {
+        v.push(":meta");
+    }
+    format!("[{}]", v.join(" "))
+}
+
+fn button_kw(b: MouseButton) -> Option<&'static str> {
+    match b {
+        MouseButton::Left => Some(":primary"),
+        MouseButton::Middle => Some(":middle"),
+        MouseButton::Right => Some(":secondary"),
+        _ => None,
+    }
+}
+
+/// The DOM KeyboardEvent.key name of a winit logical key: winit's named keys
+/// already carry the DOM names ("ArrowLeft", "Escape"); space is " ".
+fn key_name(k: &Key) -> Option<String> {
+    match k {
+        Key::Character(s) => Some(s.to_string()),
+        Key::Named(NamedKey::Space) => Some(" ".into()),
+        Key::Named(NamedKey::Super) => Some("Meta".into()),
+        Key::Named(n) => Some(format!("{n:?}")),
+        _ => None,
+    }
+}
+
+fn elapsed_ms() -> f64 {
+    thread_local! { static T0: std::time::Instant = std::time::Instant::now(); }
+    T0.with(|t| t.elapsed().as_secs_f64() * 1000.0)
 }
 
 impl ApplicationHandler for App {
@@ -61,19 +112,40 @@ impl ApplicationHandler for App {
                 self.closed = true;
                 self.events.push("{:type :close}".into());
             }
+            WindowEvent::ModifiersChanged(m) => self.mods = m.state(),
             WindowEvent::KeyboardInput { event, .. } if event.state == ElementState::Pressed => {
-                if let Some(t) = event.text {
-                    self.events.push(format!("{{:type :key :text {:?}}}", t.to_string()));
+                if let Some(k) = key_name(&event.logical_key) {
+                    let text = event.text.map(|t| format!(" :text {:?}", t.to_string())).unwrap_or_default();
+                    self.events.push(format!("{{:type :key :key {k:?}{text} :mods {}}}", mods_edn(self.mods)));
                 }
             }
             WindowEvent::CursorMoved { position: PhysicalPosition { x, y }, .. } => {
                 self.cursor = (x, y);
-                self.events.push(format!("{{:type :move :px [{x} {y}]}}"));
+                self.events.push(format!("{{:type :move :px [{x} {y}] :mods {}}}", mods_edn(self.mods)));
             }
-            WindowEvent::MouseInput { state, button: MouseButton::Left, .. } => {
+            WindowEvent::MouseInput { state, button, .. } => {
+                if let Some(b) = button_kw(button) {
+                    let (x, y) = self.cursor;
+                    let t = if state == ElementState::Pressed { "down" } else { "up" };
+                    self.events.push(format!(
+                        "{{:type :{t} :px [{x} {y}] :button {b} :mods {} :ms {}}}",
+                        mods_edn(self.mods),
+                        elapsed_ms()
+                    ));
+                }
+            }
+            WindowEvent::MouseWheel { delta, .. } => {
                 let (x, y) = self.cursor;
-                let t = if state == ElementState::Pressed { "down" } else { "up" };
-                self.events.push(format!("{{:type :{t} :px [{x} {y}]}}"));
+                let d = match delta {
+                    MouseScrollDelta::LineDelta(_, ly) => format!(":lines {}", ly as f64),
+                    MouseScrollDelta::PixelDelta(p) => format!(":pixels {}", p.y),
+                };
+                self.events.push(format!("{{:type :wheel :px [{x} {y}] {d} :mods {}}}", mods_edn(self.mods)));
+            }
+            // Delivered by winit on macOS / iOS only; X11 has no pinch event.
+            WindowEvent::PinchGesture { delta, .. } => {
+                let (x, y) = self.cursor;
+                self.events.push(format!("{{:type :pinch :px [{x} {y}] :delta {delta}}}"));
             }
             _ => {}
         }
@@ -108,6 +180,7 @@ pub fn open_bang(args: &[Value]) -> Result<Value, String> {
     APP.with(|a| {
         *a.borrow_mut() = Some(App {
             title, w, h, window: None, surface: None, closed: false, events: Vec::new(), cursor: (0.0, 0.0),
+            mods: ModifiersState::empty(),
         })
     });
     for _ in 0..50 {
@@ -204,6 +277,5 @@ pub fn sleep_ms_bang(args: &[Value]) -> Result<Value, String> {
 /// (now-ms) -> monotonic milliseconds as a double (the IClock source).
 #[export(ns = "desargues.native.window", name = "now-ms", variadic_min = 0)]
 pub fn now_ms(_args: &[Value]) -> Result<Value, String> {
-    thread_local! { static T0: std::time::Instant = std::time::Instant::now(); }
-    Ok(Value::Double(T0.with(|t| t.elapsed().as_secs_f64() * 1000.0)))
+    Ok(Value::Double(elapsed_ms()))
 }

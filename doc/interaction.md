@@ -3,7 +3,8 @@
 Every player host feeds raw input through one pure router,
 `desargues.player.pointer/step`, which hands gestures to
 `desargues.player.navigate`. Hosts only translate their own events
-(`desargues.browser.input`, `desargues.player.javafx-input`), so a gesture does
+(`desargues.browser.input`, `desargues.player.javafx-input`,
+`desargues.player.native-input`), so a gesture does
 the same thing in every host that has the port for it.
 
 What the viewer looks through is the *look*, `{:camera :view}`:
@@ -30,17 +31,17 @@ a handle works the same at any zoom.
 
 ## Gestures and keys
 
-| Action | Browser canvas | JavaFX window (2D and 3D host) |
-|---|---|---|
-| Zoom in / out at the pointer | mouse wheel | mouse wheel (ScrollEvent) |
-| Zoom (trackpad) | pinch (the browser reports ctrl + wheel) | pinch (ZoomEvent) |
-| Zoom in / out about the middle | `+` or `=` / `-` or `_` | same keys, canvas focused |
-| Pan | shift + drag, middle or right drag, or a plain drag on empty 2D space | same |
-| Pan by key | arrow keys (the view moves that way) | same |
-| Orbit (3D) | drag on empty space | same |
-| Orbit by key (3D) | `W` `A` `S` `D`, or Alt + arrows | same |
-| Reset to the source's own view | double click, or `0` | same |
-| Drag a handle (drag specs) | drag the shape (primary button, shift allowed) | same |
+| Action | Browser canvas | JavaFX window (2D and 3D host) | Native window (cljrs, X11) |
+|---|---|---|---|
+| Zoom in / out at the pointer | mouse wheel | mouse wheel (ScrollEvent) | mouse wheel (line or pixel deltas) |
+| Zoom (trackpad) | pinch (the browser reports ctrl + wheel) | pinch (ZoomEvent) | pinch only where winit reports one (macOS); X11 has none |
+| Zoom in / out about the middle | `+` or `=` / `-` or `_` | same keys, canvas focused | same keys, window focused |
+| Pan | shift + drag, middle or right drag, or a plain drag on empty 2D space | same | same, on the stage (the slider panel keeps its own drags) |
+| Pan by key | arrow keys (the view moves that way) | same | same |
+| Orbit (3D) | drag on empty space | same | same (the host shows the frame projected to 2D) |
+| Orbit by key (3D) | `W` `A` `S` `D`, or Alt + arrows | same | same |
+| Reset to the source's own view | double click, or `0` | same | same (two primary clicks within 400 ms and 6 px) |
+| Drag a handle (drag specs) | drag the shape (primary button, shift allowed) | same | same |
 
 Priority, in `pointer/step`: a gesture (wheel, pinch, key, double click) goes
 to navigation; a pan in progress keeps the pointer; a primary press on a
@@ -54,9 +55,15 @@ they are read while the canvas has focus (a press on it takes the focus).
 A key the player uses has its default action stopped (no page scroll, no
 focus traversal). The bindings are data: `desargues.player.navigate/bindings`.
 
-Other hosts: the headless PNG host and the native (cljrs) host take no input,
-but they paint what the player presents, so the REPL calls below zoom and pan
-them too.
+In the native host, keys are read while its window has focus. Ctrl and meta
+chords are left to the desktop. The Rust side sends raw winit events in
+canvas pixels through `serve`. The JVM translates them in
+`desargues.player.native-input`: it maps pixels to scene units, hit-tests the
+frame it presented, and turns the input into wheel, pinch, double-click and
+key events. `native/README.md` gives the event schema.
+
+The headless PNG host takes no input. It paints what the player presents, so
+the REPL calls below zoom and pan it too.
 
 ## REPL API
 
