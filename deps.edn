@@ -82,6 +82,14 @@
   :browser-record {:extra-paths ["browser" "studio"]
                    :extra-deps {org.slf4j/slf4j-nop {:mvn/version "1.7.36"}}
                    :main-opts ["-m" "desargues.browser.record"]}
+  ;; `clojure -M:showcase` (or `bb showcase`): re-renders the README gallery,
+  ;; doc/showcase/*.png and *.gif, through the headless PNG host. studio/ holds
+  ;; the demo constructs (no JavaFX is loaded); JLaTeXMath typesets :tex.
+  ;; Needs ffmpeg for the GIFs.
+  :showcase {:extra-paths ["dev" "studio"]
+             :extra-deps {org.scilab.forge/jlatexmath {:mvn/version "1.0.7"}
+                          org.slf4j/slf4j-nop {:mvn/version "1.7.36"}}
+             :main-opts ["-m" "desargues.showcase"]}
   ;; `clojure -M:test` runs every suite (cognitect test-runner; -n ns / -v var to
   ;; narrow). The Manim suites need the conda env; realize_test skips without it.
   :test {:extra-paths ["test" "dev" "bench" "site" "studio"]
