@@ -15,10 +15,10 @@
    canvas, since KaTeX typesets to DOM), else plain canvas text."
   (:require [clojure.string :as str]
             [desargues.player.frame :as frame]
-            [desargues.player.hit :as hit]
             [desargues.player.protocols :as p]
             [goog.object :as gobj]
-            [desargues.player.controls :as controls]))
+            [desargues.player.controls :as controls]
+            [desargues.browser.input :as input]))
 
 ;; ── Colors and units ──────────────────────────────────────────────────────
 
@@ -420,6 +420,7 @@
              :w w :h h :dpr dpr :tex-cache (atom {})))
     this)
   (-close! [this]
+    (input/unwire! state)
     (some-> (:root @state) .remove)
     (swap! state dissoc :root :canvas :layer :controls)
     this)
@@ -458,28 +459,15 @@
 
   p/IPointer
   (-on-pointer! [this f]
-    ;; Pointer events over the stage canvas in scene units, hit-tested on the
-    ;; frame last painted (a 3D frame is already flattened by then). Moves
-    ;; are reported only while a button is held.
-    (when-let [canvas (:canvas @state)]
-      (let [send! (fn [type e]
-                    (let [{:keys [w h last-frame]} @state
-                          r  (.getBoundingClientRect canvas)
-                          px [(- (.-clientX e) (.-left r)) (- (.-clientY e) (.-top r))]
-                          vp (frame/viewport w h)]
-                      (try (f {:type type :at (frame/px->scene vp px)
-                               :hit (when last-frame (hit/hit-px last-frame vp px 8))})
-                           (catch :default err (swap! state assoc :tick-error err)))))]
-        (set! (.. canvas -style -touchAction) "none")
-        (.addEventListener canvas "pointerdown"
-                           (fn [e]
-                             (.preventDefault e)
-                             (.setPointerCapture canvas (.-pointerId e))
-                             (send! :down e)))
-        (.addEventListener canvas "pointermove"
-                           (fn [e] (when (pos? (.-buttons e)) (send! :move e))))
-        (.addEventListener canvas "pointerup" (fn [e] (send! :up e)))
-        (.addEventListener canvas "pointercancel" (fn [e] (send! :up e)))))
+    ;; Pointer, wheel, pinch and double-click events over the stage canvas
+    ;; in scene units, hit-tested on the frame last painted
+    ;; (desargues.browser.input).
+    (input/wire-pointer! state f)
+    this)
+
+  p/IKeyboard
+  (-on-key! [this f]
+    (input/wire-keys! state f)
     this)
 
   p/IClock

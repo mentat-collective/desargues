@@ -14,9 +14,8 @@
      :points3   {:points [[x y z] ...] :opts {:radius r :names [\"A\" ...]}}
      :axes3     {:opts {:range [[x0 x1] [y0 y1] [z0 z1]] :labels? true}}
 
-   The camera orbits a target:
-     {:target [x y z] :distance d :yaw radians :pitch radians
-      :projection (:perspective | :orthographic)}
+   The camera orbits a target: {:target [x y z] :distance d :yaw radians
+   :pitch radians :projection (:perspective | :orthographic) :zoom k}.
    yaw turns about z, pitch lifts the eye above the xy plane. Perspective
    keeps the target plane at scene scale: a point at depth z is scaled by
    distance / z, so a 3D frame and its flat projection agree at the target.
@@ -111,29 +110,30 @@
 
 (defn project
   "Scene point [x y] and depth of world point `p` under camera `cam` (or a
-   precomputed `basis`). Perspective scales by distance / depth."
+   precomputed `basis`). Perspective scales by distance / depth, both by the
+   camera's optional :zoom (default 1, the target plane's magnification)."
   ([cam p] (project cam (basis cam) p))
   ([cam b p]
    (let [cam     (merge default-camera cam)
-         [x y z] (->camera b p)]
-     (if (= :orthographic (:projection cam))
-       {:at [x y] :depth z :scale 1.0}
-       (let [k (/ (double (:distance cam)) (max near z))]
-         {:at [(* k x) (* k y)] :depth z :scale k})))))
+         [x y z] (->camera b p)
+         zm      (double (:zoom cam 1.0))
+         k       (if (= :orthographic (:projection cam)) zm
+                     (* zm (/ (double (:distance cam)) (max near z))))]
+     {:at [(* k x) (* k y)] :depth z :scale k})))
 
 ;; ── Unprojection (scene point -> world ray) ─────────────────────────────────
 
 (defn unproject
   "The world ray {:origin :dir} of everything camera `cam` (or a precomputed
-   basis `b`) shows at scene point [sx sy]; the inverse of `project`. Under
-   perspective the ray leaves the eye through the scene point on the target
-   plane (origin eye, dir along sx right + sy up + distance forward); under
-   orthographic it leaves the eye's plane at sx right + sy up and runs along
-   forward. :dir has length 1."
+   basis `b`) shows at scene point [sx sy]; the inverse of `project`. With
+   side = (sx right + sy up) / :zoom, under perspective the ray leaves the
+   eye through the target plane at target + side (dir along side + distance
+   forward); under orthographic it leaves the eye's plane at eye + side and
+   runs along forward. :dir has length 1."
   ([cam at] (unproject cam (basis cam) at))
   ([cam {:keys [eye right up forward]} [sx sy]]
    (let [cam  (merge default-camera cam)
-         side (v+ (v* sx right) (v* sy up))]
+         side (v* (/ 1.0 (double (:zoom cam 1.0))) (v+ (v* sx right) (v* sy up)))]
      (if (= :orthographic (:projection cam))
        {:origin (v+ eye side) :dir forward}
        {:origin eye :dir (unit (v+ side (v* (:distance cam) forward)))}))))

@@ -38,6 +38,8 @@ turns `:camera` in its state (`player/set-camera!` from the REPL).
 (def p (player/open-source! (fx3/host) sd/source-fn
                             {:title "saddle" :params sd/defaults :controls sd/controls}))
 (player/set-camera! p {:yaw 0.4 :pitch 0.9})   ; or drag on empty space
+(player/zoom! p 2.0)                            ; or the wheel, a pinch, + / -
+(player/reset-view! p)                          ; or a double click, or 0
 ```
 
 ## More 3D kinds (`desargues.player.space-extras`)
@@ -107,6 +109,10 @@ The golden image `test/resources/desargues/player/golden/calculus-t14.png`
 pins one frame (sin x cos y at t = 14). Refresh it after an intended
 visual change with `DESARGUES_UPDATE_GOLDEN=1 clojure -M:test -n
 desargues.player.calculus-test`.
+Zoom, pan, orbit by key and reset, per host, with the REPL API:
+[interaction.md](interaction.md). The camera's optional `:zoom` (default 1)
+magnifies the target plane under both projections; `orbit/zoom-at` raises it
+(and walks a perspective camera in), `orbit/pan` slides the target.
 
 ## Gap-report notebooks (alexandria docs/stage-coverage)
 
