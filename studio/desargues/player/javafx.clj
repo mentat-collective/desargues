@@ -10,7 +10,9 @@
    Painting is one `paint!` method per scene-graph node kind (OCP).
    Requires the :studio alias (OpenJFX on the classpath)."
   (:require [desargues.player.frame :as frame]
-            [desargues.player.protocols :as p])
+            [desargues.player.protocols :as p]
+            [clojure.edn :as edn]
+            [clojure.string :as str])
   (:import [java.awt.image BufferedImage]
            [java.io File]
            [javafx.animation AnimationTimer]
@@ -55,14 +57,24 @@
 
 ;; ── Colors and units ────────────────────────────────────────────────────────
 
-(defn- fx-color ^Color [k]
-  (Color/web (get frame/palette k (frame/palette :white))))
+(defn- fx-color
+  "A JavaFX Color from a semantic palette keyword (:gold) or a CSS colour
+   string (\"#8FC7E8\", as alexandria's medium scenes carry)."
+  ^Color [k]
+  (if (string? k)
+    (Color/web k)
+    (Color/web (get frame/palette k (frame/palette :white)))))
 
-(defn- stroke-color ^Color [s]
-  (let [c (fx-color (or (get-in s [:stroke :color]) (get-in s [:opts :color]) :white))]
-    (if-let [{:keys [to alpha]} (:recolor s)]
-      (.interpolate c (fx-color to) (double alpha))
-      c)))
+(defn- stroke-color
+  "The stroke of shape `s`. An explicit `:stroke {:color nil}` (a fill-only
+   shape) paints nothing rather than falling back to white."
+  ^Color [s]
+  (if (and (contains? (:stroke s) :color) (nil? (get-in s [:stroke :color])))
+    Color/TRANSPARENT
+    (let [c (fx-color (or (get-in s [:stroke :color]) (get-in s [:opts :color]) :white))]
+      (if-let [{:keys [to alpha]} (:recolor s)]
+        (.interpolate c (fx-color to) (double alpha))
+        c))))
 
 (defn- fill-color
   "The fill of shape `s`, or nil when it has none."
@@ -150,13 +162,20 @@
 (defmethod paint! :rounded-rectangle [gc vp s]
   (paint-box! gc vp s (get-in s [:opts :corner-radius] 0.25)))
 
-(defn- paint-text! [^GraphicsContext gc vp s ^String text]
+(def ^:private text-alignment
+  {"start" TextAlignment/LEFT "middle" TextAlignment/CENTER "end" TextAlignment/RIGHT})
+
+(defn- paint-text!
+  "Text at the shape's :at. :opts :anchor (SVG text-anchor: start, middle,
+   end) picks the alignment; a shape carrying :opts :size is SVG text, whose
+   :at is the baseline, otherwise the text is centred vertically."
+  [^GraphicsContext gc vp s ^String text]
   (let [[cx cy] (center vp s)
         size (* (emphasis-scale s) (double (get-in s [:opts :font-size] 48))
                 (/ (double (:scale vp)) 120.0))]
     (.setFont gc (Font. size))
-    (.setTextAlign gc TextAlignment/CENTER)
-    (.setTextBaseline gc VPos/CENTER)
+    (.setTextAlign gc (text-alignment (get-in s [:opts :anchor]) TextAlignment/CENTER))
+    (.setTextBaseline gc (if (get-in s [:opts :size]) VPos/BASELINE VPos/CENTER))
     (.setFill gc (stroke-color s))
     (.fillText gc text cx cy)))
 
@@ -207,17 +226,50 @@
       (.drawImage gc img (- cx (/ (.getWidth img) 2.0)) (- cy (/ (.getHeight img) 2.0)))
       (paint-text! gc vp s (str (:tex s))))))
 
-(defn- paint-frame! [^Canvas canvas f]
+(defn- dash-px
+  "Line dashes of shape `s` in pixels, or nil. :dash is a seq of lengths, or
+   an SVG stroke-dasharray string (\"0.05,0.03\"), in scene units."
+  [vp s]
+  (when-let [d (:dash s)]
+    (let [xs (if (string? d)
+               (edn/read-string (str "[" (str/replace d "," " ") "]"))
+               d)]
+      (seq (map #(units->px vp %) (filter number? xs))))))
+
+(defmethod paint! :svg-path [^GraphicsContext gc vp s]
+  ;; :d is in scene units with y up; map it the way frame/->px does.
+  (let [{:keys [w h scale]} vp]
+    (.save gc)
+    (.translate gc (/ (double w) 2.0) (/ (double h) 2.0))
+    (.scale gc (double scale) (- (double scale)))
+    (.beginPath gc)
+    (.appendSVGPath gc (str (:d s)))
+    (when-let [f (fill-color s)]
+      (.setFill gc f)
+      (.fill gc))
+    (.setStroke gc (stroke-color s))
+    (.setLineWidth gc (/ (stroke-px vp s) (double scale)))
+    (when-let [d (dash-px vp s)]
+      (.setLineDashes gc (double-array (map #(/ % (double scale)) d))))
+    (.stroke gc)
+    (.restore gc)))
+
+(defn- paint-frame!
+  "Paint Frame `f` on `canvas`: the frame's :background (palette keyword or
+   CSS colour, default black), then each visible shape in draw order."
+  [^Canvas canvas f]
   (let [gc (.getGraphicsContext2D canvas)
         w  (.getWidth canvas)
         h  (.getHeight canvas)
         vp (frame/viewport w h)]
     (.setGlobalAlpha gc 1.0)
-    (.setFill gc Color/BLACK)
+    (.setFill gc (if-let [b (:background f)] (fx-color b) Color/BLACK))
     (.fillRect gc 0 0 w h)
     (doseq [s (frame/visible-shapes f)]
       (.save gc)
       (.setGlobalAlpha gc (double (:opacity s)))
+      (when-let [d (dash-px vp s)]
+        (.setLineDashes gc (double-array d)))
       (paint! gc vp s)
       (.restore gc))))
 

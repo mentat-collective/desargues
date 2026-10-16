@@ -1,0 +1,22 @@
+;; desargues-studio: the JavaFX host for the desargues stage, plus demo
+;; constructs, as a deps root of its own so other projects reuse it with one
+;; coordinate instead of copying the :studio alias:
+;;
+;;   ;; from a checkout
+;;   io.github.mentat-collective/desargues-studio {:local/root "<desargues>/studio"}
+;;   ;; from git
+;;   io.github.mentat-collective/desargues-studio
+;;   {:git/url "https://github.com/mentat-collective/desargues" :git/sha "..." :deps/root "studio"}
+;;
+;; Inside desargues, `clojure -A:dev:studio` keeps working through the alias in
+;; ../deps.edn. Linux classifiers: tools.deps does not resolve OpenJFX's
+;; per-platform Maven profiles.
+{:paths ["."]
+ :deps {io.github.mentat-collective/desargues {:local/root ".."}
+        org.openjfx/javafx-base$linux     {:mvn/version "25.0.4"}
+        org.openjfx/javafx-graphics$linux {:mvn/version "25.0.4"}
+        org.openjfx/javafx-controls$linux {:mvn/version "25.0.4"}
+        ;; :tex nodes paint through JLaTeXMath (plain-text fallback)
+        org.scilab.forge/jlatexmath {:mvn/version "1.0.7"}}
+ :aliases
+ {:run {:jvm-opts ["--enable-native-access=ALL-UNNAMED"]}}}
