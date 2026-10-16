@@ -82,21 +82,54 @@
     (let [{:keys [id on-change]} (get-in @state [:sliders i])]
       (when on-change (on-change id v)))))
 
-(defn handle-event!
-  "Apply one window event map ({:type :down|:move|:up|:close|:key :px [x y]})."
-  [state {:keys [type px] :as ev}]
+(defn- panel-event!
+  "Let the slider panel take event `ev`; true when it did (a press on a
+   slider, and every move and release of that slider drag)."
+  [state {:keys [type px]}]
   (let [{:keys [stage-w sliders drag]} @state
         [x y] px
         local [(- (double (or x 0)) stage-w) (double (or y 0))]]
     (case type
       :down (when-let [i (slider-at sliders local)]
               (swap! state assoc :drag i)
-              (set-slider! state i (slider-value (nth sliders i) (first local)) true))
-      :move (when drag (set-slider! state drag (slider-value (nth sliders drag) (first local)) true))
-      :up   (swap! state assoc :drag nil)
-      :close (swap! state assoc :closed? true)
-      nil)
-    (when-let [f (:on-event @state)] (f ev))))
+              (set-slider! state i (slider-value (nth sliders i) (first local)) true)
+              true)
+      :move (when drag
+              (set-slider! state drag (slider-value (nth sliders drag) (first local)) true)
+              true)
+      :up   (when drag (swap! state assoc :drag nil) true)
+      :close (do (swap! state assoc :closed? true) true)
+      nil)))
+
+(defn- stage-event?
+  "Is raw event `ev`, not taken by the panel, the stage's input? Presses,
+   wheels and pinches over the stage; moves and releases while a stage
+   press is held (as a browser reports pointermove only with buttons down,
+   and keeps a captured pointer); every key."
+  [state {:keys [type px]}]
+  (let [{:keys [stage-w pressed]} @state
+        over? (and px (< (double (first px)) (double stage-w)))]
+    (case type
+      (:down :wheel :pinch) over?
+      (:move :up) (boolean (seq pressed))
+      :key true
+      false)))
+
+(defn- track-press! [state {:keys [type button]}]
+  (case type
+    :down (swap! state update :pressed (fnil conj #{}) button)
+    :up   (swap! state update :pressed disj button)
+    nil))
+
+(defn handle-event!
+  "Apply one raw window event (desargues.native.window/pump!: {:type :down
+   |:up|:move|:wheel|:pinch|:key|:close :px [x y] ...}): the slider panel
+   takes what is its; the stage's input goes to the :on-event fn, if set."
+  [state ev]
+  (when-not (panel-event! state ev)
+    (when (stage-event? state ev)
+      (track-press! state ev)
+      (when-let [f (:on-event @state)] (f ev)))))
 
 ;; ── The host ─────────────────────────────────────────────────────────────
 
