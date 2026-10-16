@@ -11,41 +11,85 @@
 
    Expressions are Emmy expressions (symbolic). Nothing here evaluates,
    renders or prints: those live in the strata above (verify, numeric,
-   render). Host-free .cljc.")
+   render). Host-free .cljc."
+  (:require [emmy.env :as e]
+            [emmy.expression]))
 
 (defrecord Problem [id section kind integrand var bounds prompt])
 
-;; Math forms a step's :from / :to may hold besides a bare Emmy expression.
-;; Each names its kind through IForm, and desargues.steps.render/tex has one
-;; method per kind (OCP: a new form is a record plus a method).
+;; Math forms a step's :from / :to may hold. They are EMMY EXPRESSIONS: the
+;; integral sign, the equation chain, + C, the evaluation bracket and the
+;; substitution bar are symbolic operators in Emmy's expression tree, built
+;; as Emmy literals so they compose with Emmy arithmetic,
+;;   (e/- (e/* 'u 'v) (integral 'v 'u))  ;=> (- (* u v) (integral v u))
+;; and Emmy typesets them (desargues.steps.notation extends Emmy's renderer
+;; with one handler per operator). IForm names a form's kind: the operator
+;; at its root.
 (defprotocol IForm
   (form-kind [f] "Keyword naming the kind of math form, e.g. :integral."))
 
-(defn form? [x] (satisfies? IForm x))
+(def notation-operators
+  "The operators a solution writes that Emmy's algebra has no function for."
+  '#{integral plus-C eval-at subst derivative})
 
-(defrecord Integral [integrand var bounds]    ; ∫ integrand d var, bounds [a b] or nil
-  IForm (form-kind [_] :integral))
-(defrecord Eq [sides]                         ; a = b = c ...
-  IForm (form-kind [_] :eq))
-(defrecord Plus-C [expr]                      ; expr + C
-  IForm (form-kind [_] :plus-c))
+(extend-protocol IForm
+  emmy.expression.Literal
+  (form-kind [l]
+    (let [f (e/freeze l)]
+      (if (and (seq? f) (contains? notation-operators (first f)))
+        (keyword (name (first f)))
+        :expr))))
+
+(defn form?
+  "True when x is a notation form (an integral, + C, a bracket ...)."
+  [x]
+  (and (satisfies? IForm x) (not= :expr (form-kind x))))
+
+(defn- lit [form] (e/literal-number form))
 
 (defn integral
-  ([integrand var] (->Integral integrand var nil))
-  ([integrand var bounds] (->Integral integrand var bounds)))
+  "∫ integrand d var, or with bounds [a b] the definite integral."
+  ([integrand var] (lit (list 'integral (e/freeze integrand) (e/freeze var))))
+  ([integrand var bounds]
+   (if-let [[a b] bounds]
+     (lit (list 'integral (e/freeze integrand) (e/freeze var) (e/freeze a) (e/freeze b)))
+     (integral integrand var))))
 
-(defn eq [& sides] (->Eq (vec sides)))
+(defn eq
+  "The equation chain a = b = c ..., Emmy's `=` operator left unevaluated."
+  [& sides]
+  (lit (cons '= (map e/freeze sides))))
 
-(defn plus-c [expr] (->Plus-C expr))
+(defn plus-c "expr + C." [expr] (lit (list 'plus-C (e/freeze expr))))
 
-(defrecord Op [op args]
-  IForm (form-kind [_] :op))
+(defn eval-at
+  "[F]_a^b: F between the bounds a and b of var."
+  [F var a b]
+  (lit (list 'eval-at (e/freeze F) (e/freeze var) (e/freeze a) (e/freeze b))))
+
+(defn subst
+  "F |_{u = g}: F with u replaced by g."
+  [F u g]
+  (lit (list 'subst (e/freeze F) (e/freeze u) (e/freeze g))))
+
+(defn derivative
+  "d/d var of f, not yet taken."
+  [f var]
+  (lit (list 'derivative (e/freeze f) (e/freeze var))))
 
 (defn op
-  "A display combination of math forms Emmy cannot add, e.g.
-   (op :- (* u v) (integral v u)) for u v - ∫ v du. `op` is :+ :- or :*."
+  "Emmy arithmetic over math forms: (op :- (* u v) (integral v u)) is
+   u v - ∫ v du. `op` is :+ :- or :*; kept so a derivation reads as it is
+   written, it is (e/- ...) etc."
   [op & args]
-  (->Op op (vec args)))
+  (apply (case op :+ e/+ :- e/- :* e/*) args))
+
+(defn integral-parts
+  "[integrand var a b] of an integral form (a b nil when indefinite), else nil."
+  [form]
+  (let [f (e/freeze form)]
+    (when (and (seq? f) (= 'integral (first f)))
+      (vec (take 4 (concat (rest f) (repeat nil)))))))
 
 (defrecord Step [rule construction from to bindings text side-work])
 
