@@ -13,7 +13,9 @@
             [desargues.steps.protocols :as p]
             [desargues.steps.render :as render]
             [desargues.steps.verify :as verify]
-            [nextjournal.clerk :as clerk]))
+            [nextjournal.clerk :as clerk]
+            [desargues.steps.viewers :as viewers]
+            [desargues.steps.present :as present]))
 
 ;; ## How a solution is shown
 ;; Each step's words come from its construction, a multimethod. The
@@ -23,7 +25,7 @@
 (defn- step-hiccup [i s]
   [:div {:style {:display "flex" :gap "0.8em" :align-items "baseline" :margin "0.2em 0"}}
    [:span {:style {:color "#888" :min-width "1.6em" :font-family "monospace"}} (str (inc i) ".")]
-   [:div {:style {:flex "1" :min-width "0"}} (clerk/md (render/parts->md (phrase/parts s)))]])
+   [:div {:style {:flex "1" :min-width "0"}} (clerk/md (present/->md (present/present s)))]])
 
 (defn- step-view [i s] (clerk/html (step-hiccup i s)))
 
@@ -75,16 +77,16 @@
    (into [:details {:style {:margin "0.4em 0" :padding "0.3em 0.8em" :border-left "3px solid #4aa3c7"}}
           [:summary {:style {:cursor "pointer" :color "#4aa3c7"}} title]]
          (concat (map-indexed step-hiccup (:steps derivation))
-                 [[:div (clerk/tex (str "\\boxed{" (render/tex (:answer derivation)) "}"))]]))))
+                 [[:div (clerk/tex (str "\\boxed{" (present/present-form (:answer derivation)) "}"))]]))))
 
 (defn- problem-view [{:keys [title section derivation alternatives figure f] :as example}]
   (let [v (verdict example)]
     (apply clerk/col
            (concat
             [(clerk/md (str "## " title "\n*" section "*"))
-             (clerk/tex (render/tex (-> derivation :steps first :from)))
-             (steps-view derivation)
-             (clerk/row (clerk/tex (str "\\boxed{" (render/tex (:answer derivation)) "}")) (badge v))]
+             (clerk/tex (present/present-form (-> derivation :steps first :from)))
+             (viewers/show-steps derivation)
+             (badge v)]
             (when (seq alternatives)
               (cons (clerk/md (str "**Other pathways** (" (count alternatives) "), each reaching the same answer:"))
                     (map pathway-view alternatives)))

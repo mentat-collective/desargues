@@ -10,16 +10,6 @@
             [desargues.steps.model :as model]
             [emmy.env :as e]))
 
-(defn textbook
-  "A frozen Emmy expression in textbook notation before typesetting:
-   (exp u) is written e^u. Candidate for Emmy's own TeX renderer
-   (doc/emmy-upstream.md)."
-  [form]
-  (cond (and (seq? form) (= 'exp (first form)) (= 2 (count form)))
-        (list 'expt 'e (textbook (second form)))
-        (seq? form) (apply list (map textbook form))
-        :else form))
-
 (defmulti tex
   "TeX of a math form."
   (fn [form] (cond (model/form? form)              (model/form-kind form)
@@ -27,7 +17,7 @@
                    (string? form)                  :string
                    :else                           :expr)))
 
-(defmethod tex :expr [x] (e/->TeX (textbook (e/freeze x))))
+(defmethod tex :expr [x] (e/->TeX x))
 
 (defmethod tex :string [s] (str "\\text{" s "}"))
 
