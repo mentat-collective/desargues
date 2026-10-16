@@ -13,7 +13,8 @@
             [desargues.player.protocols :as p]
             [clojure.edn :as edn]
             [clojure.string :as str]
-            [desargues.player.hit :as hit])
+            [desargues.player.hit :as hit]
+            [desargues.player.controls :as controls])
   (:import [java.awt.image BufferedImage]
            [java.io File]
            [javafx.animation AnimationTimer]
@@ -32,7 +33,11 @@
            [javax.imageio ImageIO]
 [javafx.scene.layout Pane]
 [javafx.scene.input MouseEvent]
-[javafx.event EventHandler]))
+[javafx.event EventHandler]
+[javafx.scene.control Button]
+[javafx.scene.control CheckBox]
+[javafx.scene.control TextField]
+[javafx.scene.control ComboBox]))
 
 ;; ── Toolkit thread ──────────────────────────────────────────────────────────
 
@@ -291,12 +296,74 @@
 
 ;; ── The host ────────────────────────────────────────────────────────────────
 
-(defn- slider-listener [state label ^Label lbl id on-change]
-  (reify ChangeListener
-    (changed [_ _ _ nv]
-      (.setText lbl (format "%s  %.3f" label (double nv)))
-      (when-not (:muted? @state)
-        (on-change id (double nv))))))
+(defn- quiet
+  "Call (on-change id v) unless the host is moving the widget itself."
+  [state on-change id v]
+  (when-not (:muted? @state)
+    (on-change id v)))
+
+(defn- listen! [^javafx.beans.value.ObservableValue prop f]
+  (.addListener prop (reify ChangeListener (changed [_ _ _ nv] (f nv)))))
+
+(def ^:private label-style "-fx-text-fill: #d8d8d8; -fx-font-size: 13px;")
+
+;; ── Widgets: one method per control kind (OCP) ─────────────────────────
+
+(defmulti widget!
+  "Build the JavaFX nodes for control `spec` (desargues.player.controls,
+   already normalised by controls/widget-spec). Returns {:nodes [Node ...]
+   :set! (fn [shown-value])}; :set! moves the widget without firing
+   on-change (the caller mutes). Runs on the FX thread."
+  (fn [_state spec _on-change] (controls/kind spec)))
+
+(defmethod widget! :default [state spec on-change]
+  (widget! state (assoc spec :kind :text) on-change))
+
+(defmethod widget! :slider [state {:keys [id min max value] :as spec} on-change]
+  (let [text (controls/label spec)
+        lbl  (doto (Label. (format "%s  %.3f" text (double value))) (.setStyle label-style))
+        sl   (Slider. (double min) (double max) (double value))]
+    (listen! (.valueProperty sl)
+             (fn [nv]
+               (.setText lbl (format "%s  %.3f" text (double nv)))
+               (quiet state on-change id (double nv))))
+    {:nodes [lbl sl] :set! #(.setValue sl (double %))}))
+
+(defmethod widget! :toggle [state {:keys [id value] :as spec} on-change]
+  (let [cb (doto (CheckBox. (controls/label spec))
+             (.setSelected (boolean value))
+             (.setStyle label-style))]
+    (listen! (.selectedProperty cb) #(quiet state on-change id (boolean %)))
+    {:nodes [cb] :set! #(.setSelected cb (boolean %))}))
+
+(defmethod widget! :select [state {:keys [id value options] :as spec} on-change]
+  (let [lbl (doto (Label. (controls/label spec)) (.setStyle label-style))
+        cb  (ComboBox.)]
+    (.addAll (.getItems cb) ^java.util.Collection (mapv :label options))
+    (let [select! (fn [v] (when-let [i (controls/option-index spec v)]
+                            (.select (.getSelectionModel cb) (int i))))]
+      (select! value)
+      (.setMaxWidth cb Double/MAX_VALUE)
+      (listen! (.selectedIndexProperty (.getSelectionModel cb))
+               (fn [i] (let [i (long i)]
+                         (when (< -1 i (count options))
+                           (quiet state on-change id (:value (nth options i)))))))
+      {:nodes [lbl cb] :set! select!})))
+
+(defmethod widget! :text [state {:keys [id value] :as spec} on-change]
+  ;; Enter (or leaving the field) submits; the pure parser decides.
+  (let [lbl    (doto (Label. (controls/label spec)) (.setStyle label-style))
+        tf     (TextField. (str (or value "")))
+        submit (fn [] (quiet state on-change id (.getText tf)))]
+    (.setOnAction tf (reify EventHandler (handle [_ _] (submit))))
+    (listen! (.focusedProperty tf) #(when-not % (submit)))
+    {:nodes [lbl tf] :set! #(.setText tf (str %))}))
+
+(defmethod widget! :button [state {:keys [id] :as spec} on-change]
+  (let [b (Button. (controls/label spec))]
+    (.setMaxWidth b Double/MAX_VALUE)
+    (.setOnAction b (reify EventHandler (handle [_ _] (quiet state on-change id nil))))
+    {:nodes [b] :set! (fn [_] nil)}))
 
 (def ^:private hit-tolerance-px
   "How far (pixels) the pointer may miss a shape and still grab it."
@@ -377,24 +444,35 @@
     (on-fx #(write-png! (.snapshot (.getScene ^Stage (:stage @state)) nil) path)))
 
   p/IControls
-  (-control! [this {:keys [id label min max value]} on-change]
+  (-control! [this {:keys [id] :as spec} on-change]
     (on-fx
      (fn []
-       (let [label (or label (name id))
-             lbl   (doto (Label. (format "%s  %.3f" label (double value)))
-                     (.setStyle "-fx-text-fill: #d8d8d8; -fx-font-size: 13px;"))
-             sl    (Slider. (double min) (double max) (double value))]
-         (.addListener (.valueProperty sl) (slider-listener state label lbl id on-change))
-         (.addAll (.getChildren ^VBox (:controls-box @state)) [lbl sl])
-         (swap! state assoc-in [:sliders id] sl))))
+       (let [w   (widget! state spec on-change)
+             err (doto (Label. "")
+                   (.setStyle "-fx-text-fill: #e07070; -fx-font-size: 11px;")
+                   (.setVisible false)
+                   (.setManaged false))]
+         (.addAll (.getChildren ^VBox (:controls-box @state))
+                  ^java.util.Collection (conj (vec (:nodes w)) err))
+         (swap! state update :widgets assoc id {:move! (:set! w) :error err}))))
     this)
   (-set-control! [this id v]
     (on-fx
      (fn []
-       (when-let [^Slider sl (get-in @state [:sliders id])]
+       (when-let [move! (get-in @state [:widgets id :move!])]
          (swap! state assoc :muted? true)
-         (try (.setValue sl (double v))
+         (try (move! v)
               (finally (swap! state assoc :muted? false))))))
+    this)
+
+  p/IControlFeedback
+  (-control-error! [this id msg]
+    (on-fx
+     (fn []
+       (when-let [^Label err (get-in @state [:widgets id :error])]
+         (.setText err (str msg))
+         (.setVisible err (some? msg))
+         (.setManaged err (some? msg)))))
     this)
 
   p/IPointer

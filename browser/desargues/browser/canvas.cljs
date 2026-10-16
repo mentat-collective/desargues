@@ -15,7 +15,8 @@
   (:require [clojure.string :as str]
             [desargues.player.frame :as frame]
             [desargues.player.protocols :as p]
-            [goog.object :as gobj]))
+            [goog.object :as gobj]
+            [desargues.player.controls :as controls]))
 
 ;; ── Colors and units ──────────────────────────────────────────────────────
 
@@ -301,6 +302,85 @@
 
 (defn- fmt3 [v] (.toFixed (js/Number v) 3))
 
+;; ── Widgets: one method per control kind (OCP) ─────────────────────────
+
+(defmulti widget!
+  "Build the DOM elements for control `spec` (desargues.player.controls,
+   already normalised by controls/widget-spec). Returns {:nodes [Element ...]
+   :set! (fn [shown-value])}. Setting a DOM value programmatically fires no
+   input/change event, so :set! never calls on-change."
+  (fn [spec _on-change] (controls/kind spec)))
+
+(defmethod widget! :default [spec on-change]
+  (widget! (assoc spec :kind :text) on-change))
+
+(defmethod widget! :slider [{:keys [id min max value] :as spec} on-change]
+  (let [text (controls/label spec)
+        lbl  (el "label" "display:block;")
+        sl   (el "input" "width:100%;")
+        show! #(set! (.-textContent lbl) (str text "  " (fmt3 %)))]
+    (set! (.-type sl) "range")
+    (set! (.-min sl) min)
+    (set! (.-max sl) max)
+    (set! (.-step sl) (/ (- max min) 1000))
+    (set! (.-value sl) value)
+    (show! value)
+    (.setAttribute sl "data-control" (name id))
+    (.addEventListener sl "input"
+                       (fn [_]
+                         (let [v (js/parseFloat (.-value sl))]
+                           (show! v)
+                           (on-change id v))))
+    {:nodes [lbl sl] :set! (fn [v] (set! (.-value sl) v) (show! v))}))
+
+(defmethod widget! :toggle [{:keys [id value] :as spec} on-change]
+  (let [lbl (el "label" "display:flex;gap:6px;align-items:center;")
+        cb  (el "input" "")]
+    (set! (.-type cb) "checkbox")
+    (set! (.-checked cb) (boolean value))
+    (.setAttribute cb "data-control" (name id))
+    (.appendChild lbl cb)
+    (.appendChild lbl (.createTextNode js/document (controls/label spec)))
+    (.addEventListener cb "change" (fn [_] (on-change id (boolean (.-checked cb)))))
+    {:nodes [lbl] :set! (fn [v] (set! (.-checked cb) (boolean v)))}))
+
+(defmethod widget! :select [{:keys [id value options] :as spec} on-change]
+  ;; <option value> is the option's index: the values themselves (keywords,
+  ;; numbers) live in the spec, not in the DOM.
+  (let [lbl (el "label" "display:block;")
+        sel (el "select" "width:100%;")
+        select! (fn [v] (when-let [i (controls/option-index spec v)]
+                          (set! (.-value sel) (str i))))]
+    (set! (.-textContent lbl) (controls/label spec))
+    (doseq [[i {:keys [label]}] (map-indexed vector options)]
+      (let [o (el "option" "")]
+        (set! (.-value o) (str i))
+        (set! (.-textContent o) label)
+        (.appendChild sel o)))
+    (select! value)
+    (.setAttribute sel "data-control" (name id))
+    (.addEventListener sel "change"
+                       (fn [_] (on-change id (:value (nth options (js/parseInt (.-value sel)))))))
+    {:nodes [lbl sel] :set! select!}))
+
+(defmethod widget! :text [{:keys [id value] :as spec} on-change]
+  ;; Enter or leaving the field submits; the pure parser decides.
+  (let [lbl (el "label" "display:block;")
+        tf  (el "input" "width:100%;box-sizing:border-box;")]
+    (set! (.-textContent lbl) (controls/label spec))
+    (set! (.-type tf) "text")
+    (set! (.-value tf) (str (or value "")))
+    (.setAttribute tf "data-control" (name id))
+    (.addEventListener tf "change" (fn [_] (on-change id (.-value tf))))
+    {:nodes [lbl tf] :set! (fn [v] (set! (.-value tf) (str v)))}))
+
+(defmethod widget! :button [{:keys [id] :as spec} on-change]
+  (let [b (el "button" "width:100%;")]
+    (set! (.-textContent b) (controls/label spec))
+    (.setAttribute b "data-control" (name id))
+    (.addEventListener b "click" (fn [_] (on-change id nil)))
+    {:nodes [b] :set! (fn [_] nil)}))
+
 (defrecord CanvasHost [mount state]
   p/ISurface
   (-present! [this f]
@@ -353,31 +433,25 @@
         url)))
 
   p/IControls
-  (-control! [this {:keys [id label min max value]} on-change]
-    (let [label (or label (name id))
-          lbl   (el "label" "display:block;")
-          sl    (el "input" "width:100%;")]
-      (set! (.-type sl) "range")
-      (set! (.-min sl) min)
-      (set! (.-max sl) max)
-      (set! (.-step sl) (/ (- max min) 1000))
-      (set! (.-value sl) value)
-      (set! (.-textContent lbl) (str label "  " (fmt3 value)))
-      (.setAttribute sl "data-control" (name id))
-      (.addEventListener sl "input"
-                         (fn [_]
-                           (let [v (js/parseFloat (.-value sl))]
-                             (set! (.-textContent lbl) (str label "  " (fmt3 v)))
-                             (on-change id v))))
-      (.appendChild (:controls @state) lbl)
-      (.appendChild (:controls @state) sl)
-      (swap! state assoc-in [:sliders id] {:input sl :label lbl :text label}))
+  (-control! [this {:keys [id] :as spec} on-change]
+    ;; One widget! method per kind; a hidden line under it shows refusals.
+    (let [w   (widget! spec on-change)
+          err (el "div" "display:none;color:#e07070;font-size:11px;")]
+      (doseq [n (:nodes w)] (.appendChild (:controls @state) n))
+      (.appendChild (:controls @state) err)
+      (swap! state assoc-in [:widgets id] {:move! (:set! w) :error err}))
     this)
   (-set-control! [this id v]
-    ;; Setting .value fires no input event, so on-change stays quiet.
-    (when-let [{:keys [input label text]} (get-in @state [:sliders id])]
-      (set! (.-value input) v)
-      (set! (.-textContent label) (str text "  " (fmt3 v))))
+    ;; Setting a DOM value fires no input event, so on-change stays quiet.
+    (when-let [move! (get-in @state [:widgets id :move!])]
+      (move! v))
+    this)
+
+  p/IControlFeedback
+  (-control-error! [this id msg]
+    (when-let [err (get-in @state [:widgets id :error])]
+      (set! (.-textContent err) (str msg))
+      (set! (.. err -style -display) (if msg "block" "none")))
     this)
 
   p/IClock
