@@ -15,7 +15,8 @@
             [desargues.browser.player :as player]
             [desargues.player.space-demos :as space-demos]
             [desargues.studio.objects-demos :as demos]
-            [desargues.studio.widget-demos :as widget-demos]))
+            [desargues.studio.widget-demos :as widget-demos]
+            [desargues.studio.blackboard :as blackboard]))
 
 (defonce ^:private current (atom nil))
 
@@ -33,9 +34,10 @@
     {:demo (.get ps "demo") :scene (.get ps "scene") :t (.get ps "t")}))
 
 (def ^:private registry
-  "Every demo the page opens by ?demo=<key>: the slider object demos and the
-   widget demos (buttons, select, text field, toggle)."
-  (merge demos/demos widget-demos/demos))
+  "Every demo the page opens by ?demo=<key>: the slider object demos, the
+   widget demos (buttons, select, text field, toggle) and the blackboard
+   (?demo=blackboard, desargues.studio.blackboard)."
+  (merge demos/demos widget-demos/demos blackboard/demos))
 
 (defn- menu! []
   (when-let [nav (.getElementById js/document "menu")]
@@ -43,7 +45,8 @@
           (str/join " | "
                     (concat
                      (for [[k {:keys [title]}] (concat (sort-by key (merge demos/demos spaces))
-                                                       (sort-by key widget-demos/demos))]
+                                                       (sort-by key widget-demos/demos)
+                                                       blackboard/demos)]
                        (str "<a href=\"?demo=" (name k) "\">" title "</a>"))
                      (for [[k {:keys [title]}] scenes]
                        (str "<a href=\"?scene=" k "\">" title "</a>")))))))

@@ -11,7 +11,8 @@
             [desargues.player.timeline :as timeline]
             [desargues.studio.demos :as demos]
             [desargues.studio.objects-demos :as od]
-            [desargues.studio.widget-demos :as wd]))
+            [desargues.studio.widget-demos :as wd]
+            [desargues.studio.blackboard :as bb]))
 
 (comment
   ;; 1. Open a window. The host is the only toolkit-specific value here: any
@@ -122,3 +123,24 @@
   (player/set-param! g :formula "(Ex)(x=s0)")     ; the field shows it
   (wd/godel-number "0=0")                         ; => "243000000" = 2^6 3^5 5^6
   (player/close! g))
+
+(comment
+  ;; 9. The blackboard (desargues.studio.blackboard): a worked integral
+  ;;    written step by step in chalk, the explanation under each line, side
+  ;;    work in the margin, a figure pane, auto-scroll. Widgets: problem and
+  ;;    method selects, next / previous / show all / restart, explanations
+  ;;    and auto-play toggles. Buttons move the clock (:seek) to where the
+  ;;    step starts being written.
+  (def b (player/open! (fx/host) bb/blackboard {:title "desargues: blackboard"
+                                                :scene-name "blackboard"
+                                                :controls bb/controls}))
+  (player/control-input! b :problem :by-parts)
+  (player/press! b :next)                         ; step mode: one line at a time
+  (player/press! b :next)
+  (player/press! b :prev)
+  (player/press! b :all)                          ; everything, boxed answer, Emmy check
+  (player/control-input! b :path 1)               ; the tabular method
+  (player/control-input! b :explain false)
+  (player/control-input! b :auto true)            ; write the whole lesson again
+  (player/snapshot! b "blackboard.png")
+  (player/close! b))
