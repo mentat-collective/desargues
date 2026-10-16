@@ -20,11 +20,10 @@
             [desargues.player.protocols :as p]
             [desargues.player.session :as session]
             [desargues.scene.record :as recorder]
-            [desargues.player.drag :as drag]
+            [desargues.player.pointer :as pointer]
             [desargues.player.controls :as controls]
             [desargues.player.present :as present]
-            [desargues.player.space :as space]
-            [desargues.player.orbit :as orbit]))
+            [desargues.player.space :as space]))
 
 (defn record
   "The EDN scene graph of construct `construct` (fn [stage]), named `scene-name`
@@ -72,24 +71,22 @@
 (declare set-params!)
 
 (defn on-pointer
-  "Feed one pointer `event` to `player`: a drag on a shape named by a drag
-   spec in `controls` re-records the construct with the new params, like a
-   slider; on a 3D frame, a drag on empty space orbits the camera
+  "Feed one pointer `event` to `player` through the pure
+   desargues.player.pointer/step: a drag on a shape named by a drag spec in
+   `controls` re-records the construct with the new params, like a slider
+   (a :points3 point moves in world space, seen through the orbited
+   camera); on a 3D frame, a drag on empty space orbits the camera
    (desargues.player.orbit). Returns the player. Hosts call it through
    IPointer; tests and the REPL call it directly with scene-unit events."
   [player controls event]
-  (let [{:keys [drag params session camera orbit]} @(:state player)
-        f   (session/current-frame session)
-        out (drag/pointer drag controls f params event)]
-    (swap! (:state player) assoc :drag (:drag out))
+  (let [st  @(:state player)
+        out (pointer/step st controls (session/current-frame (:session st)) event)]
+    (swap! (:state player) assoc :drag (:drag out) :orbit (:orbit out))
     (when-let [ps (:params out)]
       (set-params! player ps))
-    (when (and (nil? (:drag out)) (space/three-d? f))
-      (let [o (orbit/pointer orbit (or camera (space/camera f)) event)]
-        (swap! (:state player) assoc :orbit (:orbit o))
-        (when-let [cam (:camera o)]
-          (swap! (:state player) assoc :camera cam)
-          (present! player))))
+    (when-let [cam (:camera out)]
+      (swap! (:state player) assoc :camera cam)
+      (present! player))
     player))
 
 (defn- bind-pointer!
@@ -97,8 +94,7 @@
    source, to the orbit, if the host takes pointer input (ISP)."
   [player controls]
   (when (and (satisfies? p/IPointer (:host player))
-             (or (some drag/drag-spec? controls)
-                 (space/three-d? (session/current-frame (:session @(:state player))))))
+             (pointer/wants-pointer? controls (session/current-frame (:session @(:state player)))))
     (p/-on-pointer! (:host player) (fn [ev] (on-pointer player controls ev)))))
 
 (defn open-source!
