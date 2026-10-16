@@ -163,3 +163,27 @@ CHROME=~/.cache/ms-playwright/chromium_headless_shell-1243/chrome-headless-shell
 ![plot page](showcase/browser-plot.png)
 
 ![Turing page](showcase/browser-turing.png)
+
+## Calculus objects (`desargues.objects.calc.*`)
+
+Integrals, tangents and solids are data. A constructor of
+`desargues.objects.calc.core` builds each object (`area-under`, `riemann`,
+`area-between`, `tangent-line`, `secant`, `secant->tangent`, `accumulation`,
+`revolution` (:disk :washer :shell), `double-integral`, `vector-field`,
+`line-integral`). A figure layers objects over a `plane` or `space` view, and
+its slots may hold param refs `(p :n)`, so widgets or the clock move them.
+Each target is a single multimethod: `problems`, `value` (computed through the
+numeric port: `:jvm`, or `:raster` when it is loaded), `->shapes` (player
+frames) and `->emmy-viewers` (Mafs/MathBox/Leva, in `notebooks/`). The
+readout prints the numeric value beside Emmy's exact one (16/3, 14/3 π).
+
+```bash
+clojure -M:showcase --only calc-area,calc-riemann,calc-between,calc-tangent,calc-ftc,calc-work,calc-solid,calc-solid-shell,calc-columns
+clojure -M:notebooks -m desargues.calc-emmy-check   # builds notebooks/calculus_objects.clj
+```
+
+![area](showcase/calc-area.gif) ![Riemann](showcase/calc-riemann.gif)
+![secant to tangent](showcase/calc-tangent.gif) ![FTC](showcase/calc-ftc.gif)
+![between](showcase/calc-between.png) ![work](showcase/calc-work.png)
+![disk](showcase/calc-solid.gif) ![shell](showcase/calc-solid-shell.png)
+![columns](showcase/calc-columns.gif)
