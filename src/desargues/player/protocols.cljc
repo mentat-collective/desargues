@@ -29,6 +29,16 @@
   (-size [surface]
     "Current [w h] in pixels."))
 
+(defprotocol ISpace
+  "A surface that renders 3D frames natively (desargues.player.space: a
+   :camera plus :surface3 / :curve3 / :points3 / :axes3 shapes). Opt-in
+   capability (ISP): a host without it is handed the frame projected to 2D
+   (desargues.player.space/->2d) through ISurface, so every 2D host shows 3D
+   content without knowing it exists."
+  (-present-space! [surface frame]
+    "Paint 3D `frame` (its 3D shapes in space, its 2D shapes as an overlay),
+     replacing what was shown. Same threading contract as -present!."))
+
 (defprotocol IWindow
   "A top-level window holding a surface."
   (-show! [window opts] "Open or raise the window. opts: {:title :w :h}.")

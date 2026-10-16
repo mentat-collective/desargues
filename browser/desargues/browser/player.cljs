@@ -20,12 +20,16 @@
             [desargues.browser.stage :as stage]
             [desargues.player.graph-source :as graph-source]
             [desargues.player.protocols :as p]
-            [desargues.player.session :as session]))
+            [desargues.player.session :as session]
+            [desargues.player.present :as present]))
 
 (defn- source-for [{:keys [source-fn params]}] (source-fn params))
 
-(defn- present! [{:keys [host state]}]
-  (p/-present! host (session/current-frame (:session @state))))
+(defn- present!
+  "Show the current frame; a 3D frame is projected to 2D for a 2D host
+   (desargues.player.present)."
+  [{:keys [host state]}]
+  (present/present! host (session/current-frame (:session @state)) (:camera @state)))
 
 (defn- on-tick [player dt]
   (swap! (:state player) update :session session/tick dt)
