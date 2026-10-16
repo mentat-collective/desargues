@@ -85,6 +85,11 @@
   '(reagent.core/with-let
      [f ?f
       F ?F
+      ;; The curve is drawn only over the slider domain [lo, hi]: outside it
+      ;; e^x sin x swings through its zeros at k*pi with amplitude e^x, and
+      ;; x e^x and 1/(x^2 - 1) blow up, which drew as tall vertical strokes.
+      in-domain? (fn [x] (and (>= x ?lo) (<= x ?hi)))
+      f-shown (fn [x] (if (in-domain? x) (f x) js/NaN))
       !s (reagent.core/atom {:a [?a 0] :b [?b 0]})
       fmt (fn [v] (.toFixed (js/Number v) 6))
       clamp (fn [x] (max ?lo (min ?hi x)))
@@ -117,7 +122,7 @@
           {:y {:<= (fn [x] (if (in? x) (max 0 (f x)) 0))
                :>= (fn [x] (if (in? x) (min 0 (f x)) 0))}
            :color :blue :fill-opacity 0.3 :upper-opacity 0 :lower-opacity 0}]
-         [mafs.plot/OfX {:y f :color :yellow :weight 2.5}]
+         [mafs.plot/OfX {:y f-shown :domain [?lo ?hi] :color :yellow :weight 2.5}]
          [mafs.line/Segment {:point1 [a 0] :point2 [a (f a)] :color :pink :style "dashed" :opacity 0.6}]
          [mafs.line/Segment {:point1 [b 0] :point2 [b (f b)] :color :green :style "dashed" :opacity 0.6}]
          [mafs.core/MovablePoint {:atom !s :path :a :constrain "horizontal" :color :pink}]
