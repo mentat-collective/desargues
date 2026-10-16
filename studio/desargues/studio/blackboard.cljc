@@ -71,10 +71,12 @@
 ;; ── layout and timeline: one pure value ───────────────────────────────────────
 
 (def geom
-  "Board geometry in scene units (Manim's 14.22 x 8 frame, y up)."
-  {:left -6.45 :num-x -6.78 :top 2.25 :bottom -3.6 :fade-above 2.2
-   :eq-h 0.8 :eq-h-flat 0.62 :ex-h 0.46 :gap 0.1
-   :col-x 2.75 :side-x 2.95 :side-top 1.75 :side-h 0.55
+  "Board geometry in scene units (Manim's 14.22 x 8 frame, y up). :eq-font
+   and :ex-font are the chalk sizes of an equation line and of the
+   explanation under it."
+  {:left -6.45 :num-x -6.8 :top 2.25 :bottom -3.6 :fade-above 2.2
+   :eq-h 0.98 :eq-h-flat 0.76 :ex-h 0.54 :gap 0.12 :eq-font 48 :ex-font 31
+   :col-x 2.75 :side-x 2.95 :side-top 1.75 :side-h 0.6
    :fig-center [4.85 -2.3] :fig-w 3.6 :fig-h 2.2})
 
 (defn- tall? [tex] (boolean (re-find #"\\frac|\\int|\\left|\\Big|\\boxed|\\tfrac" tex)))
@@ -94,17 +96,17 @@
   "The rows of step `st` (index `i`) at unscrolled top `y`: [rows bottom].
    An equation row is taller when it holds a fraction or an integral; so is
    an explanation with one in its math."
-  [{:keys [left num-x eq-h eq-h-flat ex-h gap]} explain? i st y]
+  [{:keys [left num-x eq-h eq-h-flat ex-h gap eq-font ex-font]} explain? i st y]
   (let [tex  (cond-> (chalk-tex (:tex st)) (:answer? st) (#(str "\\boxed{" % "}")))
         h    (if (tall? tex) eq-h eq-h-flat)
-        eq   {:key [i :eq] :tex tex :at [left (- y (/ h 2))] :font 38
+        eq   {:key [i :eq] :tex tex :at [left (- y (/ h 2))] :font eq-font
               :color (cond (:answer? st) :pink (:check? st) :green :else :white)}
-        num  {:key [i :num] :text (if (:check? st) "" (str (inc i))) :at [num-x (- y (/ h 2))]}
+        num  {:key [i :num] :text (if (:check? st) "" (str (inc i) ".")) :at [num-x (- y (/ h 2))]}
         y1   (- y h)
-        exh  (if (re-find #"\\frac|\\int" (str (:explain st))) (+ ex-h 0.16) ex-h)
+        exh  (if (re-find #"\\frac|\\int" (str (:explain st))) (+ ex-h 0.2) ex-h)
         ex   (when (and explain? (:explain st))
-               {:key [i :ex] :tex (explain->tex (:explain st)) :at [(+ left 0.25) (- y1 (/ exh 2))]
-                :font 26 :color :dim})]
+               {:key [i :ex] :tex (explain->tex (:explain st)) :at [(+ left 0.3) (- y1 (/ exh 2))]
+                :font ex-font :color :dim})]
     [(cond-> [eq num] ex (conj ex)) (- (if ex (- y1 exh) y1) gap)]))
 
 (defn plan
@@ -180,12 +182,15 @@
 ;; ── the construct ─────────────────────────────────────────────────────────────
 
 (defn- chalk-item
-  "The hidden mobject of plan item `it`, where it is first written (:at0)."
-  [{:keys [tex text font color] at :at0}]
+  "The hidden mobject of plan item `it`, where it is first written (:at0).
+   Margin work is chalked a little larger than its plan font so it reads
+   beside the bigger equation lines."
+  [{:keys [tex text font color key] at :at0}]
   (if tex
-    (-> (s/tex tex :font-size font :color (chalk color) :anchor "start" :write true)
+    (-> (s/tex tex :font-size (if (= :side (second key)) (+ font 6) font)
+               :color (chalk color) :anchor "start" :write true)
         (s/move-to at))
-    (-> (s/text text :font-size 22 :color (chalk :grey)) (s/move-to at))))
+    (-> (s/text text :font-size 28 :color (chalk :grey)) (s/move-to at))))
 
 (defn- figure-coords [{:keys [x-range y-range]} g]
   (c/coord-system {:x-range (conj (vec x-range) 1) :y-range (conj (vec y-range) 1)
