@@ -1,0 +1,1375 @@
+{:bijection
+ [{:beat :swap,
+   :ids [:title],
+   :items
+   [{:id :title,
+     :kind :tex,
+     :latex "g : A \\to B",
+     :at [0.0 3.45],
+     :size 34,
+     :color :white}]}
+  {:beat :show,
+   :items
+   [{:id [:box :dom],
+     :kind :rect,
+     :center [-2.6 -0.15000000000000013],
+     :size [1.5 1.85],
+     :color :grey,
+     :width 2}
+    {:id [:set :dom],
+     :kind :tex,
+     :latex "A",
+     :at [-2.6 1.095],
+     :size 32,
+     :color :white}
+    {:id [:box :cod],
+     :kind :rect,
+     :center [2.6 -0.15000000000000013],
+     :size [1.5 1.85],
+     :color :grey,
+     :width 2}
+    {:id [:set :cod],
+     :kind :tex,
+     :latex "B",
+     :at [2.6 1.095],
+     :size 32,
+     :color :white}]}
+  {:beat :par,
+   :beats
+   [{:beat :show,
+     :items
+     [{:id [:dot :dom 1],
+       :kind :dot,
+       :at [-2.6 0.32499999999999984],
+       :radius 0.09,
+       :color :white}
+      {:id [:label :dom 1],
+       :kind :tex,
+       :latex "1",
+       :at [-3.02 0.32499999999999984],
+       :size 26,
+       :color :white}
+      {:id [:dot :dom 2],
+       :kind :dot,
+       :at [-2.6 -0.6250000000000001],
+       :radius 0.09,
+       :color :white}
+      {:id [:label :dom 2],
+       :kind :tex,
+       :latex "2",
+       :at [-3.02 -0.6250000000000001],
+       :size 26,
+       :color :white}]}
+    {:beat :show,
+     :items
+     [{:id [:dot :cod a],
+       :kind :dot,
+       :at [2.6 0.32499999999999984],
+       :radius 0.09,
+       :color :white}
+      {:id [:label :cod a],
+       :kind :tex,
+       :latex "a",
+       :at [3.02 0.32499999999999984],
+       :size 26,
+       :color :white}
+      {:id [:dot :cod b],
+       :kind :dot,
+       :at [2.6 -0.6250000000000001],
+       :radius 0.09,
+       :color :white}
+      {:id [:label :cod b],
+       :kind :tex,
+       :latex "b",
+       :at [3.02 -0.6250000000000001],
+       :size 26,
+       :color :white}]}]}
+  {:beat :show,
+   :items
+   [{:id [[:arrow :f 1 b] :shaft],
+     :kind :line,
+     :from [-2.4426050853231125 0.29624515981864535],
+     :to [2.4426050853231125 -0.5962451598186457],
+     :color :white,
+     :width 2}
+    {:id [[:arrow :f 1 b] :head 0],
+     :kind :line,
+     :from [2.4426050853231125 -0.5962451598186457],
+     :to [2.283327863673827 -0.4665078611582976],
+     :color :white,
+     :width 2}
+    {:id [[:arrow :f 1 b] :head 1],
+     :kind :line,
+     :from [2.4426050853231125 -0.5962451598186457],
+     :to [2.2477437489494005 -0.6612840680709462],
+     :color :white,
+     :width 2}]}
+  {:beat :show,
+   :items
+   [{:id [[:arrow :f 2 a] :shaft],
+     :kind :line,
+     :from [-2.4426050853231125 -0.5962451598186457],
+     :to [2.4426050853231125 0.29624515981864535],
+     :color :white,
+     :width 2}
+    {:id [[:arrow :f 2 a] :head 0],
+     :kind :line,
+     :from [2.4426050853231125 0.29624515981864535],
+     :to [2.2477437489494005 0.3612840680709458],
+     :color :white,
+     :width 2}
+    {:id [[:arrow :f 2 a] :head 1],
+     :kind :line,
+     :from [2.4426050853231125 0.29624515981864535],
+     :to [2.283327863673827 0.1665078611582973],
+     :color :white,
+     :width 2}]}
+  {:beat :caption,
+   :ids [:caption],
+   :items
+   [{:id :caption,
+     :kind :text,
+     :text
+     "a function sends exactly one arrow from every dot of the domain",
+     :at [0.0 -3.45],
+     :size 24.0,
+     :color :white}]}
+  {:beat :caption,
+   :ids [:caption],
+   :items
+   [{:id :caption,
+     :kind :text,
+     :text "g is a function",
+     :at [0.0 -3.45],
+     :size 26,
+     :color :teal}]}
+  {:beat :hold, :seconds 1.2}
+  {:beat :par,
+   :beats
+   [{:beat :recolor,
+     :ids
+     [[[:arrow :f 2 a] :shaft]
+      [[:arrow :f 2 a] :head 0]
+      [[:arrow :f 2 a] :head 1]
+      [[:arrow :f 1 b] :shaft]
+      [[:arrow :f 1 b] :head 0]
+      [[:arrow :f 1 b] :head 1]],
+     :color :white}
+    {:beat :recolor,
+     :ids [[:dot :dom 1] [:dot :dom 2] [:dot :cod a] [:dot :cod b]],
+     :color :white}]}
+  {:beat :caption,
+   :ids [:caption],
+   :items
+   [{:id :caption,
+     :kind :text,
+     :text "injective: no two arrows end at the same dot",
+     :at [0.0 -3.45],
+     :size 26,
+     :color :white}]}
+  {:beat :caption,
+   :ids [:caption],
+   :items
+   [{:id :caption,
+     :kind :text,
+     :text "g is injective",
+     :at [0.0 -3.45],
+     :size 26,
+     :color :teal}]}
+  {:beat :hold, :seconds 1.2}
+  {:beat :par,
+   :beats
+   [{:beat :recolor,
+     :ids
+     [[[:arrow :f 2 a] :shaft]
+      [[:arrow :f 2 a] :head 0]
+      [[:arrow :f 2 a] :head 1]
+      [[:arrow :f 1 b] :shaft]
+      [[:arrow :f 1 b] :head 0]
+      [[:arrow :f 1 b] :head 1]],
+     :color :white}
+    {:beat :recolor,
+     :ids [[:dot :dom 1] [:dot :dom 2] [:dot :cod a] [:dot :cod b]],
+     :color :white}]}
+  {:beat :caption,
+   :ids [:caption],
+   :items
+   [{:id :caption,
+     :kind :text,
+     :text "surjective: every dot of the codomain is reached",
+     :at [0.0 -3.45],
+     :size 26,
+     :color :white}]}
+  {:beat :caption,
+   :ids [:caption],
+   :items
+   [{:id :caption,
+     :kind :text,
+     :text "g is surjective",
+     :at [0.0 -3.45],
+     :size 26,
+     :color :teal}]}
+  {:beat :hold, :seconds 1.2}
+  {:beat :par,
+   :beats
+   [{:beat :recolor,
+     :ids
+     [[[:arrow :f 2 a] :shaft]
+      [[:arrow :f 2 a] :head 0]
+      [[:arrow :f 2 a] :head 1]
+      [[:arrow :f 1 b] :shaft]
+      [[:arrow :f 1 b] :head 0]
+      [[:arrow :f 1 b] :head 1]],
+     :color :white}
+    {:beat :recolor,
+     :ids [[:dot :dom 1] [:dot :dom 2] [:dot :cod a] [:dot :cod b]],
+     :color :white}]}
+  {:beat :hold, :seconds 1.0}],
+ :composition
+ [{:beat :swap,
+   :ids [:title],
+   :items
+   [{:id :title,
+     :kind :tex,
+     :latex "g \\circ f : A \\to C",
+     :at [0.0 3.45],
+     :size 34,
+     :color :white}]}
+  {:beat :show,
+   :items
+   [{:id [:box :dom],
+     :kind :rect,
+     :center [-4.4 -0.15000000000000013],
+     :size [1.5 2.8],
+     :color :grey,
+     :width 2}
+    {:id [:set :dom],
+     :kind :tex,
+     :latex "A",
+     :at [-4.4 1.5699999999999998],
+     :size 32,
+     :color :white}
+    {:id [:box :mid],
+     :kind :rect,
+     :center [0.0 -0.15000000000000013],
+     :size [1.5 1.85],
+     :color :grey,
+     :width 2}
+    {:id [:set :mid],
+     :kind :tex,
+     :latex "B",
+     :at [0.0 1.095],
+     :size 32,
+     :color :white}
+    {:id [:box :cod],
+     :kind :rect,
+     :center [4.4 -0.15000000000000013],
+     :size [1.5 1.85],
+     :color :grey,
+     :width 2}
+    {:id [:set :cod],
+     :kind :tex,
+     :latex "C",
+     :at [4.4 1.095],
+     :size 32,
+     :color :white}]}
+  {:beat :par,
+   :beats
+   [{:beat :show,
+     :items
+     [{:id [:dot :dom 1],
+       :kind :dot,
+       :at [-4.4 0.7999999999999998],
+       :radius 0.09,
+       :color :white}
+      {:id [:label :dom 1],
+       :kind :tex,
+       :latex "1",
+       :at [-4.82 0.7999999999999998],
+       :size 26,
+       :color :white}
+      {:id [:dot :dom 2],
+       :kind :dot,
+       :at [-4.4 -0.15000000000000013],
+       :radius 0.09,
+       :color :white}
+      {:id [:label :dom 2],
+       :kind :tex,
+       :latex "2",
+       :at [-4.82 -0.15000000000000013],
+       :size 26,
+       :color :white}
+      {:id [:dot :dom 3],
+       :kind :dot,
+       :at [-4.4 -1.1],
+       :radius 0.09,
+       :color :white}
+      {:id [:label :dom 3],
+       :kind :tex,
+       :latex "3",
+       :at [-4.82 -1.1],
+       :size 26,
+       :color :white}]}
+    {:beat :show,
+     :items
+     [{:id [:dot :mid a],
+       :kind :dot,
+       :at [0.0 0.32499999999999984],
+       :radius 0.09,
+       :color :white}
+      {:id [:label :mid a],
+       :kind :tex,
+       :latex "a",
+       :at [0.0 0.5949999999999999],
+       :size 26,
+       :color :white}
+      {:id [:dot :mid b],
+       :kind :dot,
+       :at [0.0 -0.6250000000000001],
+       :radius 0.09,
+       :color :white}
+      {:id [:label :mid b],
+       :kind :tex,
+       :latex "b",
+       :at [0.0 -0.3550000000000001],
+       :size 26,
+       :color :white}]}
+    {:beat :show,
+     :items
+     [{:id [:dot :cod x],
+       :kind :dot,
+       :at [4.4 0.32499999999999984],
+       :radius 0.09,
+       :color :white}
+      {:id [:label :cod x],
+       :kind :tex,
+       :latex "x",
+       :at [4.82 0.32499999999999984],
+       :size 26,
+       :color :white}
+      {:id [:dot :cod y],
+       :kind :dot,
+       :at [4.4 -0.6250000000000001],
+       :radius 0.09,
+       :color :white}
+      {:id [:label :cod y],
+       :kind :tex,
+       :latex "y",
+       :at [4.82 -0.6250000000000001],
+       :size 26,
+       :color :white}]}]}
+  {:beat :show,
+   :items
+   [{:id [[:arrow :f 1 a] :shaft],
+     :kind :line,
+     :from [-4.240924263855503 0.7828270512116735],
+     :to [-0.1590757361444967 0.34217294878832616],
+     :color :white,
+     :width 2}
+    {:id [[:arrow :f 1 a] :head 0],
+     :kind :line,
+     :from [-0.1590757361444967 0.34217294878832616],
+     :to [-0.3274101772442785 0.45992062791460064],
+     :color :white,
+     :width 2}
+    {:id [[:arrow :f 1 a] :head 1],
+     :kind :line,
+     :from [-0.1590757361444967 0.34217294878832616],
+     :to [-0.3486617013698324 0.26306440443578594],
+     :color :white,
+     :width 2}
+    {:id [[:arrow :f 2 b] :shaft],
+     :kind :line,
+     :from [-4.240924263855503 -0.16717294878832648],
+     :to [-0.1590757361444967 -0.6078270512116738],
+     :color :white,
+     :width 2}
+    {:id [[:arrow :f 2 b] :head 0],
+     :kind :line,
+     :from [-0.1590757361444967 -0.6078270512116738],
+     :to [-0.3274101772442785 -0.4900793720853993],
+     :color :white,
+     :width 2}
+    {:id [[:arrow :f 2 b] :head 1],
+     :kind :line,
+     :from [-0.1590757361444967 -0.6078270512116738],
+     :to [-0.3486617013698324 -0.686935595564214],
+     :color :white,
+     :width 2}
+    {:id [[:arrow :f 3 b] :shaft],
+     :kind :line,
+     :from [-4.240924263855503 -1.0828270512116738],
+     :to [-0.1590757361444967 -0.6421729487883264],
+     :color :white,
+     :width 2}
+    {:id [[:arrow :f 3 b] :head 0],
+     :kind :line,
+     :from [-0.1590757361444967 -0.6421729487883264],
+     :to [-0.3486617013698324 -0.5630644044357862],
+     :color :white,
+     :width 2}
+    {:id [[:arrow :f 3 b] :head 1],
+     :kind :line,
+     :from [-0.1590757361444967 -0.6421729487883264],
+     :to [-0.3274101772442785 -0.7599206279146009],
+     :color :white,
+     :width 2}]}
+  {:beat :show,
+   :items
+   [{:id [[:arrow :g a x] :shaft],
+     :kind :line,
+     :from [0.16 0.32499999999999984],
+     :to [4.24 0.32499999999999984],
+     :color :white,
+     :width 2}
+    {:id [[:arrow :g a x] :head 0],
+     :kind :line,
+     :from [4.24 0.32499999999999984],
+     :to [4.0600000000000005 0.4239999999999998],
+     :color :white,
+     :width 2}
+    {:id [[:arrow :g a x] :head 1],
+     :kind :line,
+     :from [4.24 0.32499999999999984],
+     :to [4.0600000000000005 0.22599999999999984],
+     :color :white,
+     :width 2}
+    {:id [[:arrow :g b y] :shaft],
+     :kind :line,
+     :from [0.16 -0.6250000000000001],
+     :to [4.24 -0.6250000000000001],
+     :color :white,
+     :width 2}
+    {:id [[:arrow :g b y] :head 0],
+     :kind :line,
+     :from [4.24 -0.6250000000000001],
+     :to [4.0600000000000005 -0.5260000000000001],
+     :color :white,
+     :width 2}
+    {:id [[:arrow :g b y] :head 1],
+     :kind :line,
+     :from [4.24 -0.6250000000000001],
+     :to [4.0600000000000005 -0.7240000000000001],
+     :color :white,
+     :width 2}]}
+  {:beat :caption,
+   :ids [:caption],
+   :items
+   [{:id :caption,
+     :kind :tex,
+     :latex "(g \\circ f)(x) = g(f(x))",
+     :at [0.0 -3.45],
+     :size 32,
+     :color :white}]}
+  {:beat :par,
+   :beats
+   [{:beat :recolor,
+     :ids
+     [[[:arrow :f 1 a] :shaft]
+      [[:arrow :f 1 a] :head 0]
+      [[:arrow :f 1 a] :head 1]
+      [[:arrow :g a x] :shaft]
+      [[:arrow :g a x] :head 0]
+      [[:arrow :g a x] :head 1]],
+     :color :gold}
+    {:beat :recolor,
+     :ids [[:dot :dom 1] [:dot :mid a] [:dot :cod x]],
+     :color :gold}]}
+  {:beat :hold, :seconds 0.6}
+  {:beat :par,
+   :beats
+   [{:beat :recolor,
+     :ids
+     [[[:arrow :f 1 a] :shaft]
+      [[:arrow :f 1 a] :head 0]
+      [[:arrow :f 1 a] :head 1]
+      [[:arrow :g a x] :shaft]
+      [[:arrow :g a x] :head 0]
+      [[:arrow :g a x] :head 1]],
+     :color :grey}
+    {:beat :recolor,
+     :ids [[:dot :dom 1] [:dot :mid a] [:dot :cod x]],
+     :color :white}]}
+  {:beat :par,
+   :beats
+   [{:beat :recolor,
+     :ids
+     [[[:arrow :f 2 b] :shaft]
+      [[:arrow :f 2 b] :head 0]
+      [[:arrow :f 2 b] :head 1]
+      [[:arrow :g b y] :shaft]
+      [[:arrow :g b y] :head 0]
+      [[:arrow :g b y] :head 1]],
+     :color :gold}
+    {:beat :recolor,
+     :ids [[:dot :dom 2] [:dot :mid b] [:dot :cod y]],
+     :color :gold}]}
+  {:beat :hold, :seconds 0.6}
+  {:beat :par,
+   :beats
+   [{:beat :recolor,
+     :ids
+     [[[:arrow :f 2 b] :shaft]
+      [[:arrow :f 2 b] :head 0]
+      [[:arrow :f 2 b] :head 1]
+      [[:arrow :g b y] :shaft]
+      [[:arrow :g b y] :head 0]
+      [[:arrow :g b y] :head 1]],
+     :color :grey}
+    {:beat :recolor,
+     :ids [[:dot :dom 2] [:dot :mid b] [:dot :cod y]],
+     :color :white}]}
+  {:beat :par,
+   :beats
+   [{:beat :recolor,
+     :ids
+     [[[:arrow :f 3 b] :shaft]
+      [[:arrow :f 3 b] :head 0]
+      [[:arrow :f 3 b] :head 1]
+      [[:arrow :g b y] :shaft]
+      [[:arrow :g b y] :head 0]
+      [[:arrow :g b y] :head 1]],
+     :color :gold}
+    {:beat :recolor,
+     :ids [[:dot :dom 3] [:dot :mid b] [:dot :cod y]],
+     :color :gold}]}
+  {:beat :hold, :seconds 0.6}
+  {:beat :par,
+   :beats
+   [{:beat :recolor,
+     :ids
+     [[[:arrow :f 3 b] :shaft]
+      [[:arrow :f 3 b] :head 0]
+      [[:arrow :f 3 b] :head 1]
+      [[:arrow :g b y] :shaft]
+      [[:arrow :g b y] :head 0]
+      [[:arrow :g b y] :head 1]],
+     :color :grey}
+    {:beat :recolor,
+     :ids [[:dot :dom 3] [:dot :mid b] [:dot :cod y]],
+     :color :white}]}
+  {:beat :hide,
+   :ids
+   [[[:arrow :f 2 b] :shaft]
+    [[:arrow :f 2 b] :head 0]
+    [[:arrow :f 2 b] :head 1]
+    [[:arrow :f 3 b] :shaft]
+    [[:arrow :f 3 b] :head 0]
+    [[:arrow :f 3 b] :head 1]
+    [[:arrow :f 1 a] :shaft]
+    [[:arrow :f 1 a] :head 0]
+    [[:arrow :f 1 a] :head 1]
+    [[:arrow :g a x] :shaft]
+    [[:arrow :g a x] :head 0]
+    [[:arrow :g a x] :head 1]
+    [[:arrow :g b y] :shaft]
+    [[:arrow :g b y] :head 0]
+    [[:arrow :g b y] :head 1]
+    [:box :mid]
+    [:set :mid]
+    [:dot :mid a]
+    [:label :mid a]
+    [:dot :mid b]
+    [:label :mid b]]}
+  {:beat :show,
+   :items
+   [{:id [[:arrow :gf 1 x] :shaft],
+     :kind :line,
+     :from [-4.240232575586153 0.7913761901594797],
+     :to [4.240232575586153 0.33362380984052004],
+     :color :teal,
+     :width 2}
+    {:id [[:arrow :gf 1 x] :head 0],
+     :kind :line,
+     :from [4.240232575586153 0.33362380984052004],
+     :to [4.065830205459396 0.44218168976717354],
+     :color :teal,
+     :width 2}
+    {:id [[:arrow :gf 1 x] :head 1],
+     :kind :line,
+     :from [4.240232575586153 0.33362380984052004],
+     :to [4.055158240781752 0.24446950205503692],
+     :color :teal,
+     :width 2}
+    {:id [[:arrow :gf 2 y] :shaft],
+     :kind :line,
+     :from [-4.240232575586153 -0.15862380984052032],
+     :to [4.240232575586153 -0.61637619015948],
+     :color :teal,
+     :width 2}
+    {:id [[:arrow :gf 2 y] :head 0],
+     :kind :line,
+     :from [4.240232575586153 -0.61637619015948],
+     :to [4.065830205459396 -0.5078183102328264],
+     :color :teal,
+     :width 2}
+    {:id [[:arrow :gf 2 y] :head 1],
+     :kind :line,
+     :from [4.240232575586153 -0.61637619015948],
+     :to [4.055158240781752 -0.705530497944963],
+     :color :teal,
+     :width 2}
+    {:id [[:arrow :gf 3 y] :shaft],
+     :kind :line,
+     :from [-4.240232575586153 -1.0913761901594798],
+     :to [4.240232575586153 -0.6336238098405202],
+     :color :teal,
+     :width 2}
+    {:id [[:arrow :gf 3 y] :head 0],
+     :kind :line,
+     :from [4.240232575586153 -0.6336238098405202],
+     :to [4.055158240781752 -0.5444695020550372],
+     :color :teal,
+     :width 2}
+    {:id [[:arrow :gf 3 y] :head 1],
+     :kind :line,
+     :from [4.240232575586153 -0.6336238098405202],
+     :to [4.065830205459396 -0.7421816897671738],
+     :color :teal,
+     :width 2}]}
+  {:beat :caption,
+   :ids [:caption],
+   :items
+   [{:id :caption,
+     :kind :tex,
+     :latex "g \\circ f = \\{(1, x), (2, y), (3, y)\\}",
+     :at [0.0 -3.45],
+     :size 32,
+     :color :teal}]}
+  {:beat :hold, :seconds 1.5}],
+ :not-a-function
+ [{:beat :swap,
+   :ids [:title],
+   :items
+   [{:id :title,
+     :kind :tex,
+     :latex "h : A \\to B",
+     :at [0.0 3.45],
+     :size 34,
+     :color :white}]}
+  {:beat :show,
+   :items
+   [{:id [:box :dom],
+     :kind :rect,
+     :center [-2.6 -0.15000000000000013],
+     :size [1.5 1.85],
+     :color :grey,
+     :width 2}
+    {:id [:set :dom],
+     :kind :tex,
+     :latex "A",
+     :at [-2.6 1.095],
+     :size 32,
+     :color :white}
+    {:id [:box :cod],
+     :kind :rect,
+     :center [2.6 -0.15000000000000013],
+     :size [1.5 1.85],
+     :color :grey,
+     :width 2}
+    {:id [:set :cod],
+     :kind :tex,
+     :latex "B",
+     :at [2.6 1.095],
+     :size 32,
+     :color :white}]}
+  {:beat :par,
+   :beats
+   [{:beat :show,
+     :items
+     [{:id [:dot :dom 1],
+       :kind :dot,
+       :at [-2.6 0.32499999999999984],
+       :radius 0.09,
+       :color :white}
+      {:id [:label :dom 1],
+       :kind :tex,
+       :latex "1",
+       :at [-3.02 0.32499999999999984],
+       :size 26,
+       :color :white}
+      {:id [:dot :dom 2],
+       :kind :dot,
+       :at [-2.6 -0.6250000000000001],
+       :radius 0.09,
+       :color :white}
+      {:id [:label :dom 2],
+       :kind :tex,
+       :latex "2",
+       :at [-3.02 -0.6250000000000001],
+       :size 26,
+       :color :white}]}
+    {:beat :show,
+     :items
+     [{:id [:dot :cod a],
+       :kind :dot,
+       :at [2.6 0.32499999999999984],
+       :radius 0.09,
+       :color :white}
+      {:id [:label :cod a],
+       :kind :tex,
+       :latex "a",
+       :at [3.02 0.32499999999999984],
+       :size 26,
+       :color :white}
+      {:id [:dot :cod b],
+       :kind :dot,
+       :at [2.6 -0.6250000000000001],
+       :radius 0.09,
+       :color :white}
+      {:id [:label :cod b],
+       :kind :tex,
+       :latex "b",
+       :at [3.02 -0.6250000000000001],
+       :size 26,
+       :color :white}]}]}
+  {:beat :show,
+   :items
+   [{:id [[:arrow :f 1 a] :shaft],
+     :kind :line,
+     :from [-2.44 0.32499999999999984],
+     :to [2.44 0.32499999999999984],
+     :color :white,
+     :width 2}
+    {:id [[:arrow :f 1 a] :head 0],
+     :kind :line,
+     :from [2.44 0.32499999999999984],
+     :to [2.26 0.4239999999999998],
+     :color :white,
+     :width 2}
+    {:id [[:arrow :f 1 a] :head 1],
+     :kind :line,
+     :from [2.44 0.32499999999999984],
+     :to [2.26 0.22599999999999984],
+     :color :white,
+     :width 2}
+    {:id [[:arrow :f 1 b] :shaft],
+     :kind :line,
+     :from [-2.4426050853231125 0.29624515981864535],
+     :to [2.4426050853231125 -0.5962451598186457],
+     :color :white,
+     :width 2}
+    {:id [[:arrow :f 1 b] :head 0],
+     :kind :line,
+     :from [2.4426050853231125 -0.5962451598186457],
+     :to [2.283327863673827 -0.4665078611582976],
+     :color :white,
+     :width 2}
+    {:id [[:arrow :f 1 b] :head 1],
+     :kind :line,
+     :from [2.4426050853231125 -0.5962451598186457],
+     :to [2.2477437489494005 -0.6612840680709462],
+     :color :white,
+     :width 2}]}
+  {:beat :caption,
+   :ids [:caption],
+   :items
+   [{:id :caption,
+     :kind :text,
+     :text
+     "a function sends exactly one arrow from every dot of the domain",
+     :at [0.0 -3.45],
+     :size 24.0,
+     :color :white}]}
+  {:beat :par,
+   :beats
+   [{:beat :recolor, :ids [[:dot :dom 2] [:dot :dom 1]], :color :red}
+    {:beat :recolor,
+     :ids
+     [[[:arrow :f 1 a] :shaft]
+      [[:arrow :f 1 a] :head 0]
+      [[:arrow :f 1 a] :head 1]
+      [[:arrow :f 1 b] :shaft]
+      [[:arrow :f 1 b] :head 0]
+      [[:arrow :f 1 b] :head 1]],
+     :color :red}]}
+  {:beat :caption,
+   :ids [:caption],
+   :items
+   [{:id :caption,
+     :kind :text,
+     :text "h is not a function: 1 dots send no arrow, 1 send several",
+     :at [0.0 -3.45],
+     :size 26,
+     :color :red}]}
+  {:beat :hold, :seconds 1.2}
+  {:beat :par,
+   :beats
+   [{:beat :recolor,
+     :ids
+     [[[:arrow :f 1 a] :shaft]
+      [[:arrow :f 1 a] :head 0]
+      [[:arrow :f 1 a] :head 1]
+      [[:arrow :f 1 b] :shaft]
+      [[:arrow :f 1 b] :head 0]
+      [[:arrow :f 1 b] :head 1]],
+     :color :white}
+    {:beat :recolor,
+     :ids [[:dot :dom 1] [:dot :dom 2] [:dot :cod a] [:dot :cod b]],
+     :color :white}]}
+  {:beat :hold, :seconds 1.0}],
+ :not-injective
+ [{:beat :swap,
+   :ids [:title],
+   :items
+   [{:id :title,
+     :kind :tex,
+     :latex "f : A \\to B",
+     :at [0.0 3.45],
+     :size 34,
+     :color :white}]}
+  {:beat :show,
+   :items
+   [{:id [:box :dom],
+     :kind :rect,
+     :center [-2.6 -0.15000000000000013],
+     :size [1.5 2.8],
+     :color :grey,
+     :width 2}
+    {:id [:set :dom],
+     :kind :tex,
+     :latex "A",
+     :at [-2.6 1.5699999999999998],
+     :size 32,
+     :color :white}
+    {:id [:box :cod],
+     :kind :rect,
+     :center [2.6 -0.15000000000000013],
+     :size [1.5 2.8],
+     :color :grey,
+     :width 2}
+    {:id [:set :cod],
+     :kind :tex,
+     :latex "B",
+     :at [2.6 1.5699999999999998],
+     :size 32,
+     :color :white}]}
+  {:beat :par,
+   :beats
+   [{:beat :show,
+     :items
+     [{:id [:dot :dom 1],
+       :kind :dot,
+       :at [-2.6 0.7999999999999998],
+       :radius 0.09,
+       :color :white}
+      {:id [:label :dom 1],
+       :kind :tex,
+       :latex "1",
+       :at [-3.02 0.7999999999999998],
+       :size 26,
+       :color :white}
+      {:id [:dot :dom 2],
+       :kind :dot,
+       :at [-2.6 -0.15000000000000013],
+       :radius 0.09,
+       :color :white}
+      {:id [:label :dom 2],
+       :kind :tex,
+       :latex "2",
+       :at [-3.02 -0.15000000000000013],
+       :size 26,
+       :color :white}
+      {:id [:dot :dom 3],
+       :kind :dot,
+       :at [-2.6 -1.1],
+       :radius 0.09,
+       :color :white}
+      {:id [:label :dom 3],
+       :kind :tex,
+       :latex "3",
+       :at [-3.02 -1.1],
+       :size 26,
+       :color :white}]}
+    {:beat :show,
+     :items
+     [{:id [:dot :cod a],
+       :kind :dot,
+       :at [2.6 0.7999999999999998],
+       :radius 0.09,
+       :color :white}
+      {:id [:label :cod a],
+       :kind :tex,
+       :latex "a",
+       :at [3.02 0.7999999999999998],
+       :size 26,
+       :color :white}
+      {:id [:dot :cod b],
+       :kind :dot,
+       :at [2.6 -0.15000000000000013],
+       :radius 0.09,
+       :color :white}
+      {:id [:label :cod b],
+       :kind :tex,
+       :latex "b",
+       :at [3.02 -0.15000000000000013],
+       :size 26,
+       :color :white}
+      {:id [:dot :cod c],
+       :kind :dot,
+       :at [2.6 -1.1],
+       :radius 0.09,
+       :color :white}
+      {:id [:label :cod c],
+       :kind :tex,
+       :latex "c",
+       :at [3.02 -1.1],
+       :size 26,
+       :color :white}]}]}
+  {:beat :show,
+   :items
+   [{:id [[:arrow :f 1 a] :shaft],
+     :kind :line,
+     :from [-2.44 0.7999999999999998],
+     :to [2.44 0.7999999999999998],
+     :color :white,
+     :width 2}
+    {:id [[:arrow :f 1 a] :head 0],
+     :kind :line,
+     :from [2.44 0.7999999999999998],
+     :to [2.26 0.8989999999999998],
+     :color :white,
+     :width 2}
+    {:id [[:arrow :f 1 a] :head 1],
+     :kind :line,
+     :from [2.44 0.7999999999999998],
+     :to [2.26 0.7009999999999998],
+     :color :white,
+     :width 2}]}
+  {:beat :show,
+   :items
+   [{:id [[:arrow :f 2 a] :shaft],
+     :kind :line,
+     :from [-2.4426050853231125 -0.12124515981864566],
+     :to [2.4426050853231125 0.7712451598186454],
+     :color :white,
+     :width 2}
+    {:id [[:arrow :f 2 a] :head 0],
+     :kind :line,
+     :from [2.4426050853231125 0.7712451598186454],
+     :to [2.2477437489494005 0.8362840680709459],
+     :color :white,
+     :width 2}
+    {:id [[:arrow :f 2 a] :head 1],
+     :kind :line,
+     :from [2.4426050853231125 0.7712451598186454],
+     :to [2.283327863673827 0.6415078611582974],
+     :color :white,
+     :width 2}]}
+  {:beat :show,
+   :items
+   [{:id [[:arrow :f 3 b] :shaft],
+     :kind :line,
+     :from [-2.4426050853231125 -1.0712451598186457],
+     :to [2.4426050853231125 -0.17875484018135462],
+     :color :white,
+     :width 2}
+    {:id [[:arrow :f 3 b] :head 0],
+     :kind :line,
+     :from [2.4426050853231125 -0.17875484018135462],
+     :to [2.2477437489494005 -0.11371593192905413],
+     :color :white,
+     :width 2}
+    {:id [[:arrow :f 3 b] :head 1],
+     :kind :line,
+     :from [2.4426050853231125 -0.17875484018135462],
+     :to [2.283327863673827 -0.3084921388417027],
+     :color :white,
+     :width 2}]}
+  {:beat :caption,
+   :ids [:caption],
+   :items
+   [{:id :caption,
+     :kind :text,
+     :text
+     "a function sends exactly one arrow from every dot of the domain",
+     :at [0.0 -3.45],
+     :size 24.0,
+     :color :white}]}
+  {:beat :caption,
+   :ids [:caption],
+   :items
+   [{:id :caption,
+     :kind :text,
+     :text "f is a function",
+     :at [0.0 -3.45],
+     :size 26,
+     :color :teal}]}
+  {:beat :hold, :seconds 1.2}
+  {:beat :par,
+   :beats
+   [{:beat :recolor,
+     :ids
+     [[[:arrow :f 3 b] :shaft]
+      [[:arrow :f 3 b] :head 0]
+      [[:arrow :f 3 b] :head 1]
+      [[:arrow :f 2 a] :shaft]
+      [[:arrow :f 2 a] :head 0]
+      [[:arrow :f 2 a] :head 1]
+      [[:arrow :f 1 a] :shaft]
+      [[:arrow :f 1 a] :head 0]
+      [[:arrow :f 1 a] :head 1]],
+     :color :white}
+    {:beat :recolor,
+     :ids
+     [[:dot :dom 1]
+      [:dot :dom 2]
+      [:dot :dom 3]
+      [:dot :cod a]
+      [:dot :cod b]
+      [:dot :cod c]],
+     :color :white}]}
+  {:beat :caption,
+   :ids [:caption],
+   :items
+   [{:id :caption,
+     :kind :text,
+     :text "injective: no two arrows end at the same dot",
+     :at [0.0 -3.45],
+     :size 26,
+     :color :white}]}
+  {:beat :par,
+   :beats
+   [{:beat :recolor,
+     :ids
+     [[[:arrow :f 2 a] :shaft]
+      [[:arrow :f 2 a] :head 0]
+      [[:arrow :f 2 a] :head 1]
+      [[:arrow :f 1 a] :shaft]
+      [[:arrow :f 1 a] :head 0]
+      [[:arrow :f 1 a] :head 1]],
+     :color :red}
+    {:beat :recolor, :ids [[:dot :cod a]], :color :red}]}
+  {:beat :caption,
+   :ids [:caption],
+   :items
+   [{:id :caption,
+     :kind :text,
+     :text "f is not injective: two arrows meet",
+     :at [0.0 -3.45],
+     :size 26,
+     :color :red}]}
+  {:beat :hold, :seconds 1.2}
+  {:beat :par,
+   :beats
+   [{:beat :recolor,
+     :ids
+     [[[:arrow :f 3 b] :shaft]
+      [[:arrow :f 3 b] :head 0]
+      [[:arrow :f 3 b] :head 1]
+      [[:arrow :f 2 a] :shaft]
+      [[:arrow :f 2 a] :head 0]
+      [[:arrow :f 2 a] :head 1]
+      [[:arrow :f 1 a] :shaft]
+      [[:arrow :f 1 a] :head 0]
+      [[:arrow :f 1 a] :head 1]],
+     :color :white}
+    {:beat :recolor,
+     :ids
+     [[:dot :dom 1]
+      [:dot :dom 2]
+      [:dot :dom 3]
+      [:dot :cod a]
+      [:dot :cod b]
+      [:dot :cod c]],
+     :color :white}]}
+  {:beat :caption,
+   :ids [:caption],
+   :items
+   [{:id :caption,
+     :kind :text,
+     :text "surjective: every dot of the codomain is reached",
+     :at [0.0 -3.45],
+     :size 26,
+     :color :white}]}
+  {:beat :recolor, :ids [[:dot :cod c]], :color :red}
+  {:beat :caption,
+   :ids [:caption],
+   :items
+   [{:id :caption,
+     :kind :text,
+     :text "f is not surjective: the red dots are never reached",
+     :at [0.0 -3.45],
+     :size 26,
+     :color :red}]}
+  {:beat :hold, :seconds 1.2}
+  {:beat :par,
+   :beats
+   [{:beat :recolor,
+     :ids
+     [[[:arrow :f 3 b] :shaft]
+      [[:arrow :f 3 b] :head 0]
+      [[:arrow :f 3 b] :head 1]
+      [[:arrow :f 2 a] :shaft]
+      [[:arrow :f 2 a] :head 0]
+      [[:arrow :f 2 a] :head 1]
+      [[:arrow :f 1 a] :shaft]
+      [[:arrow :f 1 a] :head 0]
+      [[:arrow :f 1 a] :head 1]],
+     :color :white}
+    {:beat :recolor,
+     :ids
+     [[:dot :dom 1]
+      [:dot :dom 2]
+      [:dot :dom 3]
+      [:dot :cod a]
+      [:dot :cod b]
+      [:dot :cod c]],
+     :color :white}]}
+  {:beat :par,
+   :beats
+   [{:beat :recolor, :ids [[:dot :dom 1] [:dot :dom 3]], :color :gold}
+    {:beat :recolor,
+     :ids
+     [[[:arrow :f 3 b] :shaft]
+      [[:arrow :f 3 b] :head 0]
+      [[:arrow :f 3 b] :head 1]
+      [[:arrow :f 1 a] :shaft]
+      [[:arrow :f 1 a] :head 0]
+      [[:arrow :f 1 a] :head 1]],
+     :color :gold}
+    {:beat :recolor,
+     :ids [[:dot :cod a] [:dot :cod b]],
+     :color :gold}]}
+  {:beat :caption,
+   :ids [:caption],
+   :items
+   [{:id :caption,
+     :kind :tex,
+     :latex
+     "\\bar{f}\\left(C\\right) = \\{a, b\\}\\quad C = \\{1, 3\\}",
+     :at [0.0 -3.45],
+     :size 32,
+     :color :gold}]}
+  {:beat :hold, :seconds 1.5}
+  {:beat :par,
+   :beats
+   [{:beat :recolor,
+     :ids
+     [[[:arrow :f 3 b] :shaft]
+      [[:arrow :f 3 b] :head 0]
+      [[:arrow :f 3 b] :head 1]
+      [[:arrow :f 2 a] :shaft]
+      [[:arrow :f 2 a] :head 0]
+      [[:arrow :f 2 a] :head 1]
+      [[:arrow :f 1 a] :shaft]
+      [[:arrow :f 1 a] :head 0]
+      [[:arrow :f 1 a] :head 1]],
+     :color :white}
+    {:beat :recolor,
+     :ids
+     [[:dot :dom 1]
+      [:dot :dom 2]
+      [:dot :dom 3]
+      [:dot :cod a]
+      [:dot :cod b]
+      [:dot :cod c]],
+     :color :white}]}
+  {:beat :par,
+   :beats
+   [{:beat :recolor, :ids [[:dot :cod a]], :color :teal}
+    {:beat :recolor,
+     :ids
+     [[[:arrow :f 2 a] :shaft]
+      [[:arrow :f 2 a] :head 0]
+      [[:arrow :f 2 a] :head 1]
+      [[:arrow :f 1 a] :shaft]
+      [[:arrow :f 1 a] :head 0]
+      [[:arrow :f 1 a] :head 1]],
+     :color :teal}
+    {:beat :recolor,
+     :ids [[:dot :dom 1] [:dot :dom 2]],
+     :color :teal}]}
+  {:beat :caption,
+   :ids [:caption],
+   :items
+   [{:id :caption,
+     :kind :tex,
+     :latex
+     "\\check{f}\\left(D\\right) = \\{1, 2\\}\\quad D = \\{a\\}",
+     :at [0.0 -3.45],
+     :size 32,
+     :color :teal}]}
+  {:beat :hold, :seconds 1.5}
+  {:beat :par,
+   :beats
+   [{:beat :recolor,
+     :ids
+     [[[:arrow :f 3 b] :shaft]
+      [[:arrow :f 3 b] :head 0]
+      [[:arrow :f 3 b] :head 1]
+      [[:arrow :f 2 a] :shaft]
+      [[:arrow :f 2 a] :head 0]
+      [[:arrow :f 2 a] :head 1]
+      [[:arrow :f 1 a] :shaft]
+      [[:arrow :f 1 a] :head 0]
+      [[:arrow :f 1 a] :head 1]],
+     :color :white}
+    {:beat :recolor,
+     :ids
+     [[:dot :dom 1]
+      [:dot :dom 2]
+      [:dot :dom 3]
+      [:dot :cod a]
+      [:dot :cod b]
+      [:dot :cod c]],
+     :color :white}]}
+  {:beat :hold, :seconds 1.0}],
+ :relation-ring
+ [{:beat :swap,
+   :ids [:title],
+   :items
+   [{:id :title,
+     :kind :tex,
+     :latex "R \\subseteq A \\times A",
+     :at [0.0 3.45],
+     :size 34,
+     :color :white}]}
+  {:beat :show,
+   :items
+   [{:id [:set :dom],
+     :kind :tex,
+     :latex "A",
+     :at [-4.6 2.4],
+     :size 34,
+     :color :white}]}
+  {:beat :par,
+   :beats
+   [{:beat :show,
+     :items
+     [{:id [:dot :dom 1],
+       :kind :dot,
+       :at [1.2246467991473532E-16 1.85],
+       :radius 0.09,
+       :color :white}
+      {:id [:label :dom 1],
+       :kind :tex,
+       :latex "1",
+       :at [1.4695761589768238E-16 2.25],
+       :size 26,
+       :color :white}
+      {:id [:dot :dom 2],
+       :kind :dot,
+       :at [1.7320508075688774 -1.1499999999999997],
+       :radius 0.09,
+       :color :white}
+      {:id [:label :dom 2],
+       :kind :tex,
+       :latex "2",
+       :at [2.078460969082653 -1.3499999999999996],
+       :size 26,
+       :color :white}
+      {:id [:dot :dom 3],
+       :kind :dot,
+       :at [-1.7320508075688779 -1.149999999999999],
+       :radius 0.09,
+       :color :white}
+      {:id [:label :dom 3],
+       :kind :tex,
+       :latex "3",
+       :at [-2.0784609690826534 -1.3499999999999988],
+       :size 26,
+       :color :white}]}]}
+  {:beat :show,
+   :items
+   [{:id [[:arrow :f 1 2] :shaft],
+     :kind :line,
+     :from [0.14062177826491085 1.7464359353944898],
+     :to [1.7126725858337881 -0.9764359353944896],
+     :color :white,
+     :width 2}
+    {:id [[:arrow :f 1 2] :head 0],
+     :kind :line,
+     :from [1.7126725858337881 -0.9764359353944896],
+     :to [1.7084091008084477 -0.7710513627132906],
+     :color :white,
+     :width 2}
+    {:id [[:arrow :f 1 2] :head 1],
+     :kind :line,
+     :from [1.7126725858337881 -0.9764359353944896],
+     :to [1.5369360708591286 -0.8700513627132906],
+     :color :white,
+     :width 2}]}
+  {:beat :show,
+   :items
+   [{:id [[:arrow :f 2 1] :shaft],
+     :kind :line,
+     :from [1.5914290293039666 -1.0464359353944894],
+     :to [0.019378221735089414 1.67643593539449],
+     :color :white,
+     :width 2}
+    {:id [[:arrow :f 2 1] :head 0],
+     :kind :line,
+     :from [0.019378221735089414 1.67643593539449],
+     :to [0.02364170676042996 1.471051362713291],
+     :color :white,
+     :width 2}
+    {:id [[:arrow :f 2 1] :head 1],
+     :kind :line,
+     :from [0.019378221735089414 1.67643593539449],
+     :to [0.19511473670974885 1.570051362713291],
+     :color :white,
+     :width 2}]}
+  {:beat :show,
+   :items
+   [{:id [[:arrow :f 3 3] 0],
+     :kind :line,
+     :from [-1.7799912219086433 -1.398033505555262],
+     :to [-1.7502091434662221 -1.288270671844724],
+     :color :white,
+     :width 2}
+    {:id [[:arrow :f 3 3] 1],
+     :kind :line,
+     :from [-1.7502091434662221 -1.288270671844724],
+     :to [-1.7792214854601323 -1.178301876850207],
+     :color :white,
+     :width 2}
+    {:id [[:arrow :f 3 3] 2],
+     :kind :line,
+     :from [-1.7792214854601323 -1.178301876850207],
+     :to [-1.859274728348682 -1.0975161716571182],
+     :color :white,
+     :width 2}
+    {:id [[:arrow :f 3 3] 3],
+     :kind :line,
+     :from [-1.859274728348682 -1.0975161716571182],
+     :to [-1.9689747225922543 -1.0675034556274425],
+     :color :white,
+     :width 2}
+    {:id [[:arrow :f 3 3] 4],
+     :kind :line,
+     :from [-1.9689747225922543 -1.0675034556274425],
+     :to [-2.079004253838778 -1.0962845972689412],
+     :color :white,
+     :width 2}
+    {:id [[:arrow :f 3 3] 5],
+     :kind :line,
+     :from [-2.079004253838778 -1.0962845972689412],
+     :to [-2.159958039299906 -1.176167865104148],
+     :color :white,
+     :width 2}
+    {:id [[:arrow :f 3 3] 6],
+     :kind :line,
+     :from [-2.159958039299906 -1.176167865104148],
+     :to [-2.190201260329196 -1.2858045352573924],
+     :color :white,
+     :width 2}
+    {:id [[:arrow :f 3 3] 7],
+     :kind :line,
+     :from [-2.190201260329196 -1.2858045352573924],
+     :to [-2.1616514461870038 -1.3958943166767595],
+     :color :white,
+     :width 2}
+    {:id [[:arrow :f 3 3] :head 0],
+     :kind :line,
+     :from [-2.1616514461870038 -1.3958943166767595],
+     :to [-2.1222609556381187 -1.2410479758923605],
+     :color :white,
+     :width 2}
+    {:id [[:arrow :f 3 3] :head 1],
+     :kind :line,
+     :from [-2.1616514461870038 -1.3958943166767595],
+     :to [-2.271329839818475 -1.279706322587783],
+     :color :white,
+     :width 2}]}
+  {:beat :hold, :seconds 1.0}]}
