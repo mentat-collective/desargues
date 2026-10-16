@@ -1,4 +1,4 @@
-(ns desargues.videos.physics-rk4-test
+(ns desargues.physics.physics-rk4-test
   "The all-Double RK4 path must land on the same doubles as the generic
    map-merging step it short-circuits (golden bits recorded from v0.2.0)."
   (:require [clojure.test :refer [deftest is testing]]
