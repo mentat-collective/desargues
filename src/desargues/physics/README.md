@@ -34,6 +34,20 @@ Lower strata never require upper ones (checked by
 | `evolution` (.clj) | Application | evolve, evolve-batch |
 | `desargues.physics` | Facade | re-exports the public names |
 
+## Known quirk: the stepper's time grid
+
+`StepperSolver` accumulates time in floating point (`t <- t + dt`, starting
+at 0.0) and stops once `t >= duration`. Because `dt` is rarely exact in
+binary, the accumulated `t` can land just below `duration` and take one more
+step. With `dt 0.1` over `duration 1.0`, ten additions give
+0.9999999999999999, so the trajectory has 12 points (t = 0.0 ... ~1.1), not
+11. The array fast path (`arrays/rk4-trajectory-arrays`) reproduces the same
+grid bit for bit, and the `:wasm` backend answers the same time grid.
+
+This is documented, not changed: whether to switch to an integer step count
+(`t = i * dt`, `n = round(duration / dt)`) alters every recorded trajectory
+and golden value, and is an open decision for the maintainer.
+
 ## Extending
 
 - A new engine: one `defmethod desargues.physics.solver/solver` in its own
