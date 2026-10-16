@@ -62,11 +62,16 @@
 ;; ## Rules as values
 
 (defn rule
-  "An IRule named `id` whose moves are (f goal), a seq of Moves."
+  "An IRule named `id` whose moves are (f goal), a seq of Moves. A rule
+   whose algebra Emmy cannot carry out on this goal (a division by zero
+   while simplifying, say) licenses no move there; the search goes on."
   [id f]
   (reify p/IRule
     (rule-id [_] id)
-    (moves [_ g] (or (seq (f g)) ()))))
+    (moves [_ g]
+      (try (doall (or (seq (f g)) ()))
+           (catch #?(:clj ArithmeticException :cljs :default) _ ())
+           (catch #?(:clj IllegalArgumentException :cljs :default) _ ())))))
 
 (defn- compose
   "m1 then m2, where m2 works on m1's only subgoal."

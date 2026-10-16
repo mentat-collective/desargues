@@ -34,7 +34,8 @@
   {'+ e/+ '- e/- '* e/* '/ e// 'expt e/expt 'sqrt e/sqrt 'exp e/exp 'log e/log
    'sin e/sin 'cos e/cos 'tan e/tan 'cot e/cot 'sec e/sec 'csc e/csc
    'atan e/atan 'asin e/asin 'acos e/acos 'abs e/abs 'sinh e/sinh 'cosh e/cosh
-   'square e/square 'cube e/cube})
+   'square e/square 'cube e/cube 'complex e/complex 'real-part e/real-part
+   'imag-part e/imag-part})
 
 (defn ->fn
   "`form` as a one-argument function of `v`, built from Emmy's generic

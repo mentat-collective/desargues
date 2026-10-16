@@ -50,11 +50,18 @@
   [ctx g depth]
   (assoc g :solve (fn [g'] (best ctx (with-solver ctx g' depth) (inc depth)))))
 
+(defn- safe-complete
+  "complete, or nil when Emmy's algebra fails while finishing the move."
+  [ctx g m depth]
+  (try (complete ctx g m depth)
+       (catch #?(:clj ArithmeticException :cljs :default) _ nil)
+       (catch #?(:clj IllegalArgumentException :cljs :default) _ nil)))
+
 (defn- candidates
   "Every complete Solution of g, cheapest first."
   [ctx g depth]
   (->> (p/moves (:rule ctx) (with-solver ctx g depth))
-       (keep #(complete ctx g % depth))
+       (keep #(safe-complete ctx g % depth))
        (sort-by :cost)))
 
 (defn best

@@ -25,7 +25,9 @@
     [[:const    (list '? '?c c?)                          (fn [b] (list '* (b '?c) v))]
      [:var      v                                         (fn [_] (list '/ (list 'expt v 2) 2))]
      [:power    (list 'expt v (list '? '?n n?))           (fn [b] (let [k (x/simp (list '+ (b '?n) 1))]
-                                                                     (list '/ (list 'expt v k) k)))]
+                                                                     (if (neg? k)
+                                                                       (list '/ 1 (list '* k (list 'expt v (- k))))
+                                                                       (list '/ (list 'expt v k) k))))]
      [:recip    (list '/ 1 v)                             (fn [_] (list 'log (list 'abs v)))]
      [:recip    (list 'expt v -1)                         (fn [_] (list 'log (list 'abs v)))]
      [:sqrt     (list 'sqrt v)                            (fn [_] (list '* (/ 2 3) (list 'expt v (/ 3 2))))]
@@ -49,16 +51,23 @@
      [:sinh     (list 'sinh v)                            (fn [_] (list 'cosh v))]
      [:cosh     (list 'cosh v)                            (fn [_] (list 'sinh v))]]))
 
+(defn- as-power
+  "1/v^n read as v^-n, so the power row covers it (Emmy keeps the quotient)."
+  [f v]
+  (let [b (m/match (list '/ 1 (list 'expt v (list '? '?n number?))) f)]
+    (if (m/failed? b) f (list 'expt v (- (get b '?n))))))
+
 (defn lookup
   "The first table row whose pattern matches `f` in variable `v`:
    {:row id :bindings b :F antiderivative}, or nil."
   [f v]
-  (some (fn [[id pat F]]
-          (let [b (m/match pat f)]
-            (when-not (m/failed? b)
-              (let [b (into {} (filter (comp symbol? key)) b)]
-                {:row id :bindings b :F (x/simp (F b))}))))
-        (rows v)))
+  (let [f (as-power f v)]
+    (some (fn [[id pat F]]
+            (let [b (m/match pat f)]
+              (when-not (m/failed? b)
+                (let [b (into {} (filter (comp symbol? key)) b)]
+                  {:row id :bindings b :F (x/simp (F b))}))))
+          (rows v))))
 
 (defn formula
   "The table entry as an equation ∫ f dv = F, for a :apply-formula step."

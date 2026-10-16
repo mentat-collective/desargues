@@ -79,6 +79,10 @@
 (defmethod phrase :verify [s]
   [(text "Check: differentiating gives back the integrand, ") (math (:to s))])
 
+(defmethod phrase :cite [s]
+  (let [{:keys [lemma]} (:bindings s)]
+    [(text "By problem " (name lemma) ", already solved: ") (math (:from s)) (text " = ") (math (:to s))]))
+
 (defmethod phrase :cover-up [s]
   (let [{:keys [factor root rest]} (:bindings s)]
     [(text "Cover the factor ") (math factor) (text " and set ") (math 'x) (text " = ") (math root)

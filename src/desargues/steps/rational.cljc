@@ -22,16 +22,30 @@
 
 (defn- fact [n] (reduce * 1 (range 1 (inc n))))
 
+(defn- polynomial-form?
+  "Built from v, numbers, + - * and natural-number powers only."
+  [form v]
+  (cond (number? form) true
+        (= v form)     true
+        (seq? form)    (let [[op & args] form]
+                         (case op
+                           (+ - *) (every? #(polynomial-form? % v) args)
+                           expt    (and (polynomial-form? (first args) v)
+                                        (nat-int? (second args)))
+                           false))
+        :else false))
+
 (defn coefficients
   "[c0 c1 ... cn] when `form` is a polynomial in v with rational
    coefficients (degree <= 12), else nil."
   [form v]
-  (loop [k 0 d form cs []]
-    (cond (> k 12) nil
-          (= 0 d) (let [cs (vec (reverse (drop-while zero? (reverse cs))))] (if (empty? cs) [0] cs))
-          :else (let [c (x/evaluate d v 0)]
-                  (when (rational? c)
-                    (recur (inc k) (x/d d v) (conj cs (/ c (fact k)))))))))
+  (when (polynomial-form? form v)
+    (loop [k 0 d form cs []]
+      (cond (> k 12) nil
+            (= 0 d) (let [cs (vec (reverse (drop-while zero? (reverse cs))))] (if (empty? cs) [0] cs))
+            :else (let [c (x/evaluate d v 0)]
+                    (when (rational? c)
+                      (recur (inc k) (x/d d v) (conj cs (/ c (fact k))))))))))
 
 (defn- poly-form [cs v]
   (x/simp (cons '+ (map-indexed (fn [i c] (list '* c (list 'expt v i))) cs))))
