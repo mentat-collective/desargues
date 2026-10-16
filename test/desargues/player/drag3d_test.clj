@@ -172,7 +172,7 @@
         f     (p/-frame-at f3 0.0)
         specs [{:id :p :drag {:node "A"}}]]
     (is (pointer/wants-pointer? [] f) "a 3D frame wants the pointer for orbiting")
-    (is (not (pointer/wants-pointer? [] {:t 0 :shapes []})) "a 2D frame without drag specs does not")
+    (is (pointer/wants-pointer? [] {:t 0 :shapes []}) "a 2D frame wants it too, to zoom and pan")
     (is (some? (:orbit (pointer/step {} specs f {:type :down :at [5.0 5.0] :hit nil})))
         "empty space on a 3D frame starts an orbit")
     (is (nil? (:orbit (pointer/step {} specs {:t 0 :shapes []} {:type :down :at [0 0] :hit nil})))

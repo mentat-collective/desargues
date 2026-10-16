@@ -12,10 +12,14 @@
                    desargues.player.graph-source.
 
    Changing a parameter (a widget or the REPL) rebuilds the source and the
-   session keeps its time, so the picture updates in place.
+   session keeps its time, so the picture updates in place. The viewer's
+   look (an orbited 3D camera, a zoomed or panned 2D viewport) is kept apart
+   from the params, so it survives every parameter change.
 
    REPL surface: open!, open-source!, close!, play!, pause!, seek!,
-   set-param!, params, snapshot!. One atom per player is the only state."
+   set-param!, params, snapshot!, press!, and for the view zoom!, pan!,
+   reset-view!, set-camera!, view. One atom per player is the only state.
+   Gestures and keys per host: doc/interaction.md."
   (:require [desargues.player.graph-source :as graph-source]
             [desargues.player.protocols :as p]
             [desargues.player.session :as session]
@@ -23,7 +27,8 @@
             [desargues.player.pointer :as pointer]
             [desargues.player.controls :as controls]
             [desargues.player.present :as present]
-            [desargues.player.space :as space]))
+            [desargues.player.space :as space]
+            [desargues.player.navigate :as navigate]))
 
 (defn record
   "The EDN scene graph of construct `construct` (fn [stage]), named `scene-name`
@@ -41,11 +46,12 @@
 (defn- source-for [{:keys [source-fn params]}] (source-fn params))
 
 (defn- present!
-  "Show the session's current frame on the host, seen through the orbited
-   camera when there is one (desargues.player.present picks the port)."
+  "Show the session's current frame on the host, seen through the viewer's
+   look: the orbited camera of a 3D frame, the viewport of a 2D one
+   (desargues.player.present picks the port)."
   [{:keys [host state]}]
-  (let [{:keys [session camera]} @state]
-    (present/present! host (session/current-frame session) camera)))
+  (let [{:keys [session camera view]} @state]
+    (present/present! host (session/current-frame session) camera view)))
 
 (defn- on-tick [player dt]
   (swap! (:state player) update :session session/tick dt)
@@ -75,27 +81,33 @@
    desargues.player.pointer/step: a drag on a shape named by a drag spec in
    `controls` re-records the construct with the new params, like a slider
    (a :points3 point moves in world space, seen through the orbited
-   camera); on a 3D frame, a drag on empty space orbits the camera
-   (desargues.player.orbit). Returns the player. Hosts call it through
-   IPointer; tests and the REPL call it directly with scene-unit events."
+   camera); a drag on empty space orbits a 3D camera or pans a 2D view; a
+   wheel, a pinch or a double click zooms or resets
+   (desargues.player.navigate). Returns the player. Hosts call it through
+   IPointer (and IKeyboard); tests and the REPL call it directly with
+   scene-unit events."
   [player controls event]
   (let [st  @(:state player)
         out (pointer/step st controls (session/current-frame (:session st)) event)]
-    (swap! (:state player) assoc :drag (:drag out) :orbit (:orbit out))
+    (swap! (:state player) pointer/settle out)
     (when-let [ps (:params out)]
       (set-params! player ps))
-    (when-let [cam (:camera out)]
-      (swap! (:state player) assoc :camera cam)
+    (when (:look out)
       (present! player))
     player))
 
 (defn- bind-pointer!
-  "Wire the host's pointer to the drag specs in `controls` and, for a 3D
-   source, to the orbit, if the host takes pointer input (ISP)."
+  "Wire the host's pointer (drag specs, orbit, zoom, pan) and keys (zoom,
+   pan, orbit, reset) to the player, for the ports the host has (ISP)."
   [player controls]
   (when (and (satisfies? p/IPointer (:host player))
              (pointer/wants-pointer? controls (session/current-frame (:session @(:state player)))))
-    (p/-on-pointer! (:host player) (fn [ev] (on-pointer player controls ev)))))
+    (p/-on-pointer! (:host player) (fn [ev] (on-pointer player controls ev))))
+  (when (satisfies? p/IKeyboard (:host player))
+    (p/-on-key! (:host player)
+                (fn [ev] (let [before (navigate/look @(:state player))]
+                           (on-pointer player controls ev)
+                           (not= before (navigate/look @(:state player))))))))
 
 (defn open-source!
   "Play `source-fn` (fn [params] ISource) in `host`.
@@ -160,6 +172,43 @@
   (swap! (:state player) update :camera #(when cam (merge (or %1 (space/camera (current-frame player))) cam)))
   (present! player)
   player)
+
+(defn- look!
+  "Replace the viewer's look with (f look frame) and repaint; a nil result
+   changes nothing. Returns the player."
+  [player f]
+  (let [st @(:state player)]
+    (when-let [lk (f (navigate/look st) (session/current-frame (:session st)))]
+      (swap! (:state player) merge (select-keys lk [:camera :view]))
+      (present! player))
+    player))
+
+(defn zoom!
+  "Magnify the view `m` times (m > 1 zooms in, 1/m back out) about scene
+   point `at` (default the middle), keeping that point where it shows: a 3D
+   frame's camera, a 2D frame's viewport (desargues.player.navigate). The
+   magnification is clamped. Parameter changes keep it."
+  ([player m] (zoom! player m [0.0 0.0]))
+  ([player m at] (look! player #(navigate/zoom %1 %2 m at))))
+
+(defn pan!
+  "Move the picture by [dx dy] scene units (as a drag of that travel would):
+   a 3D camera's target slides in its right/up plane, a 2D viewport shifts."
+  [player d]
+  (look! player #(navigate/pan %1 %2 d)))
+
+(defn reset-view!
+  "Back to the source's own camera and viewport (what key 0 and a double
+   click do)."
+  [player]
+  (look! player (fn [lk _] (navigate/reset lk))))
+
+(defn view
+  "What the viewer looks through now: {:three-d? :camera :view :zoom}
+   (desargues.player.navigate/describe); :camera and :view are nil while the
+   source's own are in use."
+  [player]
+  (navigate/describe (navigate/look @(:state player)) (current-frame player)))
 
 (defn set-param!
   "Set parameter `k` to `v`, rebuild the source and keep playing from the

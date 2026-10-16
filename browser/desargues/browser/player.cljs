@@ -15,12 +15,14 @@
                    every parameter change.
      load-graph!   fetch an EDN scene graph by URL, then open-graph!.
 
-   Pointer input (a host with IPointer) goes through the same pure
-   desargues.player.pointer/step as on the JVM: drag specs move their shapes,
-   and a press on empty space of a 3D frame orbits the camera.
+   Pointer and key input (a host with IPointer / IKeyboard) goes through the
+   same pure desargues.player.pointer/step as on the JVM: drag specs move
+   their shapes, a press on empty space of a 3D frame orbits the camera, and
+   wheels, pinches, pans and keys zoom and move the view (doc/interaction.md).
 
-   REPL surface: play!, pause!, seek!, set-param!, set-camera!, press!, params,
-   snapshot!, close!. One atom per player is the only state."
+   REPL surface: play!, pause!, seek!, set-param!, set-camera!, zoom!, pan!,
+   reset-view!, view, press!, params, snapshot!, close!. One atom per player
+   is the only state."
   (:require [cljs.reader :as reader]
             [desargues.scene.record :as recorder]
             [desargues.player.graph-source :as graph-source]
@@ -29,15 +31,18 @@
             [desargues.player.controls :as controls]
             [desargues.player.pointer :as pointer]
             [desargues.player.present :as present]
-            [desargues.player.space :as space]))
+            [desargues.player.space :as space]
+            [desargues.player.navigate :as navigate]))
 
 (defn- source-for [{:keys [source-fn params]}] (source-fn params))
 
 (defn- present!
-  "Show the current frame, seen through the orbited camera when there is one;
-   a 3D frame is projected to 2D for a 2D host (desargues.player.present)."
+  "Show the current frame seen through the viewer's look (the orbited camera
+   of a 3D frame, the viewport of a 2D one); a 3D frame is projected to 2D
+   for a 2D host (desargues.player.present)."
   [{:keys [host state]}]
-  (present/present! host (session/current-frame (:session @state)) (:camera @state)))
+  (let [{:keys [session camera view]} @state]
+    (present/present! host (session/current-frame session) camera view)))
 
 (defn- on-tick [player dt]
   (swap! (:state player) update :session session/tick dt)
@@ -60,27 +65,32 @@
                    (fn [id raw] (control-input! player id raw))))))
 
 (defn on-pointer
-  "Feed one pointer `event` ({:type :at :hit}, scene units) to `player`
+  "Feed one pointer, gesture or key `event` (scene units) to `player`
    through desargues.player.pointer/step: a drag re-records the source with
-   the new params, an orbit turns the camera. Returns the player."
+   the new params, an orbit turns the camera, a pan, a wheel, a pinch or a
+   key moves the view. Returns the player."
   [player controls event]
   (let [st  @(:state player)
         out (pointer/step st controls (session/current-frame (:session st)) event)]
-    (swap! (:state player) assoc :drag (:drag out) :orbit (:orbit out))
+    (swap! (:state player) pointer/settle out)
     (when-let [ps (:params out)]
       (set-params! player ps))
-    (when-let [cam (:camera out)]
-      (swap! (:state player) assoc :camera cam)
+    (when (:look out)
       (present! player))
     player))
 
 (defn- bind-pointer!
-  "Wire the host's pointer to the drag specs in `controls` and, for a 3D
-   source, to the orbit, if the host takes pointer input (ISP)."
+  "Wire the host's pointer (drag specs, orbit, zoom, pan) and keys (zoom,
+   pan, orbit, reset) to the player, for the ports the host has (ISP)."
   [player controls]
   (when (and (satisfies? p/IPointer (:host player))
              (pointer/wants-pointer? controls (session/current-frame (:session @(:state player)))))
-    (p/-on-pointer! (:host player) (fn [ev] (on-pointer player controls ev)))))
+    (p/-on-pointer! (:host player) (fn [ev] (on-pointer player controls ev))))
+  (when (satisfies? p/IKeyboard (:host player))
+    (p/-on-key! (:host player)
+                (fn [ev] (let [before (navigate/look @(:state player))]
+                           (on-pointer player controls ev)
+                           (not= before (navigate/look @(:state player))))))))
 
 (defn open-source!
   "Play `source-fn` (fn [params] ISource) in `host`.
@@ -111,6 +121,39 @@
          #(when cam (merge (or % (space/camera (session/current-frame (:session @(:state player))))) cam)))
   (present! player)
   player)
+
+(defn- look!
+  "Replace the viewer's look with (f look frame) and repaint; a nil result
+   changes nothing. Returns the player."
+  [player f]
+  (let [st @(:state player)]
+    (when-let [lk (f (navigate/look st) (session/current-frame (:session st)))]
+      (swap! (:state player) merge (select-keys lk [:camera :view]))
+      (present! player))
+    player))
+
+(defn zoom!
+  "Magnify the view `m` times (m > 1 in) about scene point `at` (default
+   the middle): a 3D camera or a 2D viewport (desargues.player.navigate).
+   Clamped; parameter changes keep it."
+  ([player m] (zoom! player m [0 0]))
+  ([player m at] (look! player #(navigate/zoom %1 %2 m at))))
+
+(defn pan!
+  "Move the picture by [dx dy] scene units, as a drag of that travel would."
+  [player d]
+  (look! player #(navigate/pan %1 %2 d)))
+
+(defn reset-view!
+  "Back to the source's own camera and viewport (key 0, a double click)."
+  [player]
+  (look! player (fn [lk _] (navigate/reset lk))))
+
+(defn view
+  "{:three-d? :camera :view :zoom}: what the viewer looks through now."
+  [player]
+  (let [st @(:state player)]
+    (navigate/describe (navigate/look st) (session/current-frame (:session st)))))
 
 (defn open-graph!
   "Play recorded scene graph `graph` (EDN data) in `host`. Same opts as
