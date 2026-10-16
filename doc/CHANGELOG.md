@@ -32,6 +32,20 @@ All notable changes to desargues. The format follows
   `device-available?` probes a device by building a kernel (raster opens
   sessions lazily and does not check an `:ocl:N` index).
 
+### Changed
+- The physics lives in its own bounded context, `desargues.physics` (facade)
+  and `desargues.physics.*` (see `src/desargues/physics/README.md`). The names
+  `desargues.videos.physics` and `desargues.videos.lagrangian` in the 0.3.0
+  and earlier entries below refer to it; the solver multimethod is now
+  `desargues.physics.solver/solver`. Its tests moved to
+  `test/desargues/physics/` (`desargues.physics.physics-rk4-test`,
+  `desargues.physics.lagrangian-test`), and the docs, the cljw kernel comment
+  and the `user` docstrings name the new namespaces.
+
+### Removed
+- The tracked `src/desargues/videos/scenes/brachistochrone.clj.bak` (nothing
+  referenced it) and with it the empty `src/desargues/videos` tree.
+
 ### Fixed
 - `raster-kernels/lower-emmy-kernel` indexed the state with doubles
   (`(aget s 0.0)`): its prewalk revisited the emitted `aget` and turned the
