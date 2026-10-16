@@ -234,6 +234,8 @@
       (when (satisfies? p/IControls (:host player))
         (doseq [[k v] (:move out)]
           (p/-set-control! (:host player) k v))))
+    (when-let [t (:seek out)]
+      (update-session! player #(session/play (session/seek % t))))
     out))
 
 (defn press!
