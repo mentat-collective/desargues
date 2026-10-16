@@ -90,6 +90,7 @@ try {
     await page.close();
   }
   failed += await checkWidgets(browser, base);
+  failed += await checkView(browser, base);
 } finally {
   await browser.close();
   server.close();
@@ -168,6 +169,77 @@ async function checkWidgets(browser, base) {
                 `${status.tickError ? ", tick error " + status.tickError : ""}` +
                 `${errors.length ? ", errors " + errors.join("; ") : ""}`);
     if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/widgets-${demo}.png` });
+    await page.close();
+  }
+  return failed;
+}
+
+// View navigation (desargues.player.navigate, doc/interaction.md): on a 2D
+// demo and on the 3D page, a real wheel over empty canvas must zoom toward
+// the pointer (status().zoom > 1, the picture changes), a ctrl+wheel (a
+// trackpad pinch) and the + key must zoom further, a shift-drag must pan,
+// and a double click and the 0 key must each bring back the source's own
+// view (zoom 1, not moved, the first picture again). Returns failures.
+async function checkView(browser, base) {
+  let failed = 0;
+  for (const [name, query] of [["2D tangent", "?demo=tangent"], ["3D space", "?demo=space"]]) {
+    const page = await browser.newPage({ viewport: { width: 1300, height: 640 } });
+    const errors = [];
+    page.on("pageerror", (e) => errors.push(String(e)));
+    await page.goto(base + query);
+    await page.waitForFunction(() => window.desargues && desargues.browser.main.status().t !== null,
+                               null, { timeout: 15000 });
+    await page.evaluate(() => desargues.browser.main.seek(99));
+    const status = () => page.evaluate(() => desargues.browser.main.status());
+    const picture = () => page.evaluate(() => document.querySelector("canvas[data-desargues=stage]").toDataURL());
+    const box = await page.$eval("canvas[data-desargues=stage]", (e) => {
+      const r = e.getBoundingClientRect(); return [r.left, r.top, r.width, r.height];
+    });
+    const [x, y] = [box[0] + 0.08 * box[2], box[1] + 0.9 * box[3]];
+    const notes = [];
+    let ok = true;
+    const step = async (label, act, test) => {
+      const before = await picture();
+      await act();
+      const s = await status();
+      const changed = before !== (await picture());
+      const pass = test(s, changed);
+      ok = ok && pass;
+      notes.push(`${label} ${pass ? "ok" : "FAILED"} (zoom ${Number(s.zoom).toFixed(3)}, moved ${s.moved})`);
+      return s;
+    };
+    const first = await picture();
+    await page.mouse.move(x, y);
+    const z1 = (await step("wheel", () => page.mouse.wheel(0, -400),
+                           (s, ch) => ch && s.zoom > 1 && s.moved)).zoom;
+    await page.keyboard.down("Control");
+    const z2 = (await step("pinch", () => page.mouse.wheel(0, -40),
+                           (s, ch) => ch && s.zoom > z1)).zoom;
+    await page.keyboard.up("Control");
+    await step("key +", () => page.keyboard.press("+"), (s, ch) => ch && Math.abs(s.zoom - 1.25 * z2) < 1e-6);
+    const zp = (await status()).zoom;
+    await step("shift-drag pan", async () => {
+      await page.keyboard.down("Shift");
+      await page.mouse.move(x, y);
+      await page.mouse.down();
+      await page.mouse.move(x + 90, y - 40, { steps: 5 });
+      await page.mouse.up();
+      await page.keyboard.up("Shift");
+    }, (s, ch) => ch && Math.abs(s.zoom - zp) < 1e-9 && s.moved);
+    await step("double click reset", () => page.mouse.dblclick(x, y),
+               (s) => s.zoom === 1 && !s.moved);
+    const back = (await picture()) === first;
+    ok = ok && back;
+    notes.push(back ? "first picture back" : "first picture NOT back");
+    await page.keyboard.press("ArrowRight");
+    await step("key 0 reset", () => page.keyboard.press("0"), (s, ch) => ch && s.zoom === 1 && !s.moved);
+    const s = await status();
+    ok = ok && !s.tickError && errors.length === 0;
+    if (!ok) failed++;
+    console.log(`${ok ? "PASS" : "FAIL"} view ${name}: ${notes.join(", ")}` +
+                `${s.tickError ? ", tick error " + s.tickError : ""}` +
+                `${errors.length ? ", errors " + errors.join("; ") : ""}`);
+    if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/view-${name.split(" ")[0]}.png` });
     await page.close();
   }
   return failed;
