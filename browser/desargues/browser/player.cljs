@@ -10,12 +10,13 @@
                    `clojure -M:browser-record` or desargues.player/record), so
                    viewing needs no JVM.
      open!         a parametric construct (fn [params] (fn [stage] ...)) over
-                   desargues.browser.stage, re-recorded in the page on every
-                   parameter change.
+                   the desargues.scene facade, re-recorded in the page through
+                   desargues.scene.record (the recorder every host shares) on
+                   every parameter change.
      load-graph!   fetch an EDN scene graph by URL, then open-graph!.
 
-   REPL surface: play!, pause!, seek!, set-param!, params, snapshot!, close!.
-   One atom per player is the only state."
+   REPL surface: play!, pause!, seek!, set-param!, press!, params, snapshot!,
+   close!. One atom per player is the only state."
   (:require [cljs.reader :as reader]
             [desargues.scene.record :as recorder]
             [desargues.player.graph-source :as graph-source]
@@ -80,8 +81,9 @@
   (fn [params] (graph-source/graph-source (recorder/record (construct-fn params)))))
 
 (defn open!
-  "Play parametric construct `construct-fn` (fn [params] (fn [stage] ...))
-   over desargues.browser.stage in `host`. Same opts as open-source!."
+  "Play parametric construct `construct-fn` (fn [params] (fn [stage] ...)),
+   written against the desargues.scene facade, in `host`; it is recorded in
+   the page by desargues.scene.record. Same opts as open-source!."
   [host construct-fn opts]
   (open-source! host (construct-source construct-fn) opts))
 
