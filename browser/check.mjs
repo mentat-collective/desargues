@@ -2,7 +2,8 @@
 // local port, opens every demo (and the recorded pendulum scene) in headless
 // Chromium through Playwright, seeks to a few times and asserts the stage
 // canvas painted non-background pixels with no page or tick errors; one slider
-// move must change the picture too.
+// move must change the picture too, and on the 3D page a mouse drag on empty
+// space must orbit the camera.
 //
 //   cd browser && npm i --no-save --no-package-lock playwright && node check.mjs
 //
@@ -29,14 +30,15 @@ const base = `http://127.0.0.1:${server.address().port}/`;
 
 const pages = ["axes", "plot", "parametric", "polar", "field", "tangent", "riemann", "tex"]
   .map((d) => ({ name: d, query: `?demo=${d}` }))
-  .concat([{ name: "pendulum (recorded EDN)", query: "?scene=pendulum" }]);
+  .concat([{ name: "space (3D, orbit)", query: "?demo=space", orbit: true },
+           { name: "pendulum (recorded EDN)", query: "?scene=pendulum" }]);
 
 // CHROME=<path> runs a browser already on disk (e.g. a cached headless shell)
 // instead of the one this Playwright release expects.
 const browser = await chromium.launch(process.env.CHROME ? { executablePath: process.env.CHROME } : {});
 let failed = 0;
 try {
-  for (const { name, query } of pages) {
+  for (const { name, query, orbit } of pages) {
     const page = await browser.newPage({ viewport: { width: 1300, height: 640 } });
     const errors = [];
     page.on("pageerror", (e) => errors.push(String(e)));
@@ -59,10 +61,29 @@ try {
       const after = await page.evaluate(() => document.querySelector("canvas").toDataURL() + document.querySelector("#stage").innerHTML);
       moved = before !== after;
     }
-    const ok = painted.every((n, i) => n > 500 || tex[i] > 0) && !tickError && errors.length === 0 && moved;
+    // A 3D page: a real mouse drag on empty canvas (bottom-left corner) must
+    // orbit the camera (status().yaw leaves null) and repaint.
+    let orbited = true;
+    if (orbit) {
+      const box = await page.$eval("canvas[data-desargues=stage]", (e) => {
+        const r = e.getBoundingClientRect(); return [r.left, r.top, r.width, r.height];
+      });
+      const [x, y] = [box[0] + 0.05 * box[2], box[1] + 0.92 * box[3]];
+      const before = await page.evaluate(() => document.querySelector("canvas").toDataURL());
+      await page.mouse.move(x, y);
+      await page.mouse.down();
+      await page.mouse.move(x + 120, y - 30, { steps: 6 });
+      await page.mouse.up();
+      const after = await page.evaluate(() => document.querySelector("canvas").toDataURL());
+      const yaw = await page.evaluate(() => desargues.browser.main.status().yaw);
+      orbited = typeof yaw === "number" && before !== after;
+    }
+    const ok = painted.every((n, i) => n > 500 || tex[i] > 0) && !tickError && errors.length === 0 &&
+               moved && orbited;
     if (!ok) failed++;
     console.log(`${ok ? "PASS" : "FAIL"} ${name}: painted ${painted.join(" / ")} px, tex labels ${tex.join(" / ")}` +
                 `${moved ? "" : ", slider did not repaint"}` +
+                `${orbited ? (orbit ? ", mouse drag orbited" : "") : ", mouse drag did not orbit"}` +
                 `${tickError ? ", tick error " + tickError : ""}` +
                 `${errors.length ? ", errors " + errors.join("; ") : ""}`);
     if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/${name.split(" ")[0]}.png` });
