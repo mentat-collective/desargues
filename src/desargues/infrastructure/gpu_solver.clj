@@ -143,18 +143,17 @@
   ([device] (->GpuSolver device (atom nil) (Object.))))
 
 (defn device-available?
-  "True when `device` can compile a kernel: a session opens and the pendulum
-   kernel builds (raster opens sessions lazily, so only a build reaches the
-   driver). raster does not check a device's index: an :ocl:N past the last
-   device still binds the runtime it initialised."
+  "True when `device` runs a kernel end to end: a solver on it integrates one
+   pendulum for two steps (session, kernel build, buffer upload, launch,
+   download). raster opens sessions lazily and its kernel build does not
+   reach the driver either, so only a real launch proves an OpenCL ICD and a
+   platform are present. raster does not check a device's index: an :ocl:N
+   past the last device still binds the runtime it initialised."
   ([] (device-available? default-device))
   ([device]
    (try
-     (let [s (gpu/make-session device)]
-       (try
-         (gpu/compile! s :probe #'rk/pendulum-par-rk4 {:dtype :double})
-         true
-         (finally (gpu/close-session! s))))
+     (with-open [gs ^java.io.Closeable (gpu-solver device)]
+       (boolean (seq (phys/solve-trajectory gs (phys/make-pendulum {}) {:dt 0.01 :duration 0.02}))))
      (catch Throwable _no-device false))))
 
 ;; ── the :gpu backend's port methods (desargues.backend) ──────────────────────
