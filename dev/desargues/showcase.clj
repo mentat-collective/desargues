@@ -44,6 +44,7 @@
             [desargues.studio.objects-demos :as od]
             [desargues.studio.widget-demos :as wd]
             [desargues.tex.label :as tl]
+            [desargues.objects.calc.demos :as calc-demos]
             [desargues.studio.blackboard :as bb]
             [desargues.studio.blackboard-lessons]))
 
@@ -132,6 +133,36 @@
 (def divisors-of-12
   (let [ds [1 2 3 4 6 12]]
     {:carrier (set ds) :order (set (for [x ds y ds :when (zero? (mod y x))] [x y]))}))
+
+(defn- calc-entry
+  "A calculus figure of desargues.objects.calc.demos as a gallery entry; `k`
+   is the demo key, or [demo-key entry-id] for a second view of one demo."
+  [k caption & {:as more}]
+  (let [[demo id] (if (vector? k) k [k k])
+        {:keys [title source-fn params]} (calc-demos/entry demo)]
+    (merge {:id id :title title :ns "desargues.objects.calc.demos" :source source-fn
+            :params params :t :end :caption caption}
+           more)))
+
+(def calc-entries
+  "The calculus objects: one figure each, plus GIFs of the animated ones."
+  [(calc-entry :calc-area "area under 4 - x^2 on [0, 2], swept in; readout 16/3 exact (Emmy) vs numeric"
+               :gif {:fps 12 :from 0.0 :to 4.0 :size [560 315]})
+   (calc-entry :calc-riemann "Riemann sums of 4 - x^2 refined n = 1 -> 40 by the clock; exact rational sum beside the numeric one"
+               :gif {:fps 12 :from 0.0 :to 6.0 :size [560 315]})
+   (calc-entry :calc-between "area between x/2 + 1 and x^2")
+   (calc-entry :calc-tangent "secants of x^3/3 - x + 2 at x0 = 1.5 with h -> 0 converge to the tangent"
+               :t 3.0 :gif {:fps 12 :from 0.0 :to 5.0 :size [560 315]})
+   (calc-entry :calc-ftc "FTC: A(x) traced while the area sweeps to x; A' = f"
+               :t 3.5 :gif {:fps 12 :from 0.0 :to 5.0 :size [560 315]})
+   (calc-entry :calc-work "line integral: F = (-y, x) along a circle, work 2 pi r^2" :t 3.5)
+   (calc-entry :calc-solid "volume of revolution of x/2 + 1 (disk method), swept a full turn; 14/3 pi exact"
+               :gif {:fps 12 :from 0.0 :to 5.0 :size [560 315]})
+   (calc-entry [:calc-solid :calc-solid-shell] "shell method: 4 - x^2 about the y-axis, 8 pi"
+               :params (assoc (calc-demos/defaults :calc-solid) :f :parabola :method :shell :play false)
+               :camera {:target [0.0 0.0 1.6] :zoom 1.1 :pitch 0.5})
+   (calc-entry :calc-columns "double integral: 6 x 6 midpoint columns under z = f(x, y), rising"
+               :gif {:fps 12 :from 0.0 :to 4.0 :size [560 315]})])
 
 (defn- blackboard-entry
   "A blackboard lesson (desargues.studio.blackboard) at the instant its last
@@ -281,7 +312,7 @@
 (defn -main [& args]
   (let [[flag v] args
         only (when (= "--only" flag) (set (map keyword (str/split v #","))))
-        es   (filter #(or (nil? only) (only (:id %))) entries)]
+        es   (filter #(or (nil? only) (only (:id %))) (concat entries calc-entries))]
     (if (= "--list" flag)
       (doseq [e es]
         (println (format "%-12s %6.2fs  %s" (name (:id e))
