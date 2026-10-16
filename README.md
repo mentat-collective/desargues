@@ -30,6 +30,50 @@ live scenes and the benchmark charts below.
   of solved configurations as facade scenes
 - ⚙️ **Environment-driven config** — no machine paths baked into source
 
+## Showcase
+
+All of these images come from the same constructs the JavaFX stage and the browser
+page play. Each is recorded as a scene graph and painted by the headless PNG host
+(`desargues.player.headless`), with no Manim and no window.
+
+<p align="center">
+  <img src="doc/showcase/space-orbit.gif" width="560" alt="orbiting a saddle surface with a spiral drawn on it">
+  <br><sub>A 3D source (<code>desargues.player.space-demos</code>) with its camera yaw swept once around.</sub>
+</p>
+
+<table>
+<tr>
+<td width="33%"><a href="doc/showcase/pendulum.gif"><img src="doc/showcase/pendulum.gif" alt="damped pendulum"></a><br><sub>Damped pendulum, RK4 at dt = 0.01 (<code>desargues.studio.demos</code>)</sub></td>
+<td width="33%"><a href="doc/showcase/parametric.gif"><img src="doc/showcase/parametric.gif" alt="Lissajous curve drawing on"></a><br><sub>A Lissajous curve drawing on (<code>desargues.studio.objects-demos</code>)</sub></td>
+<td width="33%"><a href="doc/showcase/kepler.gif"><img src="doc/showcase/kepler.gif" alt="icosahedron turning"></a><br><sub>Kepler's solids, turn slider swept (<code>desargues.studio.widget-demos</code>)</sub></td>
+</tr>
+<tr>
+<td><a href="doc/showcase/space-top.png"><img src="doc/showcase/space-top.png" alt="saddle from above"></a><br><sub>The saddle from above, camera pitched (<code>desargues.player.space-demos</code>)</sub></td>
+<td><a href="doc/showcase/tangent.png"><img src="doc/showcase/tangent.png" alt="tangent and secant"></a><br><sub>Tangent swept along x³/3 − x, then a secant (<code>desargues.studio.objects-demos</code>)</sub></td>
+<td><a href="doc/showcase/riemann.png"><img src="doc/showcase/riemann.png" alt="Riemann sums"></a><br><sub>Riemann rectangles refined to 4n (<code>desargues.studio.objects-demos</code>)</sub></td>
+</tr>
+<tr>
+<td><a href="doc/showcase/field.png"><img src="doc/showcase/field.png" alt="vector field"></a><br><sub>Vector field: rotation plus a source (<code>desargues.studio.objects-demos</code>)</sub></td>
+<td><a href="doc/showcase/refute.png"><img src="doc/showcase/refute.png" alt="refutation flow"></a><br><sub>Contraposition: every branch of the backwards truth table clashes (<code>desargues.logic.scene.refute</code>)</sub></td>
+<td><a href="doc/showcase/tex.png"><img src="doc/showcase/tex.png" alt="TeX labels"></a><br><sub>TeX labels through JLaTeXMath (<code>desargues.studio.objects-demos</code>)</sub></td>
+</tr>
+<tr>
+<td><a href="doc/showcase/turing.png"><img src="doc/showcase/turing.png" alt="Turing machine"></a><br><sub>3-state busy beaver after 9 steps, button widgets (<code>desargues.studio.widget-demos</code>)</sub></td>
+<td><a href="doc/showcase/goedel.png"><img src="doc/showcase/goedel.png" alt="Goedel numbering"></a><br><sub>Goedel number of Ex(x=s0), text widget (<code>desargues.studio.widget-demos</code>)</sub></td>
+<td><a href="doc/showcase/venn.png"><img src="doc/showcase/venn.png" alt="Venn flow"></a><br><sub>A − B = B − A refuted on Venn diagrams (<code>desargues.logic.scene.venn</code>)</sub></td>
+</tr>
+<tr>
+<td><a href="doc/showcase/truth-table.png"><img src="doc/showcase/truth-table.png" alt="truth table"></a><br><sub>De Morgan's law as a truth table (<code>desargues.logic.scene.table</code>)</sub></td>
+<td><a href="doc/showcase/proof.png"><img src="doc/showcase/proof.png" alt="proof flow"></a><br><sub>Transitivity of ⊆ by element chasing, checked (<code>desargues.logic.scene.proof</code>)</sub></td>
+<td><a href="doc/showcase/hasse.png"><img src="doc/showcase/hasse.png" alt="Hasse diagram"></a><br><sub>Divisors of 12 as a lattice (<code>desargues.logic.scene.hasse</code>)</sub></td>
+</tr>
+</table>
+
+More images, the browser page with its widgets, and the entry that makes each
+picture are in [doc/showcase.md](doc/showcase.md). To regenerate them, run
+`clojure -M:showcase` (or `bb showcase`). The browser screenshots come from
+`node browser/screenshots.mjs`.
+
 ## Install
 
 ### As a library
@@ -154,6 +198,7 @@ Videos land under `media/videos/<quality>/`.
 | Type check | `bb typecheck` · `clojure -M:dev -m desargues.typecheck` | Typed Clojure gate |
 | Benchmarks | `bb bench` · `clojure -M:bench:dynamics` | add `--manim` for render timings |
 | Landing page | `bb site` | plato deck → `dist/site` |
+| Showcase images | `bb showcase` · `clojure -M:showcase` | headless renders → `doc/showcase/`, needs ffmpeg |
 | Demos | `clojure -M:run [intro\|step N\|quickstart\|derivative]` | needs the Manim env |
 | Dev REPL | `clojure -A:dev` | `dev/` sources, orchestra, the checker |
 
@@ -295,6 +340,7 @@ A new engine registers a key and adds methods in its own namespace:
 
 ## Documentation
 
+- [showcase.md](doc/showcase.md): every gallery image and the entry that renders it
 - [ARCHITECTURE.md](doc/ARCHITECTURE.md) — SOLID/DDD design and the layer contracts
 - [BOUNDED_CONTEXTS.md](doc/BOUNDED_CONTEXTS.md) — the domain / rendering / devx contexts
 - [ADR_CODE_QUALITY.md](doc/ADR_CODE_QUALITY.md) — code quality standards
