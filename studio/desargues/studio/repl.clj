@@ -15,7 +15,8 @@
             [desargues.player.javafx3d :as fx3]
             [desargues.studio.spaces :as spaces]
             [desargues.player.calculus-symbolic :as sym]
-            [desargues.player.camera-path :as cp]))
+            [desargues.player.camera-path :as cp]
+            [desargues.studio.blackboard :as bb]))
 
 (comment
   ;; 1. Open a window. The host is the only toolkit-specific value here: any
@@ -164,3 +165,24 @@
   ;; The symbolic side on its own: any surface form in x and y.
   (sym/partials '(* (exp (- x)) (sin (* x y))))   ; => {:infix {:f :fx :fy} :tex ... :expr ...}
   ((:fx (sym/surface '(* x x y))) 1.0 2.0))        ; => 4.0, compiled from Emmy's 2 x y
+
+(comment
+  ;; 10. The blackboard (desargues.studio.blackboard): a worked integral
+  ;;     written step by step in chalk, the explanation under each line, side
+  ;;     work in the margin, a figure pane, auto-scroll. Widgets: problem and
+  ;;     method selects, next / previous / show all / restart, explanations
+  ;;     and auto-play toggles. Buttons move the clock (:seek) to where the
+  ;;     step starts being written.
+  (def b (player/open! (fx/host) bb/blackboard {:title "desargues: blackboard"
+                                                :scene-name "blackboard"
+                                                :controls bb/controls}))
+  (player/control-input! b :problem :by-parts)
+  (player/press! b :next)                         ; step mode: one line at a time
+  (player/press! b :next)
+  (player/press! b :prev)
+  (player/press! b :all)                          ; everything, boxed answer, Emmy check
+  (player/control-input! b :path 1)               ; the tabular method
+  (player/control-input! b :explain false)
+  (player/control-input! b :auto true)            ; write the whole lesson again
+  (player/snapshot! b "blackboard.png")
+  (player/close! b))

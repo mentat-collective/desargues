@@ -43,7 +43,9 @@
             [desargues.studio.demos :as demos]
             [desargues.studio.objects-demos :as od]
             [desargues.studio.widget-demos :as wd]
-            [desargues.tex.label :as tl]))
+            [desargues.tex.label :as tl]
+            [desargues.studio.blackboard :as bb]
+            [desargues.studio.blackboard-lessons]))
 
 (def out-dir "doc/showcase")
 
@@ -131,6 +133,17 @@
   (let [ds [1 2 3 4 6 12]]
     {:carrier (set ds) :order (set (for [x ds y ds :when (zero? (mod y x))] [x y]))}))
 
+(defn- blackboard-entry
+  "A blackboard lesson (desargues.studio.blackboard) at the instant its last
+   chalk is down; with `gif?`, also the lesson being written."
+  [id problem caption & {:keys [gif?]}]
+  (let [ps (assoc (bb/defaults) :problem problem)]
+    (cond-> {:id id :title (str "blackboard: " (:title (desargues.studio.blackboard-lessons/lesson problem)))
+             :ns "desargues.studio.blackboard"
+             :source (construct-source bb/blackboard) :params ps
+             :t (- (bb/board-end ps) 0.01) :caption caption}
+      gif? (assoc :gif {:fps 8 :from 0.0 :to (bb/board-end ps) :size [640 360]}))))
+
 (def entries
   [;; physics
    {:id :pendulum :title "damped pendulum" :ns "desargues.studio.demos"
@@ -178,6 +191,12 @@
    {:id :goedel :title "Goedel numbering" :ns "desargues.studio.widget-demos"
     :caption "the formula Ex(x=s0) symbol by symbol and its Goedel number (text field)"
     :source (construct-source wd/goedel-demo) :params {:formula "Ex(x=s0)"} :t :end}
+   ;; the blackboard (worked integrals written in chalk)
+   (blackboard-entry :blackboard-parts :by-parts
+                     "integration by parts written step by step in chalk: u in yellow, dv in blue, side work in the margin, the answer boxed"
+                     :gif? true)
+   (blackboard-entry :blackboard-area :area
+                     "the definite integral of sin x over [0, pi] = 2, with the arch shaded in the figure pane")
    ;; logic flows (desargues.logic.scene.*)
    {:id :venn :title "Venn flow" :ns "desargues.logic.scene.venn"
     :caption "A - B = B - A refuted: the regions that differ turn red"
