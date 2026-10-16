@@ -36,6 +36,9 @@ jobs:
             ~/.gitlibs
           key: test-${{ runner.os }}-${{ hashFiles('deps.edn') }}
           restore-keys: test-${{ runner.os }}-
+      # The Node build of the recorder: without it desargues.scene.parity-test
+      # skips the JVM vs ClojureScript comparison (node is on the runner).
+      - run: clojure -M:browser-parity
       - run: clojure -M:test
 
   dynamics:
