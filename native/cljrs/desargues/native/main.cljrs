@@ -17,7 +17,13 @@
    :frame F} {:op :control :spec S} {:op :set-control :id :value}
    {:op :snapshot :path} {:op :ticks :on? b} {:op :close}.
    Out: {:ev :ready :window? b} {:ev :tick :dt s} {:ev :change :id :value}
-   {:ev :snapshot :path} {:ev :closed}."
+   {:ev :snapshot :path} {:ev :closed}, and {:ev :input :event E} for
+   every raw stage input E in canvas pixels (desargues.native.window/pump!:
+   :down/:up {:px :button :mods :ms}, :move {:px :mods}, :wheel {:px
+   :lines|:pixels :mods}, :pinch {:px :delta}, :key {:key :text :mods});
+   the JVM translates and hit-tests them (desargues.player.native-input).
+   In, {:op :input :event E} feeds E as if the window had sent it (tests,
+   runs without a display)."
   (:require [clojure.edn :as edn]
             [desargues.player.protocols :as p]
             [desargues.player.graph-source :as gs]
@@ -81,6 +87,7 @@
       :set-control (p/-set-control! h (:id m) (:value m))
       :snapshot    (emit! {:ev :snapshot :path (p/-snapshot! h (:path m))})
       :ticks       (reset! ticks? (boolean (:on? m)))
+      :input       (host/handle-event! (:state h) (:event m))
       :close       (do (p/-close! h) (emit! {:ev :closed}))
       nil)))
 
@@ -89,6 +96,7 @@
         ticks? (atom false)
         eof? (atom false)]
     (p/-on-tick! h (fn [dt] (when @ticks? (emit! {:ev :tick :dt dt}))))
+    (swap! (:state h) assoc :on-event (fn [e] (emit! {:ev :input :event e})))
     (host/run! h {:until (fn [_]
                            (doseq [l (stdin/poll-lines)]
                              (if (= l :eof) (reset! eof? true) (dispatch! h ticks? l)))

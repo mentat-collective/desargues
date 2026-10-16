@@ -193,14 +193,45 @@
   (paint-text! gc vp s (format (str "%." (get-in s [:opts :num-decimal-places] 2) "f")
                                (double (:value s 0)))))
 
+;; ── Device scale ───────────────────────────────────────────────────────────
+;; On a fractional HiDPI screen (output scale 1.5 at 125 DPI) the canvas
+;; rasterises its vector ops at device resolution, but an image drawn at its
+;; own pixel size is magnified by the scale and goes soft. Raster content
+;; (TeX) is therefore typeset at the device scale and drawn at its LOGICAL
+;; size: the canvas then maps a sharp image 1:1 onto device pixels.
+
+(def ^:dynamic *device-scale*
+  "Device pixels per logical pixel of the canvas being painted; bound by
+   paint-frame! from the window."
+  1.0)
+
+(defn- device-scale
+  "Output scale of the window showing `canvas`, else the primary screen's,
+   else 1.0."
+  ^double [^Canvas canvas]
+  (double
+   (or (some-> canvas .getScene .getWindow .getOutputScaleX)
+       (try (.getOutputScaleX (javafx.stage.Screen/getPrimary)) (catch Throwable _ nil))
+       1.0)))
+
+(def ^:private aa-hints
+  {java.awt.RenderingHints/KEY_ANTIALIASING      java.awt.RenderingHints/VALUE_ANTIALIAS_ON
+   java.awt.RenderingHints/KEY_TEXT_ANTIALIASING java.awt.RenderingHints/VALUE_TEXT_ANTIALIAS_ON
+   java.awt.RenderingHints/KEY_FRACTIONALMETRICS java.awt.RenderingHints/VALUE_FRACTIONALMETRICS_ON
+   java.awt.RenderingHints/KEY_STROKE_CONTROL    java.awt.RenderingHints/VALUE_STROKE_PURE
+   java.awt.RenderingHints/KEY_RENDERING         java.awt.RenderingHints/VALUE_RENDER_QUALITY})
+
 (defn- tex-image*
-  "LaTeX `tex` typeset by JLaTeXMath at `px` pixels in #RRGGBB `hex`, as a
-   JavaFX image; nil when JLaTeXMath is absent or the source does not parse,
-   so the caller falls back to plain text. Reflective on purpose: the host
-   loads without JLaTeXMath on the classpath."
-  [tex px hex]
+  "LaTeX `tex` typeset by JLaTeXMath at `px` LOGICAL pixels in #RRGGBB `hex`,
+   rasterised at `scale` device pixels per logical pixel (the window's output
+   scale). Returns {:img image in device pixels, :w :h its logical size}; nil
+   when JLaTeXMath is absent or the source does not parse, so the caller
+   falls back to plain text. Reflective on purpose: the host loads without
+   JLaTeXMath on the classpath."
+  [tex px hex scale]
   (try
-    (let [fcls    (Class/forName "org.scilab.forge.jlatexmath.TeXFormula")
+    (let [scale   (double scale)
+          fcls    (Class/forName "org.scilab.forge.jlatexmath.TeXFormula")
           formula (clojure.lang.Reflector/invokeConstructor fcls (object-array [(str tex)]))
           style   (.get (.getField (Class/forName "org.scilab.forge.jlatexmath.TeXConstants")
                                    "STYLE_DISPLAY") nil)
@@ -209,29 +240,69 @@
           _       (clojure.lang.Reflector/invokeInstanceMethod
                    icon "setForeground" (object-array [(java.awt.Color/decode hex)]))
           ^javax.swing.Icon icon icon
-          w       (max 1 (.getIconWidth icon))
-          h       (max 1 (.getIconHeight icon))
+          lw      (max 1 (.getIconWidth icon))
+          lh      (max 1 (.getIconHeight icon))
+          w       (int (max 1 (Math/ceil (* scale lw))))
+          h       (int (max 1 (Math/ceil (* scale lh))))
           bi      (BufferedImage. w h BufferedImage/TYPE_INT_ARGB)
           g       (.createGraphics bi)]
-      (.setRenderingHint g java.awt.RenderingHints/KEY_ANTIALIASING
-                         java.awt.RenderingHints/VALUE_ANTIALIAS_ON)
+      ;; the glyphs are outlines: under a scale transform they are filled at
+      ;; device resolution, not magnified from a 1x bitmap
+      (.addRenderingHints g ^java.util.Map aa-hints)
+      (.scale g scale scale)
       (.paintIcon icon nil g 0 0)
       (.dispose g)
-      (let [img (WritableImage. w h)
-            pw  (.getPixelWriter img)]
-        (dotimes [y h] (dotimes [x w] (.setArgb pw x y (.getRGB bi x y))))
-        img))
+      (let [img (WritableImage. w h)]
+        (.setPixels (.getPixelWriter img) 0 0 w h
+                    (javafx.scene.image.PixelFormat/getIntArgbInstance)
+                    ^ints (.getRGB bi 0 0 w h nil 0 w) 0 w)
+        {:img img :w (double lw) :h (double lh)}))
     (catch Throwable _ nil)))
 
-(def ^:private tex-image (memoize tex-image*))
+(def ^:private tex-cache (atom {}))
+
+(defn- tex-image
+  "tex-image*, cached per (tex, px, colour, scale): a write-on animation only
+   crops a cached image, and a move to a monitor of another scale typesets
+   afresh. Bounded: cleared when it passes 512 entries."
+  [tex px hex scale]
+  (let [k [tex px hex (double scale)]]
+    (if-let [e (find @tex-cache k)]
+      (val e)
+      (let [v (tex-image* tex px hex scale)]
+        (swap! tex-cache #(assoc (if (> (count %) 512) {} %) k v))
+        v))))
+
+(defn- tex-hex
+  "#RRGGBB of a :tex shape's colour: a palette keyword or a #RRGGBB string."
+  [s]
+  (let [c (or (get-in s [:opts :color]) :white)]
+    (if (and (string? c) (re-matches #"#[0-9a-fA-F]{6}" c))
+      c
+      (get frame/palette c (frame/palette :white)))))
 
 (defmethod paint! :tex [^GraphicsContext gc vp s]
+  ;; :opts :anchor "start" puts the left edge at :at; :opts :write clips the
+  ;; image to its :draw fraction, left to right (chalk being written). The
+  ;; image is typeset in device pixels and drawn at its logical size; the
+  ;; write clip is a source rectangle on that full-resolution image (no
+  ;; snapshot, no second raster).
   (let [[cx cy] (center vp s)
         px  (Math/rint (* (emphasis-scale s) (double (get-in s [:opts :font-size] 48))
-                          (/ (double (:scale vp)) 120.0)))
-        hex (get frame/palette (or (get-in s [:opts :color]) :white) (frame/palette :white))]
-    (if-let [^WritableImage img (tex-image (str (:tex s)) px hex)]
-      (.drawImage gc img (- cx (/ (.getWidth img) 2.0)) (- cy (/ (.getHeight img) 2.0)))
+                          (/ (double (:scale vp)) 120.0)))]
+    (if-let [{:keys [^WritableImage img w h]}
+             (tex-image (str (:tex s)) px (tex-hex s) *device-scale*)]
+      (let [w  (double w)
+            h  (double h)
+            iw (.getWidth img)
+            ih (.getHeight img)
+            x  (if (= "start" (get-in s [:opts :anchor])) cx (- cx (/ w 2.0)))
+            y  (- cy (/ h 2.0))
+            wf (if (get-in s [:opts :write])
+                 (max 0.0 (min 1.0 (double (:draw s 1.0))))
+                 1.0)]
+        (when (pos? wf)
+          (.drawImage gc img 0.0 0.0 (* wf iw) ih x y (* wf w) h)))
       (paint-text! gc vp s (str (:tex s))))))
 
 (defn- dash-px
@@ -275,13 +346,15 @@
     (.clearRect gc 0 0 w h)
     (.setFill gc (if-let [b (:background f)] (fx-color b) Color/BLACK))
     (.fillRect gc 0 0 w h)
-    (doseq [s (frame/visible-shapes f)]
-      (.save gc)
-      (.setGlobalAlpha gc (double (:opacity s)))
-      (when-let [d (dash-px vp s)]
-        (.setLineDashes gc (double-array d)))
-      (paint! gc vp s)
-      (.restore gc))))
+    ;; raster content (TeX) is typeset at the window's device scale
+    (binding [*device-scale* (device-scale canvas)]
+      (doseq [s (frame/visible-shapes f)]
+        (.save gc)
+        (.setGlobalAlpha gc (double (:opacity s)))
+        (when-let [d (dash-px vp s)]
+          (.setLineDashes gc (double-array d)))
+        (paint! gc vp s)
+        (.restore gc)))))
 
 ;; ── Snapshots ───────────────────────────────────────────────────────────────
 
@@ -403,6 +476,10 @@
          (.add (.getChildren pane) canvas)
          (.bind (.widthProperty canvas) (.widthProperty pane))
          (.bind (.heightProperty canvas) (.heightProperty pane))
+         ;; moved to a monitor of another scale: re-typeset TeX at the new
+         ;; device scale (paint-frame! reads it; tex-image keys on it)
+         (listen! (.outputScaleXProperty stage)
+                  (fn [_] (when-let [f (:frame @state)] (paint-frame! canvas f))))
          (input/wire! state canvas)
          (.show stage)
          (swap! state assoc :stage stage :canvas canvas :controls-box controls))))
@@ -411,7 +488,12 @@
     (on-fx #(some-> ^Stage (:stage @state) .close))
     this)
   (-snapshot! [_ path]
-    (on-fx #(write-png! (.snapshot (.getScene ^Stage (:stage @state)) nil) path)))
+    ;; at the window's device scale: the PNG shows what the screen shows
+    (on-fx #(let [^Stage stage (:stage @state)
+                  k (.getOutputScaleX stage)
+                  sp (doto (javafx.scene.SnapshotParameters.)
+                       (.setTransform (javafx.scene.transform.Scale. k k)))]
+              (write-png! (.snapshot (.getRoot (.getScene stage)) sp nil) path))))
 
   p/IControls
   (-control! [this {:keys [id] :as spec} on-change]

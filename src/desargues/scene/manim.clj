@@ -116,7 +116,8 @@
   (-stroke! [_ obj opts]         (kw-apply man-mob/set-stroke [obj]                       (resolve-opts opts)))
 
   p/ITex
-  (-tex [_ s opts]               (kw-apply man-mob/math-tex [s] (resolve-opts opts)))
+  ;; :anchor and :write are player hints (left-aligned, written-on chalk)
+  (-tex [_ s opts]               (kw-apply man-mob/math-tex [s] (resolve-opts (dissoc opts :anchor :write))))
 
   p/IAnimations
   (-appear [_ obj opts]          (kw-apply man-anim/fade-in  [obj] (resolve-opts opts)))

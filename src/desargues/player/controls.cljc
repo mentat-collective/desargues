@@ -28,6 +28,11 @@
               (on-press params), or params merged with :set (a preset).
               Holding state between presses is just reading it from params.
 
+   Any widget may also carry :seek, a time in seconds or a pure fn of the
+   NEW params giving one: after its input is accepted the player moves its
+   clock there and plays on (a lesson's next-step button jumps to where
+   that step starts being written). Without :seek the clock keeps its time.
+
    Drag specs ({:id :drag {...}}, desargues.player.drag) are moved by the
    pointer, not by a widget; their kind is :drag and no host draws them.
 
@@ -254,12 +259,23 @@
                  (filter #(not= (get before %) (get after %))))
         controls))
 
+(defn seek-time
+  "Where the clock goes after `spec` accepted an input that left `params`:
+   its :seek (seconds, or a fn of params), or nil to keep the time."
+  [spec params]
+  (let [sk (:seek spec)]
+    (cond (number? sk) (double sk)
+          (fn? sk)     (some-> (sk params) double)
+          :else        nil)))
+
 (defn step
   "The whole effect of raw input `raw` on widget `id`, as a value both
    players (JVM and browser) apply: {:params params' :error msg-or-nil
-   :move [[id shown-value] ...]}. :move lists the OTHER widgets whose
-   parameter changed (a preset button moves the sliders it set), with what
-   each should now show. An unknown id changes nothing."
+   :move [[id shown-value] ...] :seek t-or-nil}. :move lists the OTHER
+   widgets whose parameter changed (a preset button moves the sliders it
+   set), with what each should now show. :seek is where the clock goes
+   (see seek-time); nil, or a refused input, keeps it. An unknown id
+   changes nothing."
   [controls params id raw]
   (if-let [spec (spec-by-id controls id)]
     (let [{ps :params err :error} (input spec params raw)]
@@ -267,5 +283,6 @@
        :error  err
        :move   (vec (for [k (changed controls params ps)
                           :when (not= k id)]
-                      [k (display (spec-by-id controls k) (get ps k))]))})
+                      [k (display (spec-by-id controls k) (get ps k))]))
+       :seek   (when-not err (seek-time spec ps))})
     {:params params :error (str "no control " (pr-str id)) :move []}))
