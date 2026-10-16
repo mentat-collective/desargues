@@ -12,10 +12,7 @@
 
 (defmulti tex
   "TeX of a math form."
-  (fn [form] (cond (instance? model/Integral form) :integral
-                   (instance? model/Eq form)       :eq
-                   (instance? model/Plus-C form)   :plus-c
-                   (instance? model/Op form)       :op
+  (fn [form] (cond (model/form? form)              (model/form-kind form)
                    (keyword? form)                 :keyword
                    (string? form)                  :string
                    :else                           :expr)))
@@ -38,7 +35,7 @@
 
 (defmethod tex :op [{:keys [op args]}]
   (let [sep  ({:+ " + " :- " - " :* " \\cdot "} op)
-        wrap (fn [a] (if (instance? model/Op a) (str "\\left(" (tex a) "\\right)") (tex a)))]
+        wrap (fn [a] (if (and (model/form? a) (= :op (model/form-kind a))) (str "\\left(" (tex a) "\\right)") (tex a)))]
     (apply str (interpose sep (map wrap args)))))
 
 (defn- escape-text [s]

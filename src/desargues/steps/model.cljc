@@ -16,10 +16,19 @@
 (defrecord Problem [id section kind integrand var bounds prompt])
 
 ;; Math forms a step's :from / :to may hold besides a bare Emmy expression.
-;; Each renders through desargues.steps.render/tex (one method per type).
-(defrecord Integral [integrand var bounds])   ; ∫ integrand d var, bounds [a b] or nil
-(defrecord Eq [sides])                        ; a = b = c ...
-(defrecord Plus-C [expr])                     ; expr + C
+;; Each names its kind through IForm, and desargues.steps.render/tex has one
+;; method per kind (OCP: a new form is a record plus a method).
+(defprotocol IForm
+  (form-kind [f] "Keyword naming the kind of math form, e.g. :integral."))
+
+(defn form? [x] (satisfies? IForm x))
+
+(defrecord Integral [integrand var bounds]    ; ∫ integrand d var, bounds [a b] or nil
+  IForm (form-kind [_] :integral))
+(defrecord Eq [sides]                         ; a = b = c ...
+  IForm (form-kind [_] :eq))
+(defrecord Plus-C [expr]                      ; expr + C
+  IForm (form-kind [_] :plus-c))
 
 (defn integral
   ([integrand var] (->Integral integrand var nil))
@@ -29,7 +38,8 @@
 
 (defn plus-c [expr] (->Plus-C expr))
 
-(defrecord Op [op args])
+(defrecord Op [op args]
+  IForm (form-kind [_] :op))
 
 (defn op
   "A display combination of math forms Emmy cannot add, e.g.
