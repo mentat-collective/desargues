@@ -56,7 +56,9 @@
   :studio {:extra-paths ["studio"]
            :extra-deps {org.openjfx/javafx-base$linux     {:mvn/version "25.0.4"}
                         org.openjfx/javafx-graphics$linux {:mvn/version "25.0.4"}
-                        org.openjfx/javafx-controls$linux {:mvn/version "25.0.4"}}
+                        org.openjfx/javafx-controls$linux {:mvn/version "25.0.4"}
+                        ;; :tex nodes paint through JLaTeXMath (plain-text fallback)
+                        org.scilab.forge/jlatexmath {:mvn/version "1.0.7"}}
            :jvm-opts ["--enable-native-access=ALL-UNNAMED"]}
   ;; `clojure -M:test` runs every suite (cognitect test-runner; -n ns / -v var to
   ;; narrow). The Manim suites need the conda env; realize_test skips without it.
