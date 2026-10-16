@@ -133,9 +133,10 @@ Create coordinate systems, graphs, and geometric objects.
 ### 3. Physics (moved to `desargues.physics`)
 
 The physics is its own bounded context now, `desargues.physics.*` in
-src/desargues/physics/ (see its README.md). The sketch below predates the
-move; the current names are `make-pendulum`, `make-spring-mass`, `evolve`
-and `rk4`, all on the `desargues.physics` facade.
+src/desargues/physics/ (see its README.md); it was `desargues.videos.physics`
+and `desargues.videos.lagrangian`, and its tests live in test/desargues/physics/.
+The sketch below predates the move; the current names are `make-pendulum`,
+`make-spring-mass`, `evolve` and `rk4`, all on the `desargues.physics` facade.
 
 Simulate physical systems with ODE integration.
 

@@ -43,6 +43,16 @@
   (-set-control! [window id value]
     "Move widget `id` to `value` without firing on-change (REPL-driven)."))
 
+(defprotocol IPointer
+  "Pointer input on the surface (mouse, pen, touch). Segregated from IControls
+   (ISP): a host can paint and take clicks without having widgets, or the
+   reverse."
+  (-on-pointer! [host f]
+    "Call (f event) on every pointer event over the surface, where event is
+     {:type (:down | :move | :up) :at [x y] :hit id-or-nil}. :at is in scene
+     units (y up, desargues.player.frame/px->scene); :hit is the id of the
+     shape under the pointer (desargues.player.hit/hit), or nil."))
+
 (defprotocol IClock
   "The host's frame clock (an AnimationTimer, requestAnimationFrame, a GTK
    tick callback). The player owns no thread; the host calls it back."

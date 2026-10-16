@@ -39,8 +39,8 @@ check. Raster rows, for example, appear only under `:dynamics`.
 | core | `emmy` | `pipeline.emmy/derivative-spec`: f → f′ → LaTeX | `bench/desargues/bench.clj` |
 | core | `layout`, `scene-graph`, `recording` | layout resolve, `layout->scene-graph`, imperative `render!` through the RecordingBackend, n = 4…1024 | same |
 | core | `solver` | pendulum 10 s at dt 0.01 with every TrajectorySolver (Clojure euler/rk4, raster euler/rk4/tsit5/dp5) | same |
-| hotpaths | `physics` | `videos.physics/evolve`, 800 steps on the cljw-lane pendulum: Clojure RK4, Clojure Euler, raster RK4 | `bench/desargues/bench/hotpaths.clj` |
-| hotpaths | `lagrangian` | `videos.lagrangian` compile (planar, spherical double pendulum) and 8 s evolve (Clojure RK4 and raster RK4) | same |
+| hotpaths | `physics` | `physics/evolve`, 800 steps on the cljw-lane pendulum: Clojure RK4, Clojure Euler, raster RK4 | `bench/desargues/bench/hotpaths.clj` |
+| hotpaths | `lagrangian` | `physics.lagrangian` compile (planar, spherical double pendulum) and 8 s evolve (Clojure RK4 and raster RK4) | same |
 | hotpaths | `pipeline` | `pipeline.emmy/python-code`: Emmy → LaTeX → Python (`dsl.math/latex->python`) | same |
 | hotpaths | `scene` | records the landing page's 3D pendulum (`site/desargues/site/pendulum3d`) through the RecordingBackend, then prints the graph as EDN | same |
 | geometry | `h-cloud` | applying H to an n-point cloud: Emmy per point vs the array and raster GeometryKernels | `bench/desargues/bench/geometry.clj` |
@@ -92,7 +92,7 @@ Lagrangian compile. The noisiest row is the cold Lagrangian compile; the
 
 ## The raster kernel solver (opt-in, `:dynamics`)
 
-`(desargues.videos.physics/solver :raster {:kernel? true})` (the adapter's
+`(desargues.physics.solver/solver :raster {:kernel? true})` (the adapter's
 `kernel-solver`, reached through the backend key) runs the whole RK4
 integration inside one raster `deftm`: the Lagrangian state derivative is
 Emmy's compiled kernel source lowered to raster, and the damped pendulum has

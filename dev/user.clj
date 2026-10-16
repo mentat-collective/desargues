@@ -70,7 +70,7 @@
 
 (defn instrument-ns!
   "Instrument all spec'd functions in a namespace.
-   Example: (instrument-ns! 'desargues.videos.physics)"
+   Example: (instrument-ns! 'desargues.physics)"
   [ns-sym]
   (require-specs!)
   (let [syms (->> (stest/instrumentable-syms)
@@ -151,7 +151,7 @@
 
 (defn check-fn
   "Run generative tests on a single function.
-   Example: (check-fn `desargues.videos.physics/make-pendulum)"
+   Example: (check-fn `desargues.physics/make-pendulum)"
   [fn-sym & {:keys [num-tests] :or {num-tests 100}}]
   (require-specs!)
   (require '[desargues.specs.generators :as g])
@@ -160,7 +160,7 @@
 
 (defn check-ns
   "Run generative tests on all spec'd functions in a namespace.
-   Example: (check-ns 'desargues.videos.physics)"
+   Example: (check-ns 'desargues.physics)"
   [ns-sym & {:keys [num-tests] :or {num-tests 50}}]
   (require-specs!)
   (require '[desargues.specs.generators :as g])
@@ -171,7 +171,7 @@
 
 (defn summarize-check
   "Summarize results of generative testing.
-   Example: (summarize-check (check-ns 'desargues.videos.physics))"
+   Example: (summarize-check (check-ns 'desargues.physics))"
   [results]
   (let [passed (filter #(true? (-> % :clojure.spec.test.check/ret :pass?)) results)
         failed (remove #(true? (-> % :clojure.spec.test.check/ret :pass?)) results)]

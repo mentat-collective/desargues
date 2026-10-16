@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>desargues: the stage in the browser</title>
+  <!-- :tex nodes typeset through KaTeX when it loads; without it they paint
+       as plain canvas text, so the page still works offline. -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <style>
+    body { margin: 0; background: #111; color: #ccc; font-family: sans-serif; }
+    #menu { padding: 10px 14px; font-size: 14px; }
+    #menu a { color: #8fc7e8; text-decoration: none; }
+    #stage { padding: 0 14px 14px; }
+  </style>
+</head>
+<body>
+  <nav id="menu"></nav>
+  <div id="stage"></div>
+  <script src="js/main.js"></script>
+  <script>
+    // Start once KaTeX had its chance (defer scripts run before DOMContentLoaded).
+    window.addEventListener("DOMContentLoaded", function () {
+      desargues.browser.main.start();
+    });
+  </script>
+</body>
+</html>

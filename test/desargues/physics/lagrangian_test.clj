@@ -1,4 +1,4 @@
-(ns desargues.videos.lagrangian-test
+(ns desargues.physics.lagrangian-test
   "Emmy-derived systems behave like physics: energy is conserved, rods keep
    their length, and the state contract matches the integrators."
   (:require [clojure.test :refer [deftest is testing]]
