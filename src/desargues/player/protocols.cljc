@@ -69,14 +69,31 @@
     "Show `msg` beside widget `id`, or clear it when `msg` is nil."))
 
 (defprotocol IPointer
-  "Pointer input on the surface (mouse, pen, touch). Segregated from IControls
-   (ISP): a host can paint and take clicks without having widgets, or the
-   reverse."
+  "Pointer input on the surface (mouse, pen, touch, trackpad). Segregated
+   from IControls (ISP): a host can paint and take clicks without having
+   widgets, or the reverse."
   (-on-pointer! [host f]
     "Call (f event) on every pointer event over the surface, where event is
-     {:type (:down | :move | :up) :at [x y] :hit id-or-nil}. :at is in scene
-     units (y up, desargues.player.frame/px->scene); :hit is the id of the
-     shape under the pointer (desargues.player.hit/hit), or nil."))
+     {:type (:down | :move | :up) :at [x y] :hit id-or-nil} plus, when the
+     host knows them, :button (:primary | :middle | :secondary) and :mods (a
+     set of :shift :alt :ctrl :meta). :at is in scene units of the frame last
+     presented (y up, desargues.player.frame/px->scene); :hit is the id of
+     the shape under the pointer (desargues.player.hit/hit), or nil.
+     Navigation gestures go to the same f (desargues.player.navigate):
+     {:type :wheel :at :dy} (dy in pixels, > 0 scrolling down, a line or page
+     scaled to pixels), {:type :pinch :at :factor} (> 1 spreading the
+     fingers; a browser reports it as a wheel with ctrlKey) and
+     {:type :double :at} (a double click)."))
+
+(defprotocol IKeyboard
+  "Keys pressed while the surface has focus. Segregated (ISP): a host may
+   take pointer input and no keys."
+  (-on-key! [host f]
+    "Call (f event) on every key press, event {:type :key :key k :mods
+     #{...}}, k a DOM KeyboardEvent.key name (\"ArrowLeft\", \"+\", \"0\",
+     \"a\"); a host translates its own key codes. f returns true when it used
+     the key, so the host may stop the key's default action (a page scroll).
+     Keys typed into a widget are the widget's, not f's."))
 
 (defprotocol IClock
   "The host's frame clock (an AnimationTimer, requestAnimationFrame, a GTK
