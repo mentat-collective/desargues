@@ -13,8 +13,8 @@
             [desargues.player.protocols :as p]
             [clojure.edn :as edn]
             [clojure.string :as str]
-            [desargues.player.hit :as hit]
-            [desargues.player.controls :as controls])
+            [desargues.player.controls :as controls]
+            [desargues.player.javafx-input :as input])
   (:import [java.awt.image BufferedImage]
            [java.io File]
            [javafx.animation AnimationTimer]
@@ -367,38 +367,6 @@
     (.setOnAction b (reify EventHandler (handle [_ _] (quiet state on-change id nil))))
     {:nodes [b] :set! (fn [_] nil)}))
 
-(def ^:private hit-tolerance-px
-  "How far (pixels) the pointer may miss a shape and still grab it."
-  8.0)
-
-(def ^:private mouse-event-type
-  "JavaFX mouse event -> IPointer event :type."
-  {MouseEvent/MOUSE_PRESSED  :down
-   MouseEvent/MOUSE_DRAGGED  :move
-   MouseEvent/MOUSE_MOVED    :move
-   MouseEvent/MOUSE_RELEASED :up})
-
-(defn- pointer-event
-  "The IPointer event for JavaFX mouse event `e` on `canvas`, given the last
-   presented Frame `f`: pixels -> scene units, then the pure hit test."
-  [^Canvas canvas f ^MouseEvent e]
-  (let [vp (frame/viewport (.getWidth canvas) (.getHeight canvas))
-        px [(.getX e) (.getY e)]]
-    {:type (mouse-event-type (.getEventType e))
-     :at   (frame/px->scene vp px)
-     :hit  (when f (hit/hit-px f vp px hit-tolerance-px))}))
-
-(defn- wire-mouse!
-  "Forward the canvas' mouse events to the host's pointer fn, if any."
-  [state ^Canvas canvas]
-  (let [handler (reify EventHandler
-                  (handle [_ e]
-                    (when-let [f (:on-pointer @state)]
-                      (try (f (pointer-event canvas (:frame @state) e))
-                           (catch Throwable t (swap! state assoc :pointer-error t))))))]
-    (doseq [t (keys mouse-event-type)]
-      (.addEventHandler canvas ^javafx.event.EventType t handler))))
-
 (defrecord FxHost [state]
   p/ISurface
   (-present! [this f]
@@ -435,7 +403,7 @@
          (.add (.getChildren pane) canvas)
          (.bind (.widthProperty canvas) (.widthProperty pane))
          (.bind (.heightProperty canvas) (.heightProperty pane))
-         (wire-mouse! state canvas)
+         (input/wire! state canvas)
          (.show stage)
          (swap! state assoc :stage stage :canvas canvas :controls-box controls))))
     this)
@@ -498,6 +466,13 @@
     this)
   (-stop-ticks! [this]
     (on-fx #(some-> ^AnimationTimer (:timer @state) .stop))
+    this))
+
+(extend-type FxHost
+  p/IKeyboard
+  (-on-key! [this f]
+    ;; keys pressed while the canvas has focus (desargues.player.javafx-input)
+    (swap! (:state this) assoc :on-key f)
     this))
 
 (defn host

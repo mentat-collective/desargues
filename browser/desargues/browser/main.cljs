@@ -85,16 +85,20 @@
 (defn ^:export status
   "What the headless check reads: the current time, how many pixels of the
    stage canvas differ from the background, how many KaTeX labels the
-   overlay shows (TeX typesets to DOM, not to the canvas), and the orbited
-   camera's yaw (null until an orbit)."
+   overlay shows (TeX typesets to DOM, not to the canvas), the orbited
+   camera's yaw (null until an orbit), and the view's magnification and
+   whether the viewer has moved it from the source's own (zoom, moved)."
   []
   (if-let [p @current]
-    (let [{:keys [canvas tex-cache tick-error]} @(:state (:host p))]
+    (let [{:keys [canvas tex-cache tick-error]} @(:state (:host p))
+          v (player/view p)]
       #js {"t" (:t (:session @(:state p)))
            "painted" (if canvas (canvas/painted-pixels canvas) 0)
            "tex" (count (filter #(not= "none" (.. % -style -display))
                                 (vals (some-> tex-cache deref))))
            "yaw" (some-> (:camera @(:state p)) :yaw)
+           "zoom" (:zoom v)
+           "moved" (boolean (or (:camera v) (:view v)))
            "tickError" (some-> tick-error str)})
     #js {"t" nil "painted" 0 "tex" 0}))
 

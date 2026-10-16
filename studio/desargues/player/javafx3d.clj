@@ -190,8 +190,10 @@
         cam (space/camera f)
         b   (space/basis cam)
         d   (double (:distance cam))
-        ;; vertical fov so a point at depth z lands where space/project puts it
-        fov (Math/toDegrees (* 2.0 (Math/atan (/ h (* 2.0 k d)))))
+        zm  (double (:zoom cam 1.0))
+        ;; vertical fov so a point at depth z lands where space/project puts
+        ;; it (k * zoom * distance / z pixels per unit)
+        fov (Math/toDegrees (* 2.0 (Math/atan (/ h (* 2.0 k zm d)))))
         nodes (mapcat #(node! b k %)
                       (filter #(and (space/three-d-shape? %) (frame/visible? %)) (:shapes f)))]
     (.setFieldOfView camera fov)
@@ -240,6 +242,10 @@
   p/IClock
   (-on-tick! [this f] (p/-on-tick! inner f) this)
   (-stop-ticks! [this] (p/-stop-ticks! inner) this))
+
+(extend-type FxSpaceHost
+  p/IKeyboard
+  (-on-key! [this f] (p/-on-key! (:inner this) f) this))
 
 (defn host
   "A fresh, unopened JavaFX host that renders 3D frames natively. Hand it to
