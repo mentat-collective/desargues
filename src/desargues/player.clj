@@ -21,7 +21,10 @@
             [desargues.player.session :as session]
             [desargues.scene.record :as recorder]
             [desargues.player.drag :as drag]
-            [desargues.player.controls :as controls]))
+            [desargues.player.controls :as controls]
+            [desargues.player.present :as present]
+            [desargues.player.space :as space]
+            [desargues.player.orbit :as orbit]))
 
 (defn record
   "The EDN scene graph of construct `construct` (fn [stage]), named `scene-name`
@@ -152,6 +155,15 @@
   (when (satisfies? p/IControls (:host player))
     (let [spec (controls/spec-by-id (:controls @(:state player)) id)]
       (p/-set-control! (:host player) id (if spec (controls/display spec v) v)))))
+
+(defn set-camera!
+  "Look at a 3D source through camera `cam` (merged over the current one:
+   {:yaw :pitch :distance :target :projection}), as an orbit drag does.
+   nil returns to the source's own camera."
+  [player cam]
+  (swap! (:state player) update :camera #(when cam (merge (or %1 (space/camera (current-frame player))) cam)))
+  (present! player)
+  player)
 
 (defn set-param!
   "Set parameter `k` to `v`, rebuild the source and keep playing from the

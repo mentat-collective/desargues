@@ -21,7 +21,8 @@
             [desargues.player.graph-source :as graph-source]
             [desargues.player.protocols :as p]
             [desargues.player.session :as session]
-            [desargues.player.controls :as controls]))
+            [desargues.player.controls :as controls]
+            [desargues.player.present :as present]))
 
 (defn- source-for [{:keys [source-fn params]}] (source-fn params))
 
