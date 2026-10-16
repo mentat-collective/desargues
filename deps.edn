@@ -114,6 +114,19 @@
                           com.dylibso.chicory/compiler {:mvn/version "1.5.1"}}
              :jvm-opts ["--enable-native-access=ALL-UNNAMED"
                         "--add-modules=jdk.incubator.vector"]}
+  ;; `clojure -M:notebooks`: the Clerk notebooks (notebooks/) with emmy-viewers,
+  ;; whose Mafs fragments draw the interactive figures (integration's area
+  ;; over [a, b]). emmy-viewers is the BuddhiLW fork pin alexandria uses;
+  ;; Emmy comes from the fork pin above, not emmy-viewers' release. The page
+  ;; needs a Clerk JS bundle carrying emmy-viewers' SCI namespaces (Clerk's
+  ;; CDN bundle lacks them): mentat.clerk-utils.build/set-viewer-js! on it.
+  :notebooks {:extra-paths ["notebooks" "studio"]
+              :extra-deps {io.github.nextjournal/clerk {:mvn/version "0.18.1158"}
+                           org.mentat/emmy-viewers {:git/url "https://github.com/BuddhiLW/emmy-viewers.git"
+                                                    :git/sha "e11c10747dbbc71be70738b40425f0643e3c4ff5"
+                                                    :exclusions [org.mentat/emmy]}
+                           nrepl/nrepl {:mvn/version "1.3.0"}}
+              :jvm-opts ["-Xmx3g"]}
   :ansatz {:extra-paths ["ansatz"]
            :extra-deps {org.replikativ/ansatz {:mvn/version "0.2.115"}}
            :jvm-opts ["--enable-native-access=ALL-UNNAMED"]}}}
