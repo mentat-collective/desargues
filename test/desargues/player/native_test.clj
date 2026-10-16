@@ -73,3 +73,27 @@
           (player/set-param! pl :damping 0.5)
           (is (= 0.5 (:damping (player/params pl)))))
         (finally (player/close! pl))))))
+
+(defn- raster-on-classpath? []
+  (try (some? (requiring-resolve 'desargues.infrastructure.raster-adapter/raster-solver))
+       (catch Throwable _ false)))
+
+(deftest pendulum-raster-row
+  (let [pendulum (pendulum-fn)
+        controls @(resolve 'desargues.studio.demos/pendulum-controls)
+        solver-for @(resolve 'desargues.studio.demos/solver-for)]
+    (testing "the demo controls carry a raster row"
+      (is (some #(= :raster (:id %)) controls)))
+    (testing "the row selects the solver; an explicit :solver wins"
+      (is (= :jvm (solver-for {})))
+      (is (= :jvm (solver-for {:raster 0.0})))
+      (is (= :raster (solver-for {:raster 1.0})))
+      (is (= :raster (solver-for {:raster true})))
+      (is (= :jvm (solver-for {:raster 1.0 :solver :jvm}))))
+    (if-not (raster-on-classpath?)
+      (is true "raster not on the classpath (run with :dynamics); skipped")
+      (testing "{:raster 1} integrates on raster and records the same steps as the JVM"
+        (let [jvm (player/record "Damped pendulum" (pendulum {}))
+              ras (player/record "Damped pendulum" (pendulum {:raster 1.0}))]
+          (is (= (count (:steps jvm)) (count (:steps ras))))
+          (is (pos? (count (:steps ras)))))))))
