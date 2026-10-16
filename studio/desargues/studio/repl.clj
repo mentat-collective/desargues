@@ -12,6 +12,10 @@
             [desargues.studio.demos :as demos]
             [desargues.studio.objects-demos :as od]
             [desargues.studio.widget-demos :as wd]
+            [desargues.player.javafx3d :as fx3]
+            [desargues.studio.spaces :as spaces]
+            [desargues.player.calculus-symbolic :as sym]
+            [desargues.player.camera-path :as cp]
             [desargues.studio.blackboard :as bb]))
 
 (comment
@@ -122,15 +126,53 @@
   (player/control-input! g :formula "0=q")        ; => {:error "not in Goedel's alphabet: q" ...}
   (player/set-param! g :formula "(Ex)(x=s0)")     ; the field shows it
   (wd/godel-number "0=0")                         ; => "243000000" = 2^6 3^5 5^6
-  (player/close! g))
+  (player/close! g)
+
+  ;; 9. 3D sources (desargues.studio.spaces, the registry the browser page
+  ;;    opens too): ISources, so open-source!, not open!. The native 3D host
+  ;;    (javafx3d) draws them in a depth-buffered SubScene; (fx/host) would
+  ;;    show them flattened by the painter's algorithm.
+  (defn open-space [k]
+    (let [{:keys [title source-fn params controls]} (spaces/demos k)]
+      (player/open-source! (fx3/host) source-fn {:title (str "desargues: " title)
+                                                  :params params :controls controls})))
+
+  ;; Partial derivatives of z = f(x, y): Emmy derived df/dx and df/dy once
+  ;; per surface, and the readout shows them with their values at P. Drag P,
+  ;; or its shadow Q on the floor, to move the point; drag empty space to
+  ;; orbit. The tour (20 s, looping): the surface draws in, the slices sweep
+  ;; to the point, the tangent plane follows P around a circle, the camera
+  ;; flies around.
+  (def c (open-space :calculus))
+  (player/set-param! c :f :monkey)                ; the select moves too
+  (player/set-param! c :x0 -1.2)
+  (player/press! c :ascend)                       ; a step up the gradient; P holds still
+  (player/press! c :ascend)
+  (player/press! c :reset)
+  (player/set-param! c :path :ascent)             ; the tangent plane rides the ascent path
+  (player/set-param! c :morph-to :waves)
+  (player/set-param! c :auto-morph true)          ; f morphs into sin x cos y and back
+  (player/set-param! c :morph 0.5)                ; or hold it half way: f = (1-m) f + m g
+  (player/set-param! c :tour false)               ; a still: the frame ignores t
+  (player/set-camera! c {:yaw 0.3 :pitch 0.9})
+  (player/seek! c 14.0)
+  (player/snapshot! c "calculus.png")
+  (player/close! c)
+
+  ;; The camera path on its own: keyframes in, a camera at any t out.
+  (cp/camera-at (cp/fly-around {:t0 0 :t1 12 :turns 1.0}) 3.0)
+
+  ;; The symbolic side on its own: any surface form in x and y.
+  (sym/partials '(* (exp (- x)) (sin (* x y))))   ; => {:infix {:f :fx :fy} :tex ... :expr ...}
+  ((:fx (sym/surface '(* x x y))) 1.0 2.0))        ; => 4.0, compiled from Emmy's 2 x y
 
 (comment
-  ;; 9. The blackboard (desargues.studio.blackboard): a worked integral
-  ;;    written step by step in chalk, the explanation under each line, side
-  ;;    work in the margin, a figure pane, auto-scroll. Widgets: problem and
-  ;;    method selects, next / previous / show all / restart, explanations
-  ;;    and auto-play toggles. Buttons move the clock (:seek) to where the
-  ;;    step starts being written.
+  ;; 10. The blackboard (desargues.studio.blackboard): a worked integral
+  ;;     written step by step in chalk, the explanation under each line, side
+  ;;     work in the margin, a figure pane, auto-scroll. Widgets: problem and
+  ;;     method selects, next / previous / show all / restart, explanations
+  ;;     and auto-play toggles. Buttons move the clock (:seek) to where the
+  ;;     step starts being written.
   (def b (player/open! (fx/host) bb/blackboard {:title "desargues: blackboard"
                                                 :scene-name "blackboard"
                                                 :controls bb/controls}))

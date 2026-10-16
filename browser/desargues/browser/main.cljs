@@ -13,9 +13,9 @@
   (:require [clojure.string :as str]
             [desargues.browser.canvas :as canvas]
             [desargues.browser.player :as player]
-            [desargues.player.space-demos :as space-demos]
             [desargues.studio.objects-demos :as demos]
             [desargues.studio.widget-demos :as widget-demos]
+            [desargues.studio.spaces :as studio-spaces]
             [desargues.studio.blackboard :as blackboard]))
 
 (defonce ^:private current (atom nil))
@@ -25,9 +25,9 @@
   {"pendulum" {:title "damped pendulum (recorded)" :url "scenes/pendulum.edn"}})
 
 (def spaces
-  "3D sources the page plays as they are (ISources, not constructs)."
-  {:space {:title "saddle and curve (3D)" :source-fn space-demos/source-fn
-           :params space-demos/defaults :controls space-demos/controls}})
+  "3D sources the page plays as they are (ISources, not constructs): the
+   shared registry desargues.studio.spaces (:space, :calculus)."
+  studio-spaces/demos)
 
 (defn- query []
   (let [ps (js/URLSearchParams. (.. js/window -location -search))]
@@ -110,3 +110,15 @@
 
 (defn ^:export set-param [k v]
   (when-let [p @current] (player/set-param! p (keyword k) v) (status)))
+
+(defn ^:export readout
+  "The text shapes whose id starts with \"readout\" in the frame last
+   painted, one per line (the calculus demo's live readout; the headless
+   check asserts it follows the widgets)."
+  []
+  (if-let [p @current]
+    (->> (:shapes (:last-frame @(:state (:host p))))
+         (filter #(str/starts-with? (str (:id %)) "readout"))
+         (map :text)
+         (str/join "\n"))
+    ""))
