@@ -257,15 +257,17 @@
     (.stroke gc)
     (.restore gc)))
 
-(defn- paint-frame!
+(defn paint-frame!
   "Paint Frame `f` on `canvas`: the frame's :background (palette keyword or
-   CSS colour, default black), then each visible shape in draw order."
+   CSS colour, default black), then each visible shape in draw order. Public
+   so the 3D host (desargues.player.javafx3d) paints its 2D overlay with it."
   [^Canvas canvas f]
   (let [gc (.getGraphicsContext2D canvas)
         w  (.getWidth canvas)
         h  (.getHeight canvas)
         vp (frame/viewport w h)]
     (.setGlobalAlpha gc 1.0)
+    (.clearRect gc 0 0 w h)
     (.setFill gc (if-let [b (:background f)] (fx-color b) Color/BLACK))
     (.fillRect gc 0 0 w h)
     (doseq [s (frame/visible-shapes f)]
