@@ -1,25 +1,26 @@
 (ns desargues.player.session
   "PURE stratum of the player: a playback Session value and its transitions.
 
-   A Session is {:graph :sched :t :playing? :speed :loop?}. Every transition is
-   a pure fn Session -> Session, so the host's clock (a JavaFX AnimationTimer,
-   requestAnimationFrame, a GTK tick callback) only has to call `tick` with
-   elapsed seconds and present `current-frame`. Host-free .cljc."
-  (:require [desargues.player.timeline :as timeline]))
+   A Session is {:source :t :playing? :speed :loop?}, where :source is any
+   desargues.player.protocols/ISource (a recorded scene graph, an alexandria
+   scene, a plot...). Every transition is a pure fn Session -> Session, so the
+   host's clock (a JavaFX AnimationTimer, requestAnimationFrame, a GTK tick
+   callback) only calls `tick` with elapsed seconds and presents
+   `current-frame`. Host-free .cljc."
+  (:require [desargues.player.protocols :as p]))
 
 (defn session
-  "A paused Session at t = 0 over a recorded scene `graph`."
-  ([graph] (session graph {}))
-  ([graph opts]
-   (merge {:graph graph
-           :sched (timeline/schedule graph)
+  "A paused Session at t = 0 over `source` (an ISource)."
+  ([source] (session source {}))
+  ([source opts]
+   (merge {:source source
            :t 0.0
            :playing? false
            :speed 1.0
            :loop? true}
           opts)))
 
-(defn duration [s] (get-in s [:sched :duration]))
+(defn duration [s] (double (p/-duration (:source s))))
 
 (defn seek
   "Session moved to time `t`, clamped to [0 duration]."
@@ -44,12 +45,12 @@
         :else       (assoc s :t d :playing? false)))))
 
 (defn reload
-  "Session over a freshly recorded `graph`, keeping time (clamped) and the
-   play state, so a parameter change re-records without a jump."
-  [s graph]
-  (seek (assoc s :graph graph :sched (timeline/schedule graph)) (:t s)))
+  "Session over a fresh `source`, keeping time (clamped) and the play state,
+   so a parameter change rebuilds the source without a jump."
+  [s source]
+  (seek (assoc s :source source) (:t s)))
 
 (defn current-frame
   "The Frame the Session shows now."
   [s]
-  (timeline/frame-at (:graph s) (:sched s) (:t s)))
+  (p/-frame-at (:source s) (:t s)))

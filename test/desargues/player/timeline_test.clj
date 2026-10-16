@@ -9,7 +9,9 @@
             [desargues.player.frame :as frame]
             [desargues.player.session :as session]
             [desargues.player.timeline :as tl]
-            [desargues.scene :as s]))
+            [desargues.scene :as s]
+            [desargues.player.graph-source :as gs]
+            [desargues.player.protocols :as p]))
 
 (defn- glide-construct
   "A dot that appears (0.5 s), glides to `to` (2 s), then holds 1 s."
@@ -65,8 +67,8 @@
          (tl/apply-anim {1 {:opacity 0.5}} {:anim :teleport :target 1} 1.0))))
 
 (deftest session-transitions
-  (let [g (player/record "Glide" (glide-construct [3 0]))
-        s (session/session g)]
+  (let [src (fn [to] (gs/graph-source (player/record "Glide" (glide-construct to))))
+        s   (session/session (src [3 0]))]
     (testing "a paused session does not move"
       (is (= 0.0 (:t (session/tick s 1.0)))))
     (testing "playing advances by speed * dt"
@@ -81,7 +83,15 @@
       (is (= 3.5 (:t (session/seek s 99))))
       (is (= 0.0 (:t (session/seek s -1)))))
     (testing "reload keeps time and play state"
-      (let [s' (session/reload (session/play (session/seek s 2.0))
-                               (player/record "Glide" (glide-construct [-3 0])))]
+      (let [s' (session/reload (session/play (session/seek s 2.0)) (src [-3 0]))]
         (is (= 2.0 (:t s')))
         (is (:playing? s'))))))
+
+(deftest any-source-plays-like-a-recorded-one
+  (testing "LSP: a hand-written ISource drives the same session transitions"
+    (let [still (reify p/ISource
+                  (-duration [_] 2.0)
+                  (-frame-at [_ t] (frame/frame t [{:id 1 :node :dot :at [t 0] :opacity 1.0}])))
+          s     (session/tick (session/play (session/session still)) 1.5)]
+      (is (= 1.5 (:t s)))
+      (is (= [1.5 0] (:at (first (:shapes (session/current-frame s)))))))))

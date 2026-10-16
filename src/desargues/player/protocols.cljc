@@ -10,6 +10,17 @@
    implements ISurface and nothing else; a window without widgets skips
    IControls. Host-free .cljc.")
 
+(defprotocol ISource
+  "What the stage plays: anything with a duration and a Frame at every time.
+   Pure on both methods. A recorded desargues.scene graph is one source
+   (desargues.player.graph-source); an alexandria.medium scene, a function
+   plot or a live simulation are others. The player cannot tell them apart
+   (LSP), so a new kind of content is a new source, never a player edit."
+  (-duration [src]
+    "Seconds the source lasts (0 for a still).")
+  (-frame-at [src t]
+    "The desargues.player.frame Frame at time `t`, 0 <= t <= duration."))
+
 (defprotocol ISurface
   "Something a Frame can be painted on."
   (-present! [surface frame]
