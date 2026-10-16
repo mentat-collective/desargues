@@ -1,18 +1,21 @@
 (ns desargues.browser.main
   "BOUNDARY: the demo page's entry. Reads ?demo=<key> (one of the eight
    studio object demos, desargues.studio.objects-demos, the same registry the
-   JavaFX stage opens, played live with sliders, or a 3D source from
-   `spaces`, orbited by dragging on empty space) or ?scene=<url> (a recorded
-   EDN scene graph, e.g. scenes/pendulum.edn), builds a menu and mounts the
-   canvas host into #stage.
+   JavaFX stage opens, played live with sliders, one of the widget demos,
+   desargues.studio.widget-demos, driven by buttons, a select, a text field
+   and a toggle, or a 3D source from `spaces`, orbited by dragging on empty
+   space) or ?scene=<url> (a recorded EDN scene graph, e.g.
+   scenes/pendulum.edn), builds a menu and mounts the canvas host into #stage.
 
    window.desargues exposes the player and a paint probe for the headless
-   check (browser/check.mjs): desargues.status() -> {demo, t, painted, yaw}."
+   check (browser/check.mjs): desargues.status() -> {demo, t, painted, yaw}.
+   Every widget carries data-control=<id>, which the check drives."
   (:require [clojure.string :as str]
             [desargues.browser.canvas :as canvas]
             [desargues.browser.player :as player]
             [desargues.player.space-demos :as space-demos]
-            [desargues.studio.objects-demos :as demos]))
+            [desargues.studio.objects-demos :as demos]
+            [desargues.studio.widget-demos :as widget-demos]))
 
 (defonce ^:private current (atom nil))
 
@@ -29,12 +32,18 @@
   (let [ps (js/URLSearchParams. (.. js/window -location -search))]
     {:demo (.get ps "demo") :scene (.get ps "scene") :t (.get ps "t")}))
 
+(def ^:private registry
+  "Every demo the page opens by ?demo=<key>: the slider object demos and the
+   widget demos (buttons, select, text field, toggle)."
+  (merge demos/demos widget-demos/demos))
+
 (defn- menu! []
   (when-let [nav (.getElementById js/document "menu")]
     (set! (.-innerHTML nav)
           (str/join " | "
                     (concat
-                     (for [[k {:keys [title]}] (sort-by key (merge demos/demos spaces))]
+                     (for [[k {:keys [title]}] (concat (sort-by key (merge demos/demos spaces))
+                                                       (sort-by key widget-demos/demos))]
                        (str "<a href=\"?demo=" (name k) "\">" title "</a>"))
                      (for [[k {:keys [title]}] scenes]
                        (str "<a href=\"?scene=" k "\">" title "</a>")))))))
@@ -66,12 +75,11 @@
                                           (assoc (opts title) :params params :controls controls))
                      t))
 
+      ;; params start at each control's default (desargues.player.controls)
       :else
-      (let [{:keys [title construct controls]} (get demos/demos k (:tangent demos/demos))]
+      (let [{:keys [title construct controls]} (get registry k (:tangent registry))]
         (after-open! (player/open! host construct
-                                   (assoc (opts title)
-                                          :params (demos/defaults k)
-                                          :controls controls))
+                                   (assoc (opts title) :controls controls))
                      t)))))
 
 (defn ^:export status

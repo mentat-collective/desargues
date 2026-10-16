@@ -10,7 +10,8 @@
             [desargues.player.session :as session]
             [desargues.player.timeline :as timeline]
             [desargues.studio.demos :as demos]
-            [desargues.studio.objects-demos :as od]))
+            [desargues.studio.objects-demos :as od]
+            [desargues.studio.widget-demos :as wd]))
 
 (comment
   ;; 1. Open a window. The host is the only toolkit-specific value here: any
@@ -83,4 +84,41 @@
   ;;   (o/sweep! stage handle #(calc/tangent cs f %) [0.0 0.5 1.0])
   ;; and the step count matches the RecordingBackend graph the stage plays:
   (count (:steps (player/record "Tangent" ((:construct (od/demos :tangent))
-                                          (od/defaults :tangent))))))
+                                          (od/defaults :tangent)))))
+
+  ;; 8. Widgets that are not sliders (desargues.player.controls kinds :button
+  ;;    :select :text :toggle), one demo each in desargues.studio.widget-demos.
+  ;;    press! and control-input! go through the same pure step a click in the
+  ;;    panel does (a refusal shows under the widget); set-param! skips the
+  ;;    step and moves the widget to the value. Params start at the controls'
+  ;;    defaults, so open! needs no :params.
+  (defn open-widgets [k]
+    (let [{:keys [construct controls title]} (wd/demos k)]
+      (player/open! (fx/host) construct {:title (str "desargues: " title)
+                                         :scene-name (name k)
+                                         :controls controls})))
+
+  ;; Turing: Step / Run / Reset buttons over one param, :steps.
+  (def t (open-widgets :turing))
+  (player/press! t :step)               ; one step of the busy beaver
+  (player/press! t :step)
+  (player/params t)                     ; => {:steps 2}
+  (player/press! t :run)                ; to the halt: 14 steps, six 1s
+  (player/press! t :reset)              ; a preset: {:steps 0}
+  (player/close! t)
+
+  ;; Kepler: a select (the solid), a slider (the turn), a toggle (the spheres).
+  (def k (open-widgets :kepler))
+  (player/set-param! k :solid :dodecahedron)      ; the select moves too
+  (player/control-input! k :solid :sphere)        ; => {:error ":sphere is not an option" ...}
+  (player/set-param! k :turn 2.0)                 ; the slider moves too
+  (player/set-param! k :spheres false)            ; the toggle unticks
+  (player/close! k)
+
+  ;; Goedel: a text field whose :parse refuses symbols outside the alphabet;
+  ;; the refusal shows under the field and the picture stays.
+  (def g (open-widgets :goedel))
+  (player/control-input! g :formula "0=q")        ; => {:error "not in Goedel's alphabet: q" ...}
+  (player/set-param! g :formula "(Ex)(x=s0)")     ; the field shows it
+  (wd/godel-number "0=0")                         ; => "243000000" = 2^6 3^5 5^6
+  (player/close! g))

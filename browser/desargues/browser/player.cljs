@@ -9,8 +9,9 @@
      open-graph!   a recorded scene graph (EDN data, e.g. written by
                    `clojure -M:browser-record` or desargues.player/record), so
                    viewing needs no JVM.
-     open!         a parametric construct (fn [params] (fn [stage] ...)),
-                   re-recorded in the page through desargues.scene.record on
+     open!         a parametric construct (fn [params] (fn [stage] ...)) over
+                   the desargues.scene facade, re-recorded in the page through
+                   desargues.scene.record (the recorder every host shares) on
                    every parameter change.
      load-graph!   fetch an EDN scene graph by URL, then open-graph!.
 
@@ -18,7 +19,7 @@
    desargues.player.pointer/step as on the JVM: drag specs move their shapes,
    and a press on empty space of a 3D frame orbits the camera.
 
-   REPL surface: play!, pause!, seek!, set-param!, set-camera!, params,
+   REPL surface: play!, pause!, seek!, set-param!, set-camera!, press!, params,
    snapshot!, close!. One atom per player is the only state."
   (:require [cljs.reader :as reader]
             [desargues.scene.record :as recorder]
@@ -123,8 +124,9 @@
   (fn [params] (graph-source/graph-source (recorder/record (construct-fn params)))))
 
 (defn open!
-  "Play parametric construct `construct-fn` (fn [params] (fn [stage] ...))
-   over desargues.browser.stage in `host`. Same opts as open-source!."
+  "Play parametric construct `construct-fn` (fn [params] (fn [stage] ...)),
+   written against the desargues.scene facade, in `host`; it is recorded in
+   the page by desargues.scene.record. Same opts as open-source!."
   [host construct-fn opts]
   (open-source! host (construct-source construct-fn) opts))
 
