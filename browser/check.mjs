@@ -90,6 +90,7 @@ try {
     await page.close();
   }
   failed += await checkWidgets(browser, base);
+  failed += await checkCalculus(browser, base);
 } finally {
   await browser.close();
   server.close();
@@ -171,4 +172,47 @@ async function checkWidgets(browser, base) {
     await page.close();
   }
   return failed;
+}
+
+// The calculus demo (?demo=calculus, desargues.player.calculus-demos): pick
+// another surface in the f select and move the x0 slider through their
+// data-control attributes. Each must repaint the stage and rewrite the live
+// readout (f, df/dx, df/dy and their values at the point), which the page
+// exposes as desargues.browser.main.readout(). Returns 1 on failure.
+async function checkCalculus(browser, base) {
+  const at = (id) => `[data-control="${id}"]`;
+  const page = await browser.newPage({ viewport: { width: 1300, height: 640 } });
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(String(e)));
+  await page.goto(base + "?demo=calculus");
+  await page.waitForFunction(() => window.desargues && desargues.browser.main.status().t !== null,
+                             null, { timeout: 15000 });
+  await page.evaluate(() => desargues.browser.main.seek(99));
+  const state = () => page.evaluate(() => [document.querySelector("canvas[data-desargues=stage]").toDataURL(),
+                                           desargues.browser.main.readout()]);
+  const notes = [];
+  let ok = true;
+  const acts = [
+    ["select f = saddle", (p) => p.selectOption(at("f"), { label: "saddle" })],
+    ["slider x0", (p) => p.$eval(at("x0"), (e) => {
+      e.value = String(Number(e.min) + 0.2 * (Number(e.max) - Number(e.min)));
+      e.dispatchEvent(new Event("input"));
+    })]];
+  for (const [label, act] of acts) {
+    const [pic0, txt0] = await state();
+    await act(page);
+    const [pic1, txt1] = await state();
+    const repainted = pic0 !== pic1, rewritten = txt0 !== txt1 && txt1.includes("df/dx");
+    ok = ok && repainted && rewritten;
+    notes.push(`${label} ${repainted ? "repaints" : "DID NOT repaint"}, ` +
+               `${rewritten ? "readout now \"" + txt1.split("\n")[1] + "\"" : "readout DID NOT change"}`);
+  }
+  const status = await page.evaluate(() => desargues.browser.main.status());
+  ok = ok && !status.tickError && errors.length === 0 && status.painted > 500;
+  console.log(`${ok ? "PASS" : "FAIL"} calculus: ${notes.join(", ")}, painted ${status.painted} px` +
+              `${status.tickError ? ", tick error " + status.tickError : ""}` +
+              `${errors.length ? ", errors " + errors.join("; ") : ""}`);
+  if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/calculus.png` });
+  await page.close();
+  return ok ? 0 : 1;
 }
