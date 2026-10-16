@@ -70,10 +70,15 @@
     [(if (finite-on? f (- a w) a cap) (- a w) a)
      (if (finite-on? f b (+ b w) cap) (+ b w) b)]))
 
-(defn- y-range [f x0 x1]
-  (let [ys (for [i (range 201)] (double (f (+ x0 (* (- x1 x0) (/ i 200.0))))))
-        lo (min 0.0 (reduce min ys)) hi (max 0.0 (reduce max ys))
-        m (* 0.12 (max 1e-6 (- hi lo)))]
+(defn- y-range
+  "f's range sampled over [x0, x1], always including y = 0, padded 15%."
+  [f x0 x1]
+  (let [ys (for [i (range 201)
+                 :let [y (try (double (f (+ x0 (* (- x1 x0) (/ i 200.0))))) (catch Exception _ ##NaN))]
+                 :when (Double/isFinite y)]
+             y)
+        lo (min 0.0 (reduce min 0.0 ys)) hi (max 0.0 (reduce max 0.0 ys))
+        m (* 0.15 (max 1e-6 (- hi lo)))]
     [(- lo m) (+ hi m)]))
 
 (def ^:private area-template
@@ -104,9 +109,9 @@
            l (min a b) r (max a b)
            in? (fn [x] (and (>= x l) (<= x r)))]
        [:div {:style {:margin "0.6em 0"}}
-        [mafs.core/Mafs {:height 300 :pan false :zoom false
+        [mafs.core/Mafs {:height 300 :pan true :zoom {:min 0.05 :max 20}
                          :preserve-aspect-ratio false
-                         :view-box {:x [?lo ?hi] :y [?y0 ?y1] :padding 12}}
+                         :view-box {:x [?x0 ?x1] :y [?y0 ?y1] :padding 12}}
          [mafs.coordinates/Cartesian {:subdivisions 2}]
          [mafs.plot/Inequality
           {:y {:<= (fn [x] (if (in? x) (max 0 (f x)) 0))
@@ -126,15 +131,19 @@
 
 (defn- area-figure
   "The interactive area of example `f` (Emmy fn) over [a, b], with the exact
-   readout from antiderivative `F` when given."
+   readout from antiderivative `F` when given. The view opens on the problem:
+   x over [a, b] padded 15% each side, y over f's range there (and y = 0);
+   pan and zoom move it from there."
   [f F a b]
   (let [a (double a) b (double b)
         [lo hi] (domain f a b)
-        [y0 y1] (y-range f lo hi)]
+        pad (* 0.15 (- b a))
+        x0 (- a pad) x1 (+ b pad)
+        [y0 y1] (y-range f x0 x1)]
     (ev/fragment
      (walk/postwalk-replace
       {'?f (js-fn f) '?F (when F (js-fn F)) '?a a '?b b '?lo lo '?hi hi
-       '?y0 y0 '?y1 y1 '?step (/ (- hi lo) 400.0)}
+       '?x0 x0 '?x1 x1 '?y0 y0 '?y1 y1 '?step (/ (- hi lo) 400.0)}
       area-template))))
 
 (defn- verdict [{:keys [f F points bounds value]}]
