@@ -157,7 +157,8 @@
    (calc-entry :calc-solid "volume of revolution of x/2 + 1 (disk method), swept a full turn; 14/3 pi exact"
                :gif {:fps 12 :from 0.0 :to 5.0 :size [560 315]})
    (calc-entry [:calc-solid :calc-solid-shell] "shell method: 4 - x^2 about the y-axis, 8 pi"
-               :params (assoc (calc-demos/defaults :calc-solid) :f :parabola :method :shell :play false))
+               :params (assoc (calc-demos/defaults :calc-solid) :f :parabola :method :shell :play false)
+               :camera {:target [0.0 0.0 1.6] :zoom 1.1 :pitch 0.5})
    (calc-entry :calc-columns "double integral: 6 x 6 midpoint columns under z = f(x, y), rising"
                :gif {:fps 12 :from 0.0 :to 4.0 :size [560 315]})])
 
