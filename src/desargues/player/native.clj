@@ -14,7 +14,8 @@
    Pass :offscreen? true in the open! opts to run without a window."
   (:require [clojure.edn :as edn]
             [clojure.java.io :as io]
-            [desargues.player.protocols :as p])
+            [desargues.player.protocols :as p]
+            [desargues.player.native-input :as native-input])
   (:import [java.io BufferedReader BufferedWriter File]
            [java.util.concurrent LinkedBlockingQueue TimeUnit]))
 
@@ -37,6 +38,18 @@
       (.newLine w)
       (.flush w))))
 
+(defn- input!
+  "Translate raw native input `raw` (desargues.player.native-input) against
+   the frame last presented and hand the events to the :on-pointer and
+   :on-key fns, when set. Errors are kept in the state as :pointer-error."
+  [state raw]
+  (let [{:keys [w h frame on-pointer on-key]} @state
+        [st' evs] (native-input/translate (:input @state (native-input/initial)) w h frame raw)]
+    (swap! state assoc :input st')
+    (doseq [ev evs]
+      (when-let [f (if (= :key (:type ev)) on-key on-pointer)]
+        (try (f ev) (catch Throwable t (swap! state assoc :pointer-error t)))))))
+
 (defn- handle! [state {:keys [ev] :as m}]
   (case ev
     :tick   (when-let [f (:tick @state)]
@@ -44,6 +57,7 @@
                    (catch Throwable t (swap! state assoc :tick-error t))))
     :change (when-let [f (get-in @state [:on-change (:id m)])]
               (f (:id m) (:value m)))
+    :input  (input! state (:event m))
     (.put ^LinkedBlockingQueue (:replies @state) m)))
 
 (defn- start-reader! [state ^BufferedReader r]
@@ -129,6 +143,26 @@
     (when (:proc @(:state this))
       (try (send! this {:op :ticks :on? false}) (catch Exception _ nil)))
     this))
+
+(extend-type NativeHost
+  p/IPointer
+  (-on-pointer! [this f]
+    (swap! (:state this) assoc :on-pointer f)
+    this)
+
+  p/IKeyboard
+  (-on-key! [this f]
+    (swap! (:state this) assoc :on-key f)
+    this))
+
+(defn feed!
+  "Hand raw window event `raw` (see desargues.player.native-input) to the
+   native side as if its window had sent it; it comes back as {:ev :input}
+   and reaches the IPointer / IKeyboard fns like real input. For tests and
+   displayless runs."
+  [h raw]
+  (send! h {:op :input :event raw})
+  h)
 
 (defn host
   "A fresh, unopened native host. opts: {:offscreen? bool} (no window; every
