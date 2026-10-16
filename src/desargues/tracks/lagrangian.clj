@@ -47,9 +47,9 @@
    :every (keep every n-th point on the tracks, default 1; the drift is
    always measured on the full run).
 
-   Returns {:graph {:scene :nodes :steps [] :tracks} :drift {..} :trajectory
-   :system :L}: the graph is a desargues scene graph with :tracks next to
-   :nodes and :steps."
+   Returns {:graph {:scene :nodes :order :steps [] :tracks} :drift {..}
+   :trajectory :system :L}: the graph is a desargues scene graph with :tracks
+   next to :nodes and :steps (:order is the lesson's draw order)."
   ([k] (teach k {}))
   ([k params]
    (let [{:keys [title defaults build] :as lesson} (get @registry k)
@@ -57,7 +57,7 @@
              (throw (ex-info (str "Unknown lesson " (pr-str k)) {:lesson k :known (keys @registry)})))
          {:keys [dt duration solver every] :or {dt 0.01 duration 10.0 solver :jvm every 1}
           :as params} (merge defaults params)
-         {:keys [system L keyer nodes]} (build params)
+         {:keys [system L keyer nodes order]} (build params)
          traj (vec (phys/evolve system {:dt dt :duration duration :solver solver}))
          drift (assoc (projection/energy-drift traj #(phys/energy system L %))
                       :solver solver :dt dt :duration duration)
@@ -65,7 +65,8 @@
                   (projection/trajectory->tracks traj keyer {:every every
                                                              :meta {:lesson k :solver solver}})
                   drift)]
-     {:graph {:scene title :nodes nodes :steps [] :tracks tracks}
+     {:graph (cond-> {:scene title :nodes nodes :steps [] :tracks tracks}
+               order (assoc :order order))
       :drift drift
       :trajectory traj
       :system system
@@ -109,6 +110,12 @@
 
 ;; ── lesson: the simple pendulum ─────────────────────────────────────────────
 
+(defn- lesson-order
+  "Draw order of a lesson's `nodes`: strokes (lines, paths) under the filled
+   shapes, ties broken by id, so the result does not depend on map order."
+  [nodes]
+  (mapv :id (sort-by (juxt #(if (#{:line :path} (:node %)) 0 1) (comp str :id)) (vals nodes))))
+
 (defn pendulum-system
   "A planar pendulum of length l, bob mass m, in gravity g (x-z plane, z up,
    pivot at the origin) from Emmy's L = T - V; coordinate :theta from the
@@ -126,14 +133,16 @@
  {:title "Pendulum"
   :defaults {:l 1.0 :m 1.0 :g 9.8 :theta0 1.0 :omega0 0.0}
   :build (fn [{:keys [l] :as params}]
-           (let [{:keys [system L]} (pendulum-system params)]
+           (let [{:keys [system L]} (pendulum-system params)
+                 nodes {:pivot {:node :dot :id :pivot :at [0.0 0.0 0.0] :opts {:color :grey}}
+                        :rod   {:node :line :id :rod :from [0.0 0.0 0.0] :to [0.0 0.0 (- l)]
+                                :opts {:color :grey :width 4}}
+                        :bob   {:node :circle :id :bob :opts {:radius 0.12 :color :gold}
+                                :fill {:color :gold :opacity 0.8}}}]
              {:system system
               :L L
-              :nodes {:pivot {:node :dot :id :pivot :at [0.0 0.0 0.0] :opts {:color :grey}}
-                      :rod   {:node :line :id :rod :from [0.0 0.0 0.0] :to [0.0 0.0 (- l)]
-                              :opts {:color :grey :width 4}}
-                      :bob   {:node :circle :id :bob :opts {:radius 0.12 :color :gold}
-                              :fill {:color :gold :opacity 0.8}}}
+              :nodes nodes
+              :order (lesson-order nodes)
               :keyer (fn [state]
                        (let [[p] (phys/positions-at system state)]
                          {:bob {:transform {:translate p}}
@@ -177,16 +186,18 @@
   :defaults {:A 1.0 :C 0.5 :M 1.0 :g 9.8 :h 1.0 :theta0 0.5 :phi0 0.0 :psi0 0.0
              :thetadot0 0.0 :phidot0 0.0 :psidot0 20.0 :r 0.35}
   :build (fn [{:keys [h r] :as params}]
-           (let [{:keys [system L]} (top-system params)]
+           (let [{:keys [system L]} (top-system params)
+                 nodes {:tip    {:node :dot :id :tip :at [0.0 0.0 0.0] :opts {:color :grey}}
+                        :axis   {:node :line :id :axis :from [0.0 0.0 0.0] :to [0.0 0.0 h]
+                                 :opts {:color :blue :width 4}}
+                        :top    {:node :circle :id :top :opts {:radius 0.1 :color :teal}
+                                 :fill {:color :teal :opacity 0.8}}
+                        :marker {:node :line :id :marker :from [0.0 0.0 h] :to [r 0.0 h]
+                                 :opts {:color :red :width 3}}}]
              {:system system
               :L L
-              :nodes {:tip    {:node :dot :id :tip :at [0.0 0.0 0.0] :opts {:color :grey}}
-                      :axis   {:node :line :id :axis :from [0.0 0.0 0.0] :to [0.0 0.0 h]
-                               :opts {:color :blue :width 4}}
-                      :top    {:node :circle :id :top :opts {:radius 0.1 :color :teal}
-                               :fill {:color :teal :opacity 0.8}}
-                      :marker {:node :line :id :marker :from [0.0 0.0 h] :to [r 0.0 h]
-                               :opts {:color :red :width 3}}}
+              :nodes nodes
+              :order (lesson-order nodes)
               :keyer (fn [{:keys [theta phi psi]}]
                        (let [q (euler-zxz->quat phi theta psi)
                              c (rotate q [0.0 0.0 h])
