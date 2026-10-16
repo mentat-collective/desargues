@@ -1,0 +1,9 @@
+;; cljs.main build options for `clojure -M:browser-parity` (see deps.edn):
+;; desargues.browser.parity for Node, which records every studio object demo
+;; on the ClojureScript host for the cross-host parity test.
+{:main          desargues.browser.parity
+ :output-to     "target/browser-parity/parity.js"
+ :output-dir    "target/browser-parity/out"
+ :optimizations :simple
+ :target        :nodejs
+ :pretty-print  false}

@@ -29,6 +29,16 @@
   (-size [surface]
     "Current [w h] in pixels."))
 
+(defprotocol ISpace
+  "A surface that renders 3D frames natively (desargues.player.space: a
+   :camera plus :surface3 / :curve3 / :points3 / :axes3 shapes). Opt-in
+   capability (ISP): a host without it is handed the frame projected to 2D
+   (desargues.player.space/->2d) through ISurface, so every 2D host shows 3D
+   content without knowing it exists."
+  (-present-space! [surface frame]
+    "Paint 3D `frame` (its 3D shapes in space, its 2D shapes as an overlay),
+     replacing what was shown. Same threading contract as -present!."))
+
 (defprotocol IWindow
   "A top-level window holding a surface."
   (-show! [window opts] "Open or raise the window. opts: {:title :w :h}.")
@@ -36,12 +46,27 @@
   (-snapshot! [window path] "Write what the window shows to a PNG at `path`."))
 
 (defprotocol IControls
-  "Interactive widgets bound to player parameters."
+  "Interactive widgets bound to player parameters. The control model (what a
+   spec means, what an input does to the params) is pure and shared by every
+   host: desargues.player.controls. A host only draws one widget per kind
+   and reports raw input."
   (-control! [window spec on-change]
-    "Add a widget from `spec` {:id :kind (:slider | :toggle | :button) :label
-     :min :max :value}. `on-change` is (fn [id value]), called on user input.")
+    "Add a widget from `spec` {:id :kind :label ...}, kind one of :slider
+     {:min :max :value}, :toggle {:value bool}, :select {:options
+     [{:value :label}] :value}, :text {:value string} or :button (see
+     desargues.player.controls; the player hands specs already normalised by
+     controls/widget-spec). `on-change` is (fn [id raw]), called on user
+     input with the widget's raw value: the number, the boolean, the chosen
+     option's :value, the typed string, or nil for a button press.")
   (-set-control! [window id value]
-    "Move widget `id` to `value` without firing on-change (REPL-driven)."))
+    "Move widget `id` to `value` (controls/display of the param) without
+     firing on-change (REPL-driven). A button ignores it."))
+
+(defprotocol IControlFeedback
+  "Telling the user an input was refused (a :text that does not parse).
+   Segregated from IControls (ISP): a host may draw widgets and stay silent."
+  (-control-error! [window id msg]
+    "Show `msg` beside widget `id`, or clear it when `msg` is nil."))
 
 (defprotocol IPointer
   "Pointer input on the surface (mouse, pen, touch). Segregated from IControls

@@ -68,15 +68,23 @@
   ;; time). `clojure -M:browser-record` re-records the demo scene graphs the
   ;; static page plays (browser/public/scenes/*.edn) on the JVM; viewing them
   ;; needs no JVM. `browser/check.sh` serves the page and asserts it paints.
-  :browser {:extra-paths ["browser"]
+  ;; studio/ is on the path for the shared object-demo registry
+  ;; (desargues.studio.objects-demos, .cljc): the page plays the same demos.
+  :browser {:extra-paths ["browser" "studio"]
             :extra-deps {org.clojure/clojurescript {:mvn/version "1.12.134"}}
             :main-opts ["-m" "cljs.main" "-co" "browser/build.edn" "-c"]}
+  ;; `clojure -M:browser-parity`: the same recorder compiled for Node, so
+  ;; desargues.scene.parity-test can record every object demo on both hosts
+  ;; and compare the EDN graphs.
+  :browser-parity {:extra-paths ["browser" "studio"]
+                   :extra-deps {org.clojure/clojurescript {:mvn/version "1.12.134"}}
+                   :main-opts ["-m" "cljs.main" "-co" "browser/parity.edn" "-c"]}
   :browser-record {:extra-paths ["browser" "studio"]
                    :extra-deps {org.slf4j/slf4j-nop {:mvn/version "1.7.36"}}
                    :main-opts ["-m" "desargues.browser.record"]}
   ;; `clojure -M:test` runs every suite (cognitect test-runner; -n ns / -v var to
   ;; narrow). The Manim suites need the conda env; realize_test skips without it.
-  :test {:extra-paths ["test" "dev" "bench" "site"]
+  :test {:extra-paths ["test" "dev" "bench" "site" "studio"]
          :extra-deps {io.github.cognitect-labs/test-runner {:git/tag "v0.5.1" :git/sha "dfb30dd"}
                       io.github.hive-agi/hive-test {:git/tag "v0.4.11" :git/sha "4d20774cf592966c9ac54fa7fe7a1e2f7d6ae68d"}
                       com.nextjournal/beholder {:mvn/version "1.0.2"}

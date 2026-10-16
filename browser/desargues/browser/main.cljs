@@ -1,15 +1,16 @@
 (ns desargues.browser.main
   "BOUNDARY: the demo page's entry. Reads ?demo=<key> (one of the eight
-   desargues.browser.demos, played live with sliders) or ?scene=<url> (a
-   recorded EDN scene graph, e.g. scenes/pendulum.edn), builds a menu and
-   mounts the canvas host into #stage.
+   studio object demos, desargues.studio.objects-demos, the same registry the
+   JavaFX stage opens, played live with sliders) or ?scene=<url> (a recorded
+   EDN scene graph, e.g. scenes/pendulum.edn), builds a menu and mounts the
+   canvas host into #stage.
 
    window.desargues exposes the player and a paint probe for the headless
    check (browser/check.mjs): desargues.status() -> {demo, t, painted}."
   (:require [clojure.string :as str]
             [desargues.browser.canvas :as canvas]
-            [desargues.browser.demos :as demos]
-            [desargues.browser.player :as player]))
+            [desargues.browser.player :as player]
+            [desargues.studio.objects-demos :as demos]))
 
 (defonce ^:private current (atom nil))
 

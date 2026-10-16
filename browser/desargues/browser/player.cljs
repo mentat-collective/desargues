@@ -17,15 +17,20 @@
    REPL surface: play!, pause!, seek!, set-param!, params, snapshot!, close!.
    One atom per player is the only state."
   (:require [cljs.reader :as reader]
-            [desargues.browser.stage :as stage]
+            [desargues.scene.record :as recorder]
             [desargues.player.graph-source :as graph-source]
             [desargues.player.protocols :as p]
-            [desargues.player.session :as session]))
+            [desargues.player.session :as session]
+            [desargues.player.controls :as controls]
+            [desargues.player.present :as present]))
 
 (defn- source-for [{:keys [source-fn params]}] (source-fn params))
 
-(defn- present! [{:keys [host state]}]
-  (p/-present! host (session/current-frame (:session @state))))
+(defn- present!
+  "Show the current frame; a 3D frame is projected to 2D for a 2D host
+   (desargues.player.present)."
+  [{:keys [host state]}]
+  (present/present! host (session/current-frame (:session @state)) (:camera @state)))
 
 (defn- on-tick [player dt]
   (swap! (:state player) update :session session/tick dt)
@@ -33,19 +38,30 @@
 
 (declare set-param!)
 
-(defn- bind-controls! [player controls]
+(declare control-input!)
+
+(defn- bind-controls!
+  "One widget per control spec (desargues.player.controls), drawn at the
+   value the params hold, if the host has widgets (ISP)."
+  [player controls]
   (when (satisfies? p/IControls (:host player))
-    (doseq [spec controls]
-      (p/-control! (:host player) spec (fn [id v] (set-param! player id v))))))
+    (doseq [spec (filter controls/widget? controls)]
+      (p/-control! (:host player)
+                   (controls/widget-spec spec (:params @(:state player)))
+                   (fn [id raw] (control-input! player id raw))))))
 
 (defn open-source!
   "Play `source-fn` (fn [params] ISource) in `host`.
-   opts: {:title :w :h :params {} :controls [widget-spec] :autoplay? true}."
+   opts: {:title :w :h :params {} :controls [widget-spec] :autoplay? true}.
+   Widget kinds: desargues.player.controls (:slider :toggle :select :text
+   :button); params not given start at each control's default."
   [host source-fn {:keys [title w h params controls autoplay?]
                    :or {title "desargues" w 1280 h 720 params {} autoplay? true}}]
-  (let [spec   {:source-fn source-fn :params params}
-        sess   (cond-> (session/session (source-for spec)) autoplay? session/play)
-        player {:host host :state (atom (assoc spec :session sess))}]
+  (let [controls (controls/validate (vec controls))
+        params   (merge (controls/defaults controls) params)
+        spec     {:source-fn source-fn :params params :controls controls}
+        sess     (cond-> (session/session (source-for spec)) autoplay? session/play)
+        player   {:host host :state (atom (assoc spec :session sess))}]
     (p/-show! host {:title title :w w :h h})
     (bind-controls! player controls)
     (p/-on-tick! host (fn [dt] (on-tick player dt)))
@@ -61,7 +77,7 @@
 (defn construct-source
   "A source-fn re-recording parametric construct `construct-fn` in the page."
   [construct-fn]
-  (fn [params] (graph-source/graph-source (stage/record (construct-fn params)))))
+  (fn [params] (graph-source/graph-source (recorder/record (construct-fn params)))))
 
 (defn open!
   "Play parametric construct `construct-fn` (fn [params] (fn [stage] ...))
@@ -104,9 +120,38 @@
   (let [st (swap! (:state player) assoc-in [:params k] v)]
     (swap! (:state player) update :session session/reload (source-for st))
     (when (satisfies? p/IControls (:host player))
-      (p/-set-control! (:host player) k v))
+      (let [spec (controls/spec-by-id (:controls st) k)]
+        (p/-set-control! (:host player) k (if spec (controls/display spec v) v))))
     (present! player)
     player))
+
+(defn- set-params! [player ps]
+  (let [st (swap! (:state player) assoc :params ps)]
+    (swap! (:state player) update :session session/reload (source-for st))
+    (present! player)
+    player))
+
+(defn control-input!
+  "Apply raw input `raw` from widget `id` through the pure
+   desargues.player.controls/step: rebuild once, move the other widgets a
+   preset changed, report a refusal through IControlFeedback. Returns the
+   step outcome {:params :error :move}."
+  [player id raw]
+  (let [{:keys [controls params]} @(:state player)
+        out (controls/step controls params id raw)]
+    (when (satisfies? p/IControlFeedback (:host player))
+      (p/-control-error! (:host player) id (:error out)))
+    (when (and (nil? (:error out)) (not= params (:params out)))
+      (set-params! player (:params out))
+      (when (satisfies? p/IControls (:host player))
+        (doseq [[k v] (:move out)]
+          (p/-set-control! (:host player) k v))))
+    out))
+
+(defn press!
+  "Press button `id` (the REPL twin of clicking it)."
+  [player id]
+  (control-input! player id nil))
 
 (defn snapshot!
   "Offer the current picture as a PNG download named `path`."
