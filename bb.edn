@@ -30,5 +30,18 @@
                  :task (apply shell "clojure -M -m desargues.lesson.export build" *command-line-args*)}
   lesson:verify {:doc "Rebuild a lesson bundle dir in a temp dir and compare sha256s with its manifest; exits 1 on a mismatch. Args: <dir>"
                  :task (apply shell "clojure -M -m desargues.lesson.export verify" *command-line-args*)}
+  lesson:e2e    {:doc "Build a lesson, statically build its notebook (viewer bundle compiled by shadow-cljs, needs npm + network), then check it in headless Chromium (dev/e2e/lesson_render.mjs); exits 1 on a failed check. Screenshot: dist/lesson-e2e-<id>.png. Args: [lesson.edn, default lessons/area-under-curve.edn]"
+                 :task (let [lesson (or (first *command-line-args*) "lessons/area-under-curve.edn")
+                             id     (second (re-find (re-pattern ":lesson/id\\s+:([^\\s}]+)") (slurp lesson)))
+                             dir    (str "dist/lessons/" id)
+                             ;; outside the bundle dir: lesson:build prunes and
+                             ;; lesson:verify flags files its manifest does not list
+                             static (str "dist/lesson-e2e/" id)]
+                         (shell "clojure -M -m desargues.lesson.export build" lesson)
+                         (shell "clojure -M:notebooks:lesson-e2e -m desargues.lesson.static-build"
+                                (str dir "/notebook.clj") static)
+                         (when-not (fs/exists? "dev/e2e/node_modules/playwright-core")
+                           (shell {:dir "dev/e2e"} "npm install --no-package-lock --no-audit --no-fund"))
+                         (shell "node dev/e2e/lesson_render.mjs" lesson static))}
   serve         {:doc "Serve dist/site on http://localhost:8087"
                  :task (shell "python3 -m http.server 8087 --directory dist/site")}}}

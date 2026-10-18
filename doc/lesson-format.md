@@ -323,7 +323,7 @@ the bare encoding. Its tests check it byte for byte against
 
 A `:viewer` block holds a bare fragment form. Outside a lesson, emmy-viewers
 fragments can be exported on their own with `emmy.viewer.export`, released in
-[`io.github.buddhilw/emmy-viewers 0.5.0-fork.1`](https://clojars.org/io.github.buddhilw/emmy-viewers)
+[`io.github.buddhilw/emmy-viewers 0.5.1-fork.1`](https://clojars.org/io.github.buddhilw/emmy-viewers)
 on Clojars, which is the version `:notebooks` pins.
 It writes a fragment together with its Clerk viewer metadata, with the viewer
 stored as a registered symbol: `fragment->edn` / `edn->fragment` and
@@ -370,6 +370,43 @@ static Clerk build of a single notebook. Its JSON uses the same encoding as
   hashes for `media/*` while every text hash still matches. When you compare
   with the committed manifest, compare the text files and treat media
   differences as a host difference.
-- Nothing is verified in a browser. The manifest hashes the notebook
-  *source*. It does not check how Clerk or emmy-viewers render it, and it
-  does not check that the quoted `:viewer` code runs.
+- **The manifest does not cover rendering.** It hashes the notebook
+  *source*. How Clerk and emmy-viewers render it is checked separately, by
+  `bb lesson:e2e` (below). That check needs npm and the network, and its
+  result is not part of `lesson:verify`.
+
+## Browser check: `bb lesson:e2e`
+
+```sh
+bb lesson:e2e                       # lessons/area-under-curve.edn
+bb lesson:e2e lessons/<name>.edn
+```
+
+The task runs three steps and exits non-zero if any of them fails:
+
+1. `lesson:build` of the lesson into `dist/lessons/<id>`.
+2. A static Clerk build of its `notebook.clj` into `dist/lesson-e2e/<id>`,
+   made by `clojure -M:notebooks:lesson-e2e -m desargues.lesson.static-build
+   <notebook> <out>`. This step goes through `emmy.clerk/build!`, with a
+   viewer bundle that shadow-cljs compiles here from
+   `notebooks/desargues/lesson/sci_extensions.cljs`: Clerk's static app plus
+   emmy-viewers' SCI namespaces. The prebuilt emmy-viewers bundle on
+   Clerk's CDN, which is `emmy.clerk/build!`'s default, throws on load and
+   leaves the page blank. The npm deps go into the root `package.json` and
+   `node_modules/`, both gitignored. `three` is pinned to 0.150.0: newer
+   releases call `process.emitWarning` in the browser, which stops Mafs from
+   mounting. The first build takes several minutes.
+3. `node dev/e2e/lesson_render.mjs <lesson.edn> <static dir>`. It uses
+   `playwright-core` (`dev/e2e/package.json`, installed on first run into
+   `dev/e2e/node_modules`) with Playwright's downloaded Chromium headless
+   shell (`~/.cache/ms-playwright`; set `CHROMIUM` to use another binary).
+   It serves the build on a local port, opens it, and checks:
+   - no page errors and no console errors;
+   - every `:slide/title` of the lesson is a heading on the page;
+   - KaTeX rendered the integrals: a `.katex` element whose text holds `∫`;
+   - the embedded PNG and GIF media and every other `<img>` loaded
+     (`naturalWidth > 0`);
+   - the `:viewer` fragment's Mafs mounted: an `<svg>` inside `.MafsView`;
+   - the recorded scene's last frame (Clerk's `_data/*.png`) is on the page.
+
+   It writes a full-page screenshot to `dist/lesson-e2e-<id>.png`.

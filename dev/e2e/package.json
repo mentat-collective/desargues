@@ -1,0 +1,8 @@
+{
+  "private": true,
+  "description": "Headless-browser check of the generated lesson notebook (bb lesson:e2e). Uses Playwright's downloaded Chromium; no browser download here.",
+  "type": "module",
+  "devDependencies": {
+    "playwright-core": "1.62.1"
+  }
+}

@@ -26,4 +26,9 @@ __pycache__/*
 
 # browser host: npm deps of the headless check, compiled bundle
 node_modules/
+# bb lesson:e2e: the shadow-cljs viewer bundle build writes these at the root
+/.clerk/
+/.shadow-cljs/
+/package.json
+/package-lock.json
 /browser/public/js/
