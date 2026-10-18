@@ -60,10 +60,21 @@ In the notebook, prose becomes Clerk markdown comments.
 
 `:expr` holds numbers, symbols and strings, plus lists headed by a symbol,
 nested. Vectors are allowed for structures. The expression is **not**
-evaluated. The notebook typesets it with `(clerk/tex (emmy.env/->TeX '<expr>))`,
-so any form `->TeX` accepts will work, including `(= a b c)`, `(/ 1 3)`,
-`(* 2 pi ...)` and `(expt x 2)`. An operator Emmy has no TeX rule for, such
-as `integral`, is set as a sans-serif function name: `integral(x², x, 0, 1)`.
+evaluated. The notebook typesets it with
+`(clerk/tex (desargues.lesson.tex/->TeX '<expr>))`: Emmy's `->TeX`, extended
+through Emmy's extensible renderer (`emmy.expression.render/TeX-renderer`)
+with rules for integrals. Any form Emmy's `->TeX` accepts works, including
+`(= a b c)`, `(/ 1 3)`, `(* 2 pi ...)` and `(expt x 2)`, and in addition:
+
+| Expression | TeX |
+|---|---|
+| `(integral f x a b)` | `\int_{a}^{b} f \, dx` |
+| `(integral f x)` | `\int f \, dx` |
+
+`integrate` is accepted as a synonym of `integral`. A sum or difference
+integrand is parenthesized. Any other operator Emmy has no TeX rule for is
+set as a sans-serif function name, e.g. `\mathsf{foo}(x)`. Further rules go
+in `desargues.lesson.tex/integral-handlers`.
 
 ### `:figure`: a calc figure
 
@@ -209,26 +220,22 @@ it is **skipped**: the build warns on stderr, records it under the manifest's
 
 5. Open the notebook. It needs the `:notebooks` classpath, because it
    requires `desargues.calc-emmy` (in `notebooks/`), emmy-viewers and Clerk.
-   Its `:media` cells refer to `media/<file>` **relative to the bundle
-   directory**, and `clerk/image` reads that path when the cell is evaluated.
-   So run the JVM with the bundle directory as its working directory, using
-   the repo's `:notebooks` classpath:
+   Its `:media` cells refer to `media/<file>` **relative to the notebook
+   file**: when the notebook is loaded it computes `bundle-dir`, the
+   directory of `*file*`, and reads media below it (PNGs through
+   `clerk/image`, GIF/MP4 inlined as `data:` URIs). The generated source
+   holds no absolute path; the directory is found at load time. So it can be
+   opened from any working directory, for example the repo root:
 
    ```sh
-   CP=$(clojure -Spath -A:notebooks | tr ':' '\n' \
-        | sed "s|^\([^/]\)|$PWD/\1|" | paste -sd:)   # make relative entries absolute
-   cd dist/lessons/area-under-curve
-   java -cp "$CP" clojure.main
+   clojure -A:notebooks
    ```
 
    ```clojure
    (require '[nextjournal.clerk :as clerk])
    (clerk/serve! {})
-   (clerk/show! "notebook.clj")
+   (clerk/show! "dist/lessons/area-under-curve/notebook.clj")
    ```
-
-   If you evaluate it from the repo root instead, every cell runs except the
-   `clerk/image` ones, which fail with "Can't get input stream from URL!".
 
    `notebook.clj` is generated output. Edit the lesson and rebuild instead
    of editing the notebook.
