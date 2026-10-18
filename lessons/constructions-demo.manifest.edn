@@ -1,0 +1,29 @@
+{
+  :deps {
+          clj-python/libpython-clj {:mvn/version "2.026"}
+          io.github.hive-agi/hive-di {:git/sha "ab63fd0"}
+          io.github.hive-agi/hive-dsl {:git/sha "335869e"}
+          io.github.mentat-collective/emmy {:git/sha "1ed6094"}
+          metosin/malli {:mvn/version "0.20.2"}
+          org.clojure/clojure {:mvn/version "1.12.3"}
+          org.clojure/core.async {:mvn/version "1.7.701"}
+          org.clojure/core.logic {:mvn/version "1.1.1"}
+          org.clojure/data.json {:mvn/version "2.5.1"}
+          org.clojure/test.check {:mvn/version "1.1.1"}
+          org.typedclojure/typed.clj.runtime {:mvn/version "1.3.0"}}
+  :files {
+           "lesson.edn" "c58ae5e6d53cce2efaf82390b5de16cf0bf629b0457359b2b83e0a392d7a68b4"
+           "lesson.json" "5959805b511d55c653deec42696e048fe60d9042c30d9cd1ce99d5da2f3ce4d9"
+           "media/median-png.png" "6ad1a3090643aafe3945a6d3761acdc053f6e0b0007041d0e41278710bfdfcae"
+           "notebook.clj" "07b69a452d54d68cdb0433422c2021a8794634076fd39a082904abc7c67bd9a1"}
+  :generated-by "bb lesson:build lessons/constructions-demo.edn"
+  :notebook-deps {
+                   io.github.buddhilw/emmy-viewers {:mvn/version "0.5.0-fork.1"}
+                   io.github.nextjournal/clerk {:git/sha "a67a5d1e25fc9601e9f8a6d8006aaf7eed1a7761"}
+                   io.github.nextjournal/clerk.render {
+                                                        :git/sha "a67a5d1e25fc9601e9f8a6d8006aaf7eed1a7761"}
+                   org.babashka/sci {:git/sha "c556f4474303c61da72e7a07eef496dcbf66a56e"}
+                   org.mentat/clerk-utils {:mvn/version "0.6.0"}
+                   org.scilab.forge/jlatexmath {:mvn/version "1.0.7"}}
+  :skipped []
+  :lesson/id :constructions-demo}

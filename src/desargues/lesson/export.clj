@@ -49,7 +49,9 @@
             [desargues.player.graph-source :as gs]
             [desargues.player.headless :as hl]
             [desargues.player.protocols :as pp]
-            [desargues.scene.serialize :as ser])
+            [desargues.scene.serialize :as ser]
+            [desargues.board :as board]
+            [desargues.board.picture :as picture])
   (:import (java.nio.file Files LinkOption Path)
            (java.nio.file.attribute FileAttribute)
            (java.security MessageDigest)
@@ -292,13 +294,23 @@
 (defmethod block->clj :viewer [b _]
   (str "(ev/fragment\n " (quoted (:fragment b) 1) ")"))
 
+(defn construction-board
+  "The Board of construction block `b`, sampled at its params' :init values
+   by the :jvm kernel compiler (desargues.board/sample-board): no raster, no
+   wasm, nothing written. A construction without :id is named after its
+   block."
+  [b]
+  (let [c (:construction b)]
+    (board/sample-board (cond-> c (nil? (:id c)) (assoc :id (keyword (block-name (:block/id b))))))))
+
 (defmethod block->clj :construction [b ctx]
   (let [s (var-of b ctx)]
-    (str ";; construction " (one-line (:block/id b)) " (desargues.board.construction EDN), shown as data.\n"
-         ";; TODO(lesson-export): no notebook render path for constructions yet; drawing one\n"
-         ";; compiles a board kernel (desargues.board/compile-board!), which needs the kernel toolchain.\n"
+    (str ";; construction " (one-line (:block/id b)) " (desargues.board.construction EDN), as data, then\n"
+         ";; drawn as a Mafs figure: sampled at its params' :init values at build time\n"
+         ";; (desargues.board/sample-board) and laid out by desargues.board.picture/->mafs\n"
+         "^{:nextjournal.clerk/visibility {:result :hide}}\n"
          (quoted-def s (:construction b)) "\n\n"
-         s)))
+         "(ev/fragment\n " (quoted (picture/->mafs (construction-board b)) 1) ")")))
 
 (defmethod block->clj :scene [b ctx]
   (let [s (var-of b ctx)]
@@ -387,12 +399,19 @@
 
 (def media-fps 12)
 
+(def renderable-kinds
+  "Block kinds a :media block can render: those `block-source` has a source for."
+  #{:figure :scene :construction})
+
 (defn- block-source
-  "ISource of block `b` for the headless host, or nil when its kind has none."
+  "ISource of block `b` for the headless host, or nil when its kind has none.
+   A construction is sampled by the :jvm kernel compiler (no raster needed)
+   and drawn as a recorded scene (desargues.board.picture/->scene)."
   [b]
   (case (:block/kind b)
-    :figure ((figure/source-fn (:figure b)) {})
-    :scene  (gs/graph-source (:scene b))
+    :figure       ((figure/source-fn (:figure b)) {})
+    :scene        (gs/graph-source (:scene b))
+    :construction (gs/graph-source (picture/->scene (construction-board b)))
     nil))
 
 (defn- ffmpeg? []
@@ -458,7 +477,7 @@
                                     more)))]
          (cond
            (not media?)                 (skip :disabled)
-           (nil? (block-source src-b))  (skip :no-render-path :kind (:block/kind src-b))
+           (not (renderable-kinds (:block/kind src-b)))  (skip :no-render-path :kind (:block/kind src-b))
            (not (headless-capable?))    (skip :no-awt)
            (and (not= :png (:format b)) (not (ffmpeg?))) (skip :ffmpeg-missing)
            :else

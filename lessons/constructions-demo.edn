@@ -1,0 +1,28 @@
+;; A small lesson showing the :construction render path: the median of a
+;; triangle, drawn in the notebook as a Mafs figure and rendered to a PNG by
+;; the headless host. Data only (desargues.lesson.schema). Build and verify:
+;;   bb lesson:build lessons/constructions-demo.edn
+;;   bb lesson:verify dist/lessons/constructions-demo
+;; See doc/lesson-format.md.
+{:lesson/id :constructions-demo
+ :lesson/title "A median and its midpoint"
+ :lesson/version "1.0.0"
+ :lesson/slides
+ [{:slide/id :midpoint
+   :slide/title "The midpoint of a side"
+   :slide/blocks
+   [{:block/id :intro :block/kind :prose
+     :md "Take a triangle ABC. The midpoint M of side AB is the point halfway from A to B, so |AM| = |MB|. The segment from the opposite vertex C to M is a *median* of the triangle.\n\nThe figure is a board construction: M is not placed by hand but built from A and B with the :mid operation, and the two lengths are read out as checks."}
+    {:block/id :median :block/kind :construction
+     :construction {:id :median :kind :construction
+                    :window {:x [-0.5 3.5] :y [-0.75 2.25]}
+                    :points [{:id :A :at [0 0]} {:id :B :at [3 0]} {:id :C :at [1 2]}
+                             {:id :M :op :mid :of [:A :B]}]
+                    :draw [[:polygon [:A :B :C] {:color :blue}]
+                           [:segment :C :M {:color :gold}]
+                           [:point :M {:label "M" :color :gold}]]
+                    :checks [{:distance [:A :M] :label "|AM|"}
+                             {:distance [:M :B] :label "|MB|"}]}}
+    {:block/id :median-png :block/kind :media :from :median :format :png}
+    {:block/id :outro :block/kind :prose
+     :md "Exercise: draw the other two medians. All three meet in one point, the centroid, two thirds of the way along each median from its vertex."}]}]}
