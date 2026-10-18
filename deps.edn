@@ -128,4 +128,9 @@
                                                                :git/sha "a67a5d1e25fc9601e9f8a6d8006aaf7eed1a7761"
                                                                :deps/root "render"}
                            org.babashka/sci {:git/url "https://github.com/babashka/sci"
-                                             :git/sha "c556f4474303c61da72e7a07eef496dcbf66a56e"}}}}}
+                                             :git/sha "c556f4474303c61da72e7a07eef496dcbf66a56e"}}}
+  ;; `clojure -M:notebooks:lesson-e2e -m desargues.lesson.static-build <notebook> <out>`
+  ;; (or `bb lesson:e2e`): static build of a lesson notebook with a viewer bundle
+  ;; compiled here by shadow-cljs (desargues.lesson.sci-extensions). Needs npm.
+  :lesson-e2e {:extra-deps {thheller/shadow-cljs {:mvn/version "2.25.2"}
+                            org.clojure/clojurescript {:mvn/version "1.11.60"}}}}}
