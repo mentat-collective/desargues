@@ -120,7 +120,7 @@
   :notebooks {:extra-paths ["notebooks" "studio"]
               ;; The fork's Clojars release; its POM leaves Emmy out, so the
               ;; emmy git coordinate in :deps above is the one Emmy.
-              :extra-deps {io.github.buddhilw/emmy-viewers {:mvn/version "0.5.0-fork.1"}
+              :extra-deps {io.github.buddhilw/emmy-viewers {:mvn/version "0.5.1-fork.1"}
                            org.mentat/clerk-utils {:mvn/version "0.6.0"}
                            org.scilab.forge/jlatexmath {:mvn/version "1.0.7"}
                            io.github.nextjournal/clerk {:git/sha "a67a5d1e25fc9601e9f8a6d8006aaf7eed1a7761"}

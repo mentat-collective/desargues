@@ -24,6 +24,7 @@
 //
 // CHROMIUM sets the browser binary; by default the newest Playwright
 // headless shell (or Chromium) under ~/.cache/ms-playwright.
+// LESSON_E2E_DEBUG=1 (opt-in) also prints each page error's stack trace.
 // The page loads the emmy-viewers JS bundle and Tailwind from their CDNs, so
 // it needs the network.
 

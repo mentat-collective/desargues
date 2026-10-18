@@ -323,7 +323,7 @@ the bare encoding. Its tests check it byte for byte against
 
 A `:viewer` block holds a bare fragment form. Outside a lesson, emmy-viewers
 fragments can be exported on their own with `emmy.viewer.export`, released in
-[`io.github.buddhilw/emmy-viewers 0.5.0-fork.1`](https://clojars.org/io.github.buddhilw/emmy-viewers)
+[`io.github.buddhilw/emmy-viewers 0.5.1-fork.1`](https://clojars.org/io.github.buddhilw/emmy-viewers)
 on Clojars, which is the version `:notebooks` pins.
 It writes a fragment together with its Clerk viewer metadata, with the viewer
 stored as a registered symbol: `fragment->edn` / `edn->fragment` and
