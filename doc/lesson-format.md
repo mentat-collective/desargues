@@ -278,9 +278,9 @@ The full table is the "JSON convention" comment at the top of
 ### Related: emmy-viewers fragment export
 
 A `:viewer` block holds a bare fragment form. Outside a lesson, emmy-viewers
-fragments can be exported on their own with `emmy.viewer.export`, on the
-[`feat/fragment-export`](https://github.com/BuddhiLW/emmy-viewers/tree/feat/fragment-export)
-branch of BuddhiLW/emmy-viewers (not yet in the version pinned by `:notebooks`).
+fragments can be exported on their own with `emmy.viewer.export`, released in
+[`io.github.buddhilw/emmy-viewers 0.5.0-fork.1`](https://clojars.org/io.github.buddhilw/emmy-viewers)
+on Clojars, which is the version `:notebooks` pins.
 It writes a fragment together with its Clerk viewer metadata, with the viewer
 stored as a registered symbol: `fragment->edn` / `edn->fragment` and
 `fragment->json` / `json->fragment`. It also offers `export-notebook!` for a

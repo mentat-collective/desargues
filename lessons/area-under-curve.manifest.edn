@@ -20,7 +20,7 @@
            "notebook.clj" "4b778aacbe76aae5fa6443b9cd5206fc9a6e43d7c2b5920041e39e81fbf7bdab"}
   :generated-by "bb lesson:build lessons/area-under-curve.edn"
   :notebook-deps {
-                   io.github.mentat-collective/emmy-viewers {:git/sha "a19b1e3"}
+                   io.github.buddhilw/emmy-viewers {:mvn/version "0.5.0-fork.1"}
                    io.github.nextjournal/clerk {:git/sha "a67a5d1e25fc9601e9f8a6d8006aaf7eed1a7761"}
                    io.github.nextjournal/clerk.render {
                                                         :git/sha "a67a5d1e25fc9601e9f8a6d8006aaf7eed1a7761"}
