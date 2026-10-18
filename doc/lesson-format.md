@@ -13,7 +13,10 @@ rebuilds the bundle and checks those hashes.
 The worked example is [lessons/area-under-curve.edn](../lessons/area-under-curve.edn),
 six slides on the definite integral and the shell method. Its manifest,
 [lessons/area-under-curve.manifest.edn](../lessons/area-under-curve.manifest.edn),
-is committed so you can compare your hashes with ours.
+is committed so you can compare your hashes with ours. A second, smaller
+example, [lessons/constructions-demo.edn](../lessons/constructions-demo.edn),
+draws a board construction; its manifest is
+[lessons/constructions-demo.manifest.edn](../lessons/constructions-demo.manifest.edn).
 
 Namespaces:
 
@@ -114,7 +117,25 @@ starting points.
 ```
 
 This is `desargues.board.construction` EDN. The schema checks its structure
-only, because compiling it needs the kernel toolchain.
+only; the build checks the rest by sampling it.
+
+A construction is drawn at its params' `:init` values. The build samples it
+with `desargues.board/sample-board` through the `:jvm` kernel compiler
+(`desargues.board.jvm`): the same kernel source raster compiles to wasm, run
+as plain Clojure, so **no `:dynamics` alias and no raster** are needed.
+`desargues.board.picture` then reads the board's layers against the sampled
+frame: points (free points too), segments, lines, polygons, paths and traces,
+and each check as a `label = value` readout. In the notebook the block is
+its data followed by a static Mafs figure,
+`(ev/fragment '[mafs.core/Mafs {:view-box ...} ...])`, over the
+construction's `:window` (default x in [-6, 6], y in [-3.5, 3.5]). The
+figure is computed at build time, so it is in the notebook source and its
+hash. Nothing is draggable there. For a draggable board, compile it with
+`desargues.board/compile-board!` (raster). A 3D construction (`:view`) is
+projected orthographically by its camera's initial yaw and pitch.
+Coordinates are rounded to 6 decimals, so the notebook text is the same on
+every host. [lessons/constructions-demo.edn](../lessons/constructions-demo.edn)
+is the worked example.
 
 ### `:viewer`: an emmy-viewers fragment
 
@@ -173,8 +194,11 @@ ids. `:from` must name an existing block that is not itself a media
 block. Rendering is done by the headless PNG host
 (`desargues.player.headless`, the path `bb showcase` uses). A PNG is the
 figure or scene at its last instant. `:gif` and `:mp4` are 12 fps frame
-sequences encoded by ffmpeg. Only `:figure` and `:scene` blocks have a
-render path. If a block cannot be rendered (other kind, no AWT, no ffmpeg),
+sequences encoded by ffmpeg. `:figure`, `:scene` and `:construction`
+blocks have a render path. A construction is painted as the same picture
+the notebook shows (`desargues.board.picture/->scene`), fitted to the frame,
+with no alias needed. If a block cannot be rendered (`:prose`, `:tex` or `:viewer`, recorded as
+`:no-render-path`; no AWT; no ffmpeg),
 it is **skipped**: the build warns on stderr, records it under the manifest's
 `:skipped`, and the notebook says so. The build does not fail.
 
@@ -346,10 +370,6 @@ static Clerk build of a single notebook. Its JSON uses the same encoding as
   hashes for `media/*` while every text hash still matches. When you compare
   with the committed manifest, compare the text files and treat media
   differences as a host difference.
-- **Constructions have no render path yet.** A `:construction` block appears
-  in the notebook only as data, and a `:media` block whose `:from` is a
-  construction is skipped (`:no-render-path`). Drawing one requires
-  compiling a board kernel.
 - Nothing is verified in a browser. The manifest hashes the notebook
   *source*. It does not check how Clerk or emmy-viewers render it, and it
   does not check that the quoted `:viewer` code runs.
