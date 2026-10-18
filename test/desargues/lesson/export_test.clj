@@ -1,21 +1,27 @@
 (ns desargues.lesson.export-test
   "Lesson export: building a tiny lesson (no media) twice yields identical
-   manifests, verify! proves it reproducible and catches tampering, and the
-   JSON encoding round-trips."
+   manifests, verify! proves it reproducible and catches tampering (files,
+   extra files, manifest entries), generated names are safe and unique,
+   titles cannot inject code, media is embedded, and the JSON encoding
+   round-trips."
   (:require [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [desargues.lesson.export :as ex]
             [desargues.lesson.schema :as ls]
             [desargues.lesson.tex :as tex]
+            [desargues.scene.serialize :as ser]
             [emmy.env :as e])
   (:import (java.nio.file Files)
-           (java.nio.file.attribute FileAttribute)))
+           (java.nio.file.attribute FileAttribute)
+           (java.util Base64)))
 
 (def lesson-path "test/desargues/lesson/tiny_lesson.edn")
 
 (defn- tmp-dir []
   (str (Files/createTempDirectory "lesson-export-test" (make-array FileAttribute 0))))
+
+(defn- read-all [s] (read-string (str "[" s "]")))
 
 (deftest the-tiny-lesson-is-valid
   (is (ls/valid? (ex/read-lesson lesson-path))))
@@ -52,6 +58,63 @@
           "the rebuild still matches the manifest; the file on disk does not")
       (is (not= (:expected (first mismatches)) (:on-disk (first mismatches)))))))
 
+(defn- rewrite-manifest! [d f]
+  (spit (io/file d "manifest.edn") (ser/->canonical-edn (f (ex/read-manifest d)))))
+
+(deftest verify-compares-manifest-entries
+  (doseq [[k f] [[:deps #(assoc-in % [:deps 'org.clojure/data.json] {:mvn/version "0.0.1"})]
+                 [:notebook-deps #(update % :notebook-deps dissoc 'org.mentat/clerk-utils)]
+                 [:skipped #(assoc % :skipped [{:block :ghost :format :png :from :x :reason :disabled}])]]]
+    (testing (str k)
+      (let [d (tmp-dir)]
+        (ex/build! lesson-path {:out d})
+        (rewrite-manifest! d f)
+        (let [{:keys [reproducible? mismatches]} (ex/verify! d)]
+          (is (false? reproducible?))
+          (is (= [k] (map :key mismatches)))
+          (is (= (get (ex/read-manifest d) k) (:expected (first mismatches))))
+          (is (not= (:expected (first mismatches)) (:actual (first mismatches)))))))))
+
+(deftest verify-reports-extra-files
+  (let [d (tmp-dir)]
+    (ex/build! lesson-path {:out d})
+    (spit (io/file d "stray.txt") "x")
+    (io/make-parents (io/file d "media" "old.png"))
+    (spit (io/file d "media" "old.png") "y")
+    (let [{:keys [reproducible? mismatches]} (ex/verify! d)]
+      (is (false? reproducible?))
+      (is (= [{:file "media/old.png" :problem :not-in-manifest}
+              {:file "stray.txt" :problem :not-in-manifest}]
+             (map #(select-keys % [:file :problem]) mismatches))))))
+
+(deftest build-removes-stale-files
+  (let [d (tmp-dir)]
+    (ex/build! lesson-path {:out d})
+    (spit (io/file d "stray.txt") "x")
+    (io/make-parents (io/file d "media" "old.png"))
+    (spit (io/file d "media" "old.png") "y")
+    (ex/build! lesson-path {:out d})
+    (is (not (.exists (io/file d "stray.txt"))))
+    (is (not (.exists (io/file d "media"))) "an emptied directory is removed too")
+    (is (= {:reproducible? true :mismatches []} (ex/verify! d)))))
+
+(deftest build-refuses-unsafe-out-dirs
+  (let [cwd    (System/getProperty "user.dir")
+        refuse (fn [out]
+                 (try (ex/build! lesson-path {:out out}) nil
+                      (catch clojure.lang.ExceptionInfo t (:reason (ex-data t)))))]
+    (is (= :lesson/unsafe-out-dir (refuse ".")) "the working directory (repo root)")
+    (is (= :lesson/unsafe-out-dir (refuse cwd)))
+    (is (= :lesson/unsafe-out-dir (refuse "..")) "an ancestor of it")
+    (is (= :lesson/unsafe-out-dir (refuse (str (.getParentFile (io/file cwd))))))
+    (let [d (tmp-dir)]
+      (spit (io/file d "precious.txt") "keep me")
+      (is (= :lesson/unsafe-out-dir (refuse d)) "a non-empty dir that is not a bundle")
+      (is (= "keep me" (slurp (io/file d "precious.txt")))))
+    (let [d (tmp-dir)]
+      (.mkdirs (io/file d ".git"))
+      (is (= :lesson/unsafe-out-dir (refuse d)) "a git work tree root"))))
+
 (deftest json-round-trips
   (let [d (tmp-dir)
         l (ex/read-lesson lesson-path)]
@@ -72,9 +135,10 @@
     (is (= 3 (count (re-seq #"(?m)^;; ## " s))) "one section per slide")
     (is (str/includes? s "(clerk/tex (tex/->TeX '(integrate (expt x 2) x 0 2)))"))
     (is (str/includes? s "[desargues.lesson.tex :as tex]"))
-    (is (str/includes? s "(calc-emmy/figure->mafs area-fig)"))
+    (is (str/includes? s "(calc-emmy/figure->mafs block-area-fig)"))
+    (is (str/includes? s "(scene-image block-dot)"))
     (is (str/includes? s "TODO(lesson-export)"))
-    (is (vector? (read-string (str "[" s "]"))) "the notebook reads as Clojure")))
+    (is (vector? (read-all s)) "the notebook reads as Clojure")))
 
 (deftest integral-tex
   (testing "definite and indefinite integrals typeset with the integral sign"
@@ -89,42 +153,148 @@
     (is (= (e/->TeX '(+ (expt x 2) (sin y))) (tex/->TeX '(+ (expt x 2) (sin y)))))
     (is (= "\\begin{equation}\nx\n\\end{equation}" (tex/->TeX 'x :equation true)))))
 
-(def ^:private media-lesson
-  {:lesson/id :media-path :lesson/title "media path" :lesson/version "1"
-   :lesson/slides
-   [{:slide/id :s :slide/title "s"
-     :slide/blocks [{:block/id :dot :block/kind :scene
-                     :scene {:scene "dot"
-                             :nodes {1 {:node :dot :id 1 :opts {:color :gold} :at [0 0]}}
-                             :steps [{:step :hold :seconds 1}]
-                             :node-count 1}}
-                    {:block/id :dot-png :block/kind :media :from :dot :format :png}
-                    {:block/id :dot-gif :block/kind :media :from :dot :format :gif}]}]})
+;; ----------------------------------------------------------------------------
+;; Generated names (finding 2)
 
-(deftest notebook-media-resolves-relative-to-itself
-  (let [s (ex/notebook-source media-lesson)]
-    (testing "media cells go through the notebook's own directory, not the cwd"
-      (is (str/includes? s "(def bundle-dir"))
-      (is (str/includes? s "(io/file *file*)"))
-      (is (str/includes? s "(clerk/image (media-url \"media/dot-png.png\"))"))
-      (is (str/includes? s "(media-data-uri \"media/dot-gif.gif\" \"image/gif\")"))
-      (is (not (re-find #"clerk/image \"" s)) "no bare cwd-relative clerk/image path"))
-    (testing "no absolute path in the generated source"
-      (is (not (str/includes? s (System/getProperty "user.dir"))))
-      (is (not (str/includes? s (System/getProperty "user.home"))))
-      (is (not (re-find #"\"/" s)) "no string literal starting at the filesystem root"))
-    (testing "the bundle-dir form resolves to the directory of the file it is loaded from"
-      (let [d    (io/file (tmp-dir) "nested")
-            f    (io/file d "nb.clj")
-            form (some #(when (and (seq? %) (= 'def (first %)) (= 'bundle-dir (second %))) %)
-                       (read-string (str "[" s "]")))]
-        (.mkdirs d)
-        (spit f (str "(ns lesson-media-path-probe (:require [clojure.java.io :as io]))\n"
-                     (pr-str form) "\n"
-                     "(def media (io/file bundle-dir \"media/dot-png.png\"))\n"))
-        (load-file (str f))
-        (is (= (.getCanonicalFile d)
-               (.getCanonicalFile ^java.io.File @(resolve 'lesson-media-path-probe/bundle-dir))))
-        (is (= (.getCanonicalFile (io/file d "media" "dot-png.png"))
-               (.getCanonicalFile ^java.io.File @(resolve 'lesson-media-path-probe/media))))
-        (remove-ns 'lesson-media-path-probe)))))
+(def ^:private dot-scene
+  {:scene "dot"
+   :nodes {1 {:node :dot :id 1 :opts {:color :gold} :at [0 0]}}
+   :steps [{:step :hold :seconds 1}]
+   :node-count 1})
+
+(defn- lesson-of [blocks]
+  {:lesson/id :names :lesson/title "names" :lesson/version "1"
+   :lesson/slides [{:slide/id :s :slide/title "s" :slide/blocks blocks}]})
+
+(defn- prose [id] {:block/id id :block/kind :prose :md "x"})
+
+(defn- collision [blocks]
+  (try (ex/block-names (lesson-of blocks)) nil
+       (catch clojure.lang.ExceptionInfo t (ex-data t))))
+
+(deftest generated-names-are-unique
+  (testing "lossy mappings that collide are refused, naming both ids"
+    (doseq [[a b] [[:fig/a :fig.a] [:Area :area] [:a-b :a_b] [:x/y-z :x.y/z]]]
+      (let [d (collision [(prose a) (prose b)])]
+        (is (= :lesson/name-collision (:reason d)) (str a " vs " b))
+        (is (= [a b] (:ids d)))))
+    (let [msg (try (ex/notebook-source (lesson-of [(prose :fig/a) (prose :fig.a)])) nil
+                   (catch clojure.lang.ExceptionInfo t (ex-message t)))]
+      (is (str/includes? msg ":fig/a"))
+      (is (str/includes? msg ":fig.a")))
+    (testing "and build! refuses before writing anything"
+      (let [d (tmp-dir)]
+        (is (thrown? clojure.lang.ExceptionInfo
+                     (ex/build! (lesson-of [(prose :Area) (prose :area)]) {:out d})))
+        (is (empty? (.list (io/file d)))))))
+  (testing "media file names are unique too (they share the generated name)"
+    (let [d (collision [{:block/id :dot :block/kind :scene :scene dot-scene}
+                        {:block/id :Pic :block/kind :media :from :dot :format :png}
+                        {:block/id :pic :block/kind :media :from :dot :format :gif}])]
+      (is (= [:Pic :pic] (:ids d)))))
+  (testing "distinct ids give distinct vars and media paths"
+    (let [n (ex/block-names (lesson-of [{:block/id :dot :block/kind :scene :scene dot-scene}
+                                        {:block/id :dot-png :block/kind :media :from :dot :format :png}
+                                        {:block/id :dot-gif :block/kind :media :from :dot :format :gif}]))]
+      (is (= 3 (count (set (map :var (vals n))))))
+      (is (= #{"media/dot-png.png" "media/dot-gif.gif"} (set (keep :media (vals n))))))))
+
+(deftest generated-names-are-safe
+  (let [s (ex/notebook-source
+           (lesson-of [{:block/id :scene-image :block/kind :scene :scene dot-scene}
+                       {:block/id :1st :block/kind :scene :scene dot-scene}
+                       {:block/id :str :block/kind :construction
+                        :construction {:id :c :kind :construction :points [{:id :A :at [0 0]}]}}]))
+        forms (read-all s)
+        defs  (keep #(when (and (seq? %) (= 'def (first %))) (second %)) forms)
+        fns   (keep #(when (and (seq? %) (= 'defn (first %))) (second %)) forms)]
+    (is (vector? forms) "a block id starting with a digit still reads")
+    (is (= '[block-scene-image block-1st block-str] defs))
+    (is (= '[scene-image] fns) "the helper is not shadowed by a block named :scene-image")
+    (is (str/includes? s "(scene-image block-scene-image)"))
+    (is (empty? (filter (set fns) defs)))))
+
+;; ----------------------------------------------------------------------------
+;; Comment injection (finding 3)
+
+(deftest titles-cannot-inject-code
+  (let [evil  "Area\n(System/exit 0)"
+        l     {:lesson/id :inject :lesson/title evil :lesson/version "1\r(System/exit 0)"
+               :lesson/slides [{:slide/id :s :slide/title (str "s" "\u2028" "(System/exit 0)")
+                                :slide/blocks [(assoc (prose :p) :md "line\n(System/exit 0)")]}]}
+        s     (ex/notebook-source l)
+        forms (read-all s)]
+    (is (not-any? #(and (seq? %) (= 'System/exit (first %))) forms)
+        "no (System/exit 0) form reaches the reader")
+    (is (not (str/includes? (pr-str forms) "System/exit")))
+    (is (str/includes? s ";; # Area (System/exit 0)\n") "the title stays on its comment line")
+    (is (str/includes? s ";; Lesson :inject, version 1 (System/exit 0).\n"))
+    (is (str/includes? s ";; ## s (System/exit 0)\n"))
+    (is (str/includes? s ";; line\n;; (System/exit 0)") "prose: one ;; line per line")
+    (doseq [line (str/split-lines s)
+            :when (str/includes? line "System/exit")]
+      (is (str/starts-with? line ";;") line))))
+
+;; ----------------------------------------------------------------------------
+;; Media embedded as data URIs (findings 1 and 6)
+
+(def ^:private media-lesson
+  (lesson-of [{:block/id :dot :block/kind :scene :scene dot-scene}
+              {:block/id :dot-png :block/kind :media :from :dot :format :png}
+              {:block/id :dot-gif :block/kind :media :from :dot :format :gif}]))
+
+(defn- b64 [^bytes bs] (.encodeToString (Base64/getEncoder) bs))
+
+(deftest notebook-embeds-media
+  (let [png (byte-array (map unchecked-byte (range 200)))
+        gif (.getBytes "GIF89a-fake" "UTF-8")
+        s   (ex/notebook-source media-lesson #{} {:dot-png png :dot-gif gif})]
+    (testing "media is a data URI in the notebook: no file is read at run time"
+      (is (str/includes? s "\"data:image/png;base64,\""))
+      (is (str/includes? s (b64 png)))
+      (is (str/includes? s "\"data:image/gif;base64,\""))
+      (is (str/includes? s (b64 gif)))
+      (is (not (str/includes? s "*file*")))
+      (is (not (str/includes? s "bundle-dir")))
+      (is (not (str/includes? s "io/file"))))
+    (testing "the data URI evaluates to the full bytes"
+      (let [src (some #(when (and (seq? %) (= 'clerk/html (first %))) (get-in (vec %) [1 1 :src]))
+                      (read-all s))]
+        (is (= (str "data:image/png;base64," (b64 png)) (eval src)))))
+    (testing "different media bytes give a different form, so Clerk's form-hash cache cannot go stale"
+      (is (not= s (ex/notebook-source media-lesson #{} {:dot-png (byte-array [1 2 3]) :dot-gif gif}))))
+    (testing "deterministic"
+      (is (= s (ex/notebook-source media-lesson #{} {:dot-png png :dot-gif gif}))))
+    (testing "large media is split into string literals below the class-file constant limit"
+      (let [big (byte-array 200000 (byte 7))
+            s   (ex/notebook-source media-lesson #{:dot-gif} {:dot-png big})
+            lits (filter string? (tree-seq coll? seq (read-all s)))]
+        (is (every? #(< (count %) 65535) lits))
+        (is (= (str "data:image/png;base64," (b64 big))
+               (eval (some #(when (and (seq? %) (= 'clerk/html (first %))) (get-in (vec %) [1 1 :src]))
+                           (read-all s)))))))
+    (testing "a skipped block says so; a media block with no bytes is an error"
+      (is (str/includes? (ex/notebook-source media-lesson #{:dot-png :dot-gif}) "was SKIPPED"))
+      (is (thrown? clojure.lang.ExceptionInfo (ex/notebook-source media-lesson #{:dot-gif} {}))))))
+
+(deftest build-embeds-rendered-media
+  (let [d (tmp-dir)
+        m (ex/build! (lesson-of [{:block/id :dot :block/kind :scene :scene dot-scene}
+                                 {:block/id :dot-png :block/kind :media :from :dot :format :png}])
+                     {:out d})]
+    (if (seq (:skipped m))
+      (is (= [:dot-png] (map :block (:skipped m))) "headless rendering unavailable here")
+      (let [png (Files/readAllBytes (.toPath (io/file d "media/dot-png.png")))]
+        (is (contains? (:files m) "media/dot-png.png"))
+        (is (str/includes? (slurp (io/file d "notebook.clj")) (b64 png))
+            "the notebook embeds exactly the bytes of the media file")))))
+
+;; ----------------------------------------------------------------------------
+;; CLI (finding 10)
+
+(deftest cli-usage
+  (doseq [args [[] ["build"] ["verify"] ["bogus"] ["verify" "a" "b"]]]
+    (let [err (java.io.StringWriter.)
+          code (binding [*err* err] (apply ex/run args))]
+      (is (= 2 code) (pr-str args))
+      (is (str/includes? (str err) "usage:") (pr-str args)))))

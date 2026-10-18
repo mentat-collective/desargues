@@ -17,7 +17,7 @@
            "media/area-png.png" "b808f2c8414dbadbb59a607cd64ba4e9b58be97ad3964fc99477acff27e077fe"
            "media/riemann-gif.gif" "e72a6d883fe04440c1c3bf0b721b28e0f49f9d1dd5c0d3a2eed3461f417692e6"
            "media/shell-png.png" "f7ac236ccc8667d986e48f38b38bd8bc6504f568476516b4714819b062b6cf59"
-           "notebook.clj" "a83de5c596979636901c79a57cc305fcd98cbd565c69d3d9fac46af119cfade9"}
+           "notebook.clj" "4b778aacbe76aae5fa6443b9cd5206fc9a6e43d7c2b5920041e39e81fbf7bdab"}
   :generated-by "bb lesson:build lessons/area-under-curve.edn"
   :notebook-deps {
                    io.github.mentat-collective/emmy-viewers {:git/sha "a19b1e3"}

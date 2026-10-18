@@ -161,8 +161,15 @@ its last frame, painted by the headless player.
 {:block/id :riemann-gif :block/kind :media :from :riemann-scene :format :gif}
 ```
 
-A media block renders the block named by `:from` to `media/<block-id>.<format>`
-at 960×540. `:from` must name an existing block that is not itself a media
+A media block renders the block named by `:from` to `media/<name>.<format>`
+at 960×540, and the notebook embeds the rendered bytes as a `data:` URI.
+`<name>` is the block id in lower case, with every run of characters
+outside `[a-z0-9]` replaced by one `-` (`:riemann-gif` gives `riemann-gif`,
+`:fig/a` gives `fig-a`). The same name gives the notebook var `block-<name>`
+for figure, scene and construction blocks. The mapping is lossy, so the
+build refuses a lesson in which two block ids give the same name (for
+example `:fig/a` and `:fig.a`, or `:Area` and `:area`). The error names both
+ids. `:from` must name an existing block that is not itself a media
 block. Rendering is done by the headless PNG host
 (`desargues.player.headless`, the path `bb showcase` uses). A PNG is the
 figure or scene at its last instant. `:gif` and `:mp4` are 12 fps frame
@@ -215,17 +222,26 @@ it is **skipped**: the build warns on stderr, records it under the manifest's
 
    Verify re-reads `lesson.edn`, rebuilds it in a temp directory, and compares
    three things for every file: the manifest hash, the rebuilt hash and the
-   hash of the file on disk. On any mismatch it prints `MISMATCH` with the
-   differing files and exits 1.
+   hash of the file on disk. It also reports files in the directory that the
+   manifest does not list, and manifest entries (`:lesson/id`, `:deps`,
+   `:notebook-deps`, `:skipped`) that differ from the rebuild. On any
+   mismatch it prints `MISMATCH` with each difference and exits 1.
+
+   `lesson:build` writes only into an empty directory or a previous bundle
+   (one holding `manifest.edn`). It removes files there that the new manifest
+   does not list. It refuses the working directory, any ancestor of it, and
+   a git work tree root.
 
 5. Open the notebook. It needs the `:notebooks` classpath, because it
    requires `desargues.calc-emmy` (in `notebooks/`), emmy-viewers and Clerk.
-   Its `:media` cells refer to `media/<file>` **relative to the notebook
-   file**: when the notebook is loaded it computes `bundle-dir`, the
-   directory of `*file*`, and reads media below it (PNGs through
-   `clerk/image`, GIF/MP4 inlined as `data:` URIs). The generated source
-   holds no absolute path; the directory is found at load time. So it can be
-   opened from any working directory, for example the repo root:
+   Rendered media is **embedded** in `notebook.clj` as `data:` URIs
+   (`clerk/html` with an `img`, or a `video` for MP4). The notebook reads no
+   file at run time and holds no path. So it can be opened from any working
+   directory, shown with `clerk/show!` or built statically with
+   `clerk/build!`. The `media/` files stay in the bundle as hashed
+   artifacts. Clerk caches a cell by the hash of its form, so new media
+   bytes give a new form and are never served from a stale cache entry. For
+   example, from the repo root:
 
    ```sh
    clojure -A:notebooks
@@ -299,6 +315,12 @@ interchange directly.
 
 **Not guaranteed:**
 
+- **Canonical text is byte-identical on the JVM only.**
+  `desargues.scene.serialize` is `.cljc`, but under ClojureScript a
+  1-character string is also `char?` (so it sorts as a char) and a whole
+  double prints without its decimal point (`1.0` as `1`). CLJS output reads
+  back to an equal value, but its bytes can differ. Bundles and manifests are
+  built and verified on the JVM.
 - **Media bytes depend on the host.** PNGs are painted with Java2D, so the
   JDK's font rasteriser and antialiasing affect the pixels. GIF and MP4 also
   depend on the ffmpeg version. On a single host, rebuilds are reproducible

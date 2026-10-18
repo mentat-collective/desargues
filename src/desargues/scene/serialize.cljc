@@ -26,7 +26,14 @@
      and compared, so a value that would not round-trip never reaches disk.
 
    The same scene therefore always yields the same bytes, which is what lets
-   a lesson manifest hash it."
+   a lesson manifest hash it.
+
+   Byte-identical canonical text is guaranteed on the JVM ONLY. Under CLJS
+   the reader and printer differ: a 1-character string is also `char?` (so
+   it ranks as a char in `compare-canonical`), and a whole double prints
+   without its decimal point (1.0 prints as 1). CLJS output reads back to an
+   equal value, but its bytes and its order can differ from the JVM's. Every
+   hashed artifact (lesson bundles, manifests) is written on the JVM."
   (:require [clojure.string :as str]
             #?(:clj  [clojure.edn :as edn]
                :cljs [cljs.reader :as edn])))
