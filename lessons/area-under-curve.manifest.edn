@@ -1,0 +1,31 @@
+{
+  :deps {
+          clj-python/libpython-clj {:mvn/version "2.026"}
+          io.github.hive-agi/hive-di {:git/sha "ab63fd0"}
+          io.github.hive-agi/hive-dsl {:git/sha "335869e"}
+          io.github.mentat-collective/emmy {:git/sha "1ed6094"}
+          metosin/malli {:mvn/version "0.20.2"}
+          org.clojure/clojure {:mvn/version "1.12.3"}
+          org.clojure/core.async {:mvn/version "1.7.701"}
+          org.clojure/core.logic {:mvn/version "1.1.1"}
+          org.clojure/data.json {:mvn/version "2.5.1"}
+          org.clojure/test.check {:mvn/version "1.1.1"}
+          org.typedclojure/typed.clj.runtime {:mvn/version "1.3.0"}}
+  :files {
+           "lesson.edn" "6e7d542aa50d773d681f742e6bff4d19e810ae75645827fec45ec2e1c2fda95a"
+           "lesson.json" "f54403ee30351f0cabcece69fe7a5ca025568c8c46753e40608d08dffb8a1900"
+           "media/area-png.png" "b808f2c8414dbadbb59a607cd64ba4e9b58be97ad3964fc99477acff27e077fe"
+           "media/riemann-gif.gif" "e72a6d883fe04440c1c3bf0b721b28e0f49f9d1dd5c0d3a2eed3461f417692e6"
+           "media/shell-png.png" "f7ac236ccc8667d986e48f38b38bd8bc6504f568476516b4714819b062b6cf59"
+           "notebook.clj" "a77096572506e3653d33fff4c1a78029d01dbe2084fe0f9b8c7247ae4ab0f8a4"}
+  :generated-by "bb lesson:build lessons/area-under-curve.edn"
+  :notebook-deps {
+                   io.github.mentat-collective/emmy-viewers {:git/sha "a19b1e3"}
+                   io.github.nextjournal/clerk {:git/sha "a67a5d1e25fc9601e9f8a6d8006aaf7eed1a7761"}
+                   io.github.nextjournal/clerk.render {
+                                                        :git/sha "a67a5d1e25fc9601e9f8a6d8006aaf7eed1a7761"}
+                   org.babashka/sci {:git/sha "c556f4474303c61da72e7a07eef496dcbf66a56e"}
+                   org.mentat/clerk-utils {:mvn/version "0.6.0"}
+                   org.scilab.forge/jlatexmath {:mvn/version "1.0.7"}}
+  :skipped []
+  :lesson/id :area-under-curve}
