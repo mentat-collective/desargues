@@ -8,7 +8,7 @@
    build! validates the lesson, then writes into `dir`:
 
      lesson.edn     canonical EDN (desargues.scene.serialize/->canonical-edn)
-     lesson.json    lossless JSON, see `->json-data` for the convention
+     lesson.json    lossless JSON, see desargues.lesson.json for the convention
      notebook.clj   a GENERATED Clerk notebook, one section per slide; open it
                     with the :notebooks alias (it requires desargues.calc-emmy).
                     Rendered media is EMBEDDED in it as data URIs, so it reads
@@ -39,11 +39,11 @@
 
    Media hashes depend on the renderer host (JDK font rasterisation, ffmpeg
    version): reproducible on one host, not promised across hosts."
-  (:require [clojure.data.json :as json]
-            [clojure.edn :as edn]
+  (:require [clojure.edn :as edn]
             [clojure.java.io :as io]
             [clojure.java.shell :as sh]
             [clojure.string :as str]
+            [desargues.lesson.json :as lj]
             [desargues.lesson.schema :as ls]
             [desargues.objects.calc.figure :as figure]
             [desargues.player.graph-source :as gs]
@@ -55,119 +55,19 @@
   (:import (java.nio.file Files LinkOption Path)
            (java.nio.file.attribute FileAttribute)
            (java.security MessageDigest)
-           (java.util Base64 LinkedHashMap)))
+           (java.util Base64)))
 
-;; ============================================================================
-;; JSON convention (lossless)
-;; ============================================================================
-;;
-;; JSON has strings, numbers, booleans, null, arrays and objects; EDN has more.
-;; The encoding (transit-like, `~` is the escape character):
-;;
-;;   nil, true, false          null, true, false
-;;   long / int                JSON integer
-;;   double                    JSON number (always printed with . or E, so it
-;;                             reads back as a double)
-;;   string "s"                "s"; a string that STARTS with ~ gets one more:
-;;                             "~x" -> "~~x"
-;;   keyword :ns/name          "~:ns/name"
-;;   symbol  ns/name           "~$ns/name"
-;;   char    \c                "~cc"
-;;   bigint 3N                 "~n3"
-;;   ratio 16/3                "~r16/3"
-;;   bigdec 1.5M               "~m1.5"
-;;   vector [a b]              [a b]
-;;   list (a b)                {"~list": [a b]}
-;;   set #{a b}                {"~set": [a b]}      (canonical order)
-;;   map whose keys are all strings, keywords, symbols or chars
-;;                             {"k": v ...}         keys encoded as above,
-;;                                                  in canonical key order
-;;   any other map             {"~map": [[k v] ...]}
-;;
-;; A JSON object whose ONLY key is "~list", "~set" or "~map" is a tag. A user
-;; key can never collide with one: a user string key starting with ~ is
-;; escaped to ~~, and keyword/symbol/char keys encode as ~: ~$ ~c. Output is
-;; indented two spaces, objects keep the canonical key order
-;; (desargues.scene.serialize/compare-canonical), and the file ends with a
-;; newline, so it is as deterministic as lesson.edn.
-
-(defn- encode-scalar [x]
-  (cond
-    (string? x)  (if (str/starts-with? x "~") (str "~" x) x)
-    (keyword? x) (str "~:" (subs (str x) 1))
-    (symbol? x)  (str "~$" x)
-    (char? x)    (str "~c" x)
-    (instance? clojure.lang.BigInt x)  (str "~n" x)
-    (instance? java.math.BigInteger x) (str "~n" x)
-    (ratio? x)   (str "~r" x)
-    (decimal? x) (str "~m" x)
-    (float? x)   (double x)
-    :else        x))
-
-(defn- string-key? [k] (or (string? k) (keyword? k) (symbol? k) (char? k)))
-
-(defn- linked [entries]
-  (let [m (LinkedHashMap.)]
-    (doseq [[k v] entries] (.put m k v))
-    m))
-
-(defn ->json-data
-  "The JSON-ready value of EDN `x` under the convention above (Java maps keep
-   the canonical key order)."
-  [x]
-  (cond
-    (map? x)
-    (let [es (sort-by key ser/compare-canonical (seq x))]
-      (if (every? (comp string-key? key) es)
-        (linked (map (fn [[k v]] [(encode-scalar k) (->json-data v)]) es))
-        (linked [["~map" (mapv (fn [[k v]] [(->json-data k) (->json-data v)]) es)]])))
-    (set? x)    (linked [["~set" (mapv ->json-data (sort ser/compare-canonical x))]])
-    (vector? x) (mapv ->json-data x)
-    (seq? x)    (linked [["~list" (mapv ->json-data x)]])
-    :else       (encode-scalar x)))
-
-(defn- decode-string [^String s]
-  (if (or (not (str/starts-with? s "~")) (< (count s) 2))
-    s
-    (let [body (subs s 2)]
-      (case (.charAt s 1)
-        \~ (subs s 1)
-        \: (keyword body)
-        \$ (symbol body)
-        \c (.charAt s 2)
-        \n (bigint (BigInteger. body))
-        \r (let [[n d] (str/split body #"/")]
-             (/ (bigint (BigInteger. ^String n)) (bigint (BigInteger. ^String d))))
-        \m (bigdec body)
-        (throw (ex-info (str "lesson.json: unknown string tag in " (pr-str s)) {:value s}))))))
-
-(defn <-json-data
-  "The EDN value of JSON-read `x` (string keys, as json/read-str gives them)."
-  [x]
-  (cond
-    (map? x)
-    (let [[[k v] & more] (seq x)]
-      (if (and (nil? more) (contains? #{"~list" "~set" "~map"} k))
-        (case k
-          "~list" (apply list (map <-json-data v))
-          "~set"  (into #{} (map <-json-data) v)
-          "~map"  (into {} (map (fn [[k v]] [(<-json-data k) (<-json-data v)])) v))
-        (into {} (map (fn [[k v]] [(decode-string k) (<-json-data v)])) x)))
-    (vector? x) (mapv <-json-data x)
-    (string? x) (decode-string x)
-    :else       x))
+;; lesson.json is the emmy-viewers fragment JSON encoding, v1 (desargues.lesson.json).
 
 (defn ->json
-  "Lossless, deterministic JSON text of EDN `x` (trailing newline)."
-  [x]
-  (str (json/write-str (->json-data x) :indent true :escape-slash false
-                       :escape-unicode false :escape-js-separators false)
-       "\n"))
+  "lesson.json text of `lesson` (desargues.lesson.json/lesson->json)."
+  [lesson]
+  (lj/lesson->json lesson))
 
 (defn <-json
-  "EDN back from `->json` text."
+  "The lesson back from lesson.json text."
   [s]
-  (<-json-data (json/read-str s)))
+  (lj/json->lesson s))
 
 ;; ============================================================================
 ;; Generated names

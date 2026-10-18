@@ -282,22 +282,42 @@ it is **skipped**: the build warns on stderr, records it under the manifest's
 
 ## JSON
 
-`lesson.json` holds the same value as `lesson.edn`, encoded transit-style with
-`~` as the escape character:
+`lesson.json` holds the same value as `lesson.edn`, in the **emmy-viewers
+fragment JSON encoding, v1**: the one `emmy.viewer.export` writes for an
+exported fragment ([encoding table in emmy-viewers'
+DEVELOPING.md](https://github.com/BuddhiLW/emmy-viewers/blob/main/DEVELOPING.md),
+source in [`emmy/viewer/export.cljc`](https://github.com/BuddhiLW/emmy-viewers/blob/main/src/emmy/viewer/export.cljc)).
+Desargues and emmy-viewers share one convention, so one decoder reads both
+lesson.json and a fragment's `"form"` / `"meta"`.
 
 | EDN | JSON |
 |---|---|
-| keyword `:a/b` | `"~:a/b"` |
-| symbol `a/b` | `"~$a/b"` |
-| char, bigint, ratio, bigdec | `"~c…"`, `"~n…"`, `"~r…"`, `"~m…"` |
-| a string starting with `~` | one more `~` |
+| `nil`, `true`, `false`, string | `null`, `true`, `false`, string (never escaped) |
+| integer, double | number (integral doubles keep `.0`) |
+| `##Inf`, `##-Inf`, `##NaN` | `{"~double": "Infinity"}` etc. |
+| ratio, bigint, bigdec | `{"~ratio": "1/2"}`, `{"~bigint": "1"}`, `{"~bigdec": "1.5"}` |
+| char `\a` | `{"~char": "a"}` |
+| keyword `:a/b`, symbol `a/b` | `{"~kw": "a/b"}`, `{"~sym": "a/b"}` |
+| vector | array |
 | list, set | `{"~list": [...]}`, `{"~set": [...]}` |
-| map with non-string-like keys | `{"~map": [[k, v], ...]}` |
+| map (any keys) | `{"~map": [[k, v], ...]}` |
 
-Objects keep canonical key order, and doubles always print with `.` or `E`.
-The full table is the "JSON convention" comment at the top of
-[`desargues.lesson.export`](../src/desargues/lesson/export.clj). `->json` and
-`<-json` round-trip it.
+Every JSON object in the encoding has exactly one key, one of these tags.
+Map entries and set members are in canonical order (type rank, then printed
+form), so the output is as deterministic as `lesson.edn`. The file is a
+document mirroring the fragment one:
+
+```json
+{"format": "desargues/lesson", "version": 1, "lesson": J(lesson)}
+```
+
+(a fragment is `{"format": "emmy-viewers/fragment", "version": 1, "form": ..., "meta": ...}`).
+The codec is [`desargues.lesson.json`](../src/desargues/lesson/json.cljc),
+pure and free of any emmy-viewers dependency; `lesson->json` /
+`json->lesson` write and read the document, `->json-data` / `<-json-data`
+the bare encoding. Its tests check it byte for byte against
+`emmy.viewer.export` when emmy-viewers is on the classpath
+(`clojure -M:test:notebooks`).
 
 ### Related: emmy-viewers fragment export
 
@@ -308,10 +328,8 @@ on Clojars, which is the version `:notebooks` pins.
 It writes a fragment together with its Clerk viewer metadata, with the viewer
 stored as a registered symbol: `fragment->edn` / `edn->fragment` and
 `fragment->json` / `json->fragment`. It also offers `export-notebook!` for a
-static Clerk build of a single notebook. Its JSON encoding differs from the
-lesson one: every value is a one-key tagged object (`{"~kw": ...}`,
-`{"~sym": ...}`) rather than a `~`-prefixed string. The two formats do not
-interchange directly.
+static Clerk build of a single notebook. Its JSON uses the same encoding as
+`lesson.json` (above).
 
 ## What the manifest guarantees
 
