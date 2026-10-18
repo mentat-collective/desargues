@@ -1,0 +1,40 @@
+;; A tiny lesson bundle (no :media blocks) for desargues.lesson.export-test and
+;; a smoke run of `bb lesson:build test/desargues/lesson/tiny_lesson.edn`.
+{:lesson/id :tiny-area
+ :lesson/title "Area under a parabola"
+ :lesson/version "0.1.0"
+ :lesson/slides
+ [{:slide/id :question
+   :slide/title "The question"
+   :slide/blocks
+   [{:block/id :intro :block/kind :prose
+     :md "How much area lies under y = x^2 between 0 and 2?\n\nWe will *see* it, then compute it."}
+    {:block/id :integral :block/kind :tex :expr (integrate (expt x 2) x 0 2)}]}
+  {:slide/id :picture
+   :slide/title "The picture"
+   :slide/blocks
+   [{:block/id :area-fig :block/kind :figure
+     :figure {:title "area"
+              :view {:view :plane :x-range [-1 4] :y-range [-1 5]
+                     :x-length 11.0 :y-length 6.0 :center [0.0 -0.4]}
+              :params {:sweep 0.5}
+              :objects [{:kind :area-under :id "area" :f :parabola :a 0 :b 2
+                         :upto {:calc/param :sweep} :color :teal}]}}
+    {:block/id :mafs :block/kind :viewer
+     :fragment [mafs.core/Mafs {:view-box {:x [-1 4] :y [-1 5]}}
+                [mafs.coordinates/Cartesian {}]
+                [mafs.plot/OfX {:y (fn [x] (* x x))}]]}]}
+  {:slide/id :more
+   :slide/title "Constructions and scenes"
+   :slide/blocks
+   [{:block/id :tri :block/kind :construction
+     :construction {:id :tri :kind :construction
+                    :params [{:id t :min 0 :max 1 :init 0 :label "rotate"}]
+                    :points [{:id :A :at [0 0]} {:id :B :at [2 0]} {:id :M :op :mid :of [:A :B]}]
+                    :draw [[:segment :A :B] [:point :M {:label "M"}]]}}
+    {:block/id :dot :block/kind :scene
+     :scene {:scene "dot"
+             :nodes {1 {:node :dot :id 1 :opts {:color :gold} :at [0 0]}}
+             :steps [{:step :play :anims [{:anim :appear :target 1 :opts {}}]}
+                     {:step :hold :seconds 1}]
+             :node-count 1}}]}]}
