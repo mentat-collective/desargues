@@ -26,5 +26,9 @@
                            (fs/copy-tree "doc/bench" "dist/site/assets/bench" {:replace-existing true}))}
   showcase      {:doc "README gallery -> doc/showcase/*.png, *.gif (headless host, needs ffmpeg). Args: --only id,id --list"
                  :task (apply shell "clojure -M:showcase" *command-line-args*)}
+  lesson:build  {:doc "Lesson bundle -> lesson.edn, lesson.json, notebook.clj, media, manifest.edn. Args: <lesson.edn> [out-dir, default dist/lessons/<id>]"
+                 :task (apply shell "clojure -M -m desargues.lesson.export build" *command-line-args*)}
+  lesson:verify {:doc "Rebuild a lesson bundle dir in a temp dir and compare sha256s with its manifest; exits 1 on a mismatch. Args: <dir>"
+                 :task (apply shell "clojure -M -m desargues.lesson.export verify" *command-line-args*)}
   serve         {:doc "Serve dist/site on http://localhost:8087"
                  :task (shell "python3 -m http.server 8087 --directory dist/site")}}}
