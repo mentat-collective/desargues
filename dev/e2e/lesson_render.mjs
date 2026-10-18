@@ -5,11 +5,12 @@
 //
 // - the page raises no page errors and logs no console errors;
 // - every slide title of the lesson is a heading on the page;
-// - the integral's KaTeX rendered (a .katex element whose text holds ∫);
-// - every <img> loaded (naturalWidth > 0): the embedded PNG/GIF media and
-//   the recorded scene's last frame;
-// - the :viewer fragment's Mafs mounted (an <svg> inside .MafsView);
-// - the recorded scene image (Clerk's _data/*.png) is on the page.
+// - every <img> loaded (naturalWidth > 0);
+// and, when the lesson has them (read from its EDN):
+// - an integral: its KaTeX rendered (a .katex element whose text holds ∫);
+// - :png / :gif media: that many embedded images, all loaded;
+// - a :viewer, :construction or plane figure: Mafs mounted (svg in .MafsView);
+// - a :scene: its last frame (Clerk's _data/*.png) is on the page.
 //
 // A full-page screenshot goes to dist/lesson-e2e-<id>.png.
 //
@@ -39,6 +40,15 @@ const lessonId = (lessonSrc.match(/:lesson\/id\s+:([^\s}]+)/) ?? [])[1] ?? "less
 const ROOT = resolve(buildArg ?? `dist/lesson-e2e/${lessonId}`);
 const SHOT = resolve(process.env.LESSON_E2E_SHOT ?? `dist/lesson-e2e-${lessonId}.png`);
 // Slide titles, read from the lesson EDN (strings after :slide/title).
+// What the lesson contains decides which checks apply.
+const count = (re) => (lessonSrc.match(re) ?? []).length;
+const WANT = {
+  integral: /\((integral|integrate)\s/.test(lessonSrc),
+  png: count(/:format\s+:png/g),
+  gif: count(/:format\s+:gif/g),
+  scene: count(/:block\/kind\s+:scene/g),
+  mafs: count(/:block\/kind\s+:(viewer|construction)/g) + count(/:view\s+:plane/g),
+};
 const TITLES = [...lessonSrc.matchAll(/:slide\/title\s+"((?:[^"\\]|\\.)*)"/g)].map((m) => m[1].replace(/\\(.)/g, "$1"));
 
 function chromiumPath() {
@@ -129,20 +139,26 @@ async function main() {
 
     for (const t of TITLES) check(seen.headings.includes(t), `slide heading "${t}"`);
     const integrals = seen.katex.filter((t) => t.includes("∫"));
-    check(integrals.length > 0, `KaTeX integral rendered (${seen.katex.length} .katex elements, ${integrals.length} with ∫)`);
+    if (WANT.integral)
+      check(integrals.length > 0, `KaTeX integral rendered (${seen.katex.length} .katex elements, ${integrals.length} with ∫)`);
     const kinds = (prefix) => seen.images.filter((i) => i.src.startsWith(prefix));
     const pngs = kinds("data:image/png"), gifs = kinds("data:image/gif");
-    check(pngs.length >= 2 && pngs.every((i) => i.w > 0),
-          `embedded PNG media loaded (${pngs.map((i) => `${i.w}x${i.h}`).join(", ") || "none"})`);
-    check(gifs.length >= 1 && gifs.every((i) => i.w > 0),
-          `embedded GIF media loaded (${gifs.map((i) => `${i.w}x${i.h}`).join(", ") || "none"})`);
+    if (WANT.png)
+      check(pngs.length >= WANT.png && pngs.every((i) => i.w > 0),
+            `embedded PNG media loaded, ${WANT.png} expected (${pngs.map((i) => `${i.w}x${i.h}`).join(", ") || "none"})`);
+    if (WANT.gif)
+      check(gifs.length >= WANT.gif && gifs.every((i) => i.w > 0),
+            `embedded GIF media loaded, ${WANT.gif} expected (${gifs.map((i) => `${i.w}x${i.h}`).join(", ") || "none"})`);
     check(seen.images.length > 0 && seen.images.every((i) => i.w > 0),
           `every <img> loaded, naturalWidth > 0 (${seen.images.length} images)`);
-    check(seen.mafs >= 1 && seen.mafsSvg >= 1,
-          `Mafs viewer mounted (${seen.mafs} .MafsView, ${seen.mafsSvg} svg, ${seen.mafsPaths} paths)`);
-    const scene = seen.images.filter((i) => i.src.startsWith("_data/") || i.src.includes("/_data/"));
-    check(scene.length >= 1 && scene.every((i) => i.w > 0),
-          `recorded scene image present (${scene.map((i) => `${i.src}… ${i.w}x${i.h}`).join(", ") || "none"})`);
+    if (WANT.mafs)
+      check(seen.mafs >= 1 && seen.mafsSvg >= 1,
+            `Mafs mounted (${seen.mafs} .MafsView, ${seen.mafsSvg} svg, ${seen.mafsPaths} paths)`);
+    if (WANT.scene) {
+      const scene = seen.images.filter((i) => i.src.startsWith("_data/") || i.src.includes("/_data/"));
+      check(scene.length >= WANT.scene && scene.every((i) => i.w > 0),
+            `recorded scene image present (${scene.map((i) => `${i.src}… ${i.w}x${i.h}`).join(", ") || "none"})`);
+    }
     check(pageErrors.length === 0, `no page errors${pageErrors.length ? ": " + pageErrors.join(" | ") : ""}`);
     check(consoleErrors.length === 0, `no console errors${consoleErrors.length ? ": " + consoleErrors.join(" | ") : ""}`);
     if (failedRequests.length) console.log(`     failed requests: ${failedRequests.join(" | ")}`);

@@ -137,7 +137,9 @@
     (is (str/includes? s "[desargues.lesson.tex :as tex]"))
     (is (str/includes? s "(calc-emmy/figure->mafs block-area-fig)"))
     (is (str/includes? s "(scene-image block-dot)"))
-    (is (str/includes? s "TODO(lesson-export)"))
+    (is (not (str/includes? s "TODO(lesson-export)")) "constructions have a render path")
+    (is (str/includes? s "    mafs.core/Mafs\n") "the construction is drawn as a Mafs figure")
+    (is (str/includes? s "[mafs.core/Point {:color \"#F0AC5F\", :x 1.0, :y 0.0}]") "M, the midpoint of AB")
     (is (vector? (read-all s)) "the notebook reads as Clojure")))
 
 (deftest integral-tex
