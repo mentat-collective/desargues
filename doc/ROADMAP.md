@@ -395,7 +395,30 @@ Optimize segment boundaries for combinators:
 
 ### 5.4 Scene Serialization
 
-Save/load scene state for resumable rendering:
+**Status: recorded scene graphs DONE; segment-graph resume still open.**
+`desargues.scene.serialize` (`src/desargues/scene/serialize.cljc`) writes the
+RecordingBackend's scene graph (`desargues.scene.record/record`) as canonical
+EDN and reads it back:
+
+```clojure
+(require '[desargues.scene.serialize :as ser])
+(ser/->canonical-edn graph)         ; string: sorted keys at every depth, stable line breaks
+(ser/<-edn s)                       ; back to data (reader tags refused)
+(ser/save-scene-graph! graph path)  ; JVM: write the canonical text (UTF-8)
+(ser/load-scene-graph! path)        ; JVM: read it back
+```
+
+The same scene always yields byte-identical text (save -> load -> save is a
+fixed point), so a lesson manifest can hash it. Non-data values (fns, atoms,
+records, NaN/Infinity, host objects) are rejected with an ex-info carrying
+`{:error :desargues.scene.serialize/not-data :path [...]}`. Tests:
+`test/desargues/scene/serialize_test.cljc`.
+
+Still open: the segment-graph form sketched below (segments minus their
+construct fns, edges, per-segment hashes, restored against supplied construct
+fns for resumable rendering).
+
+Original sketch, for resumable rendering:
 
 ```clojure
 (defn save-scene-graph! [scene-graph path]
