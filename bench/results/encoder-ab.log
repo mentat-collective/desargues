@@ -1,0 +1,25 @@
+{"round": 0, "profile": "final", "render_s": 31.769654820998767, "cpu_s": 48.432847, "bytes": 345829}
+{"round": 0, "profile": "preview", "render_s": 18.13702555599957, "cpu_s": 27.028730000000003, "bytes": 871628}
+{"round": 0, "profile": "superfast", "render_s": 24.788149369000166, "cpu_s": 40.004227, "bytes": 436204}
+{"round": 0, "profile": "preview-nozl", "render_s": 19.12883189400054, "cpu_s": 28.062562999999997, "bytes": 871628}
+{"round": 1, "profile": "preview-nozl", "render_s": 15.18859748399882, "cpu_s": 25.237243, "bytes": 871628}
+{"round": 1, "profile": "superfast", "render_s": 16.67559041000095, "cpu_s": 39.282321, "bytes": 436204}
+{"round": 1, "profile": "preview", "render_s": 17.113000762999945, "cpu_s": 26.271264, "bytes": 871628}
+{"round": 1, "profile": "final", "render_s": 22.368320696999945, "cpu_s": 36.090086, "bytes": 345829}
+{"round": 2, "profile": "final", "render_s": 26.70805742599987, "cpu_s": 43.485003999999996, "bytes": 345829}
+{"round": 2, "profile": "preview", "render_s": 22.988640015999408, "cpu_s": 28.227012000000002, "bytes": 871628}
+{"round": 2, "profile": "superfast", "render_s": 29.542230877999827, "cpu_s": 41.887579, "bytes": 436204}
+{"round": 2, "profile": "preview-nozl", "render_s": 19.555622706000577, "cpu_s": 27.891884, "bytes": 871628}
+{"round": 3, "profile": "preview-nozl", "render_s": 19.82191369800057, "cpu_s": 28.986724, "bytes": 871628}
+{"round": 3, "profile": "superfast", "render_s": 23.394385607000004, "cpu_s": 36.120340999999996, "bytes": 436204}
+{"round": 3, "profile": "preview", "render_s": 19.954133664001347, "cpu_s": 28.001274, "bytes": 871628}
+{"round": 3, "profile": "final", "render_s": 18.540475166999386, "cpu_s": 34.853336, "bytes": 345829}
+{"round": 4, "profile": "final", "render_s": 19.641097069999887, "cpu_s": 34.585066999999995, "bytes": 345829}
+{"round": 4, "profile": "preview", "render_s": 15.838001023999823, "cpu_s": 24.673303999999998, "bytes": 871628}
+{"round": 4, "profile": "superfast", "render_s": 24.17574582099951, "cpu_s": 40.571927, "bytes": 436204}
+{"round": 4, "profile": "preview-nozl", "render_s": 16.993269725000573, "cpu_s": 26.954067000000002, "bytes": 871628}
+SUMMARY
+{"profile": "final", "n": 5, "render_s_med": 22.368320696999945, "cpu_s_med": 36.090086, "bytes": 345829, "probe": {"codec_name": "h264", "pix_fmt": "yuv420p", "subme": "7", "me": "hex", "ref": "3", "crf": "23.0"}, "wall_ratio": 1.0, "cpu_ratio": 1.0, "size_ratio": 1.0}
+{"profile": "preview", "n": 5, "render_s_med": 18.13702555599957, "cpu_s_med": 27.028730000000003, "bytes": 871628, "probe": {"codec_name": "h264", "pix_fmt": "yuv420p", "subme": "0", "me": "dia", "ref": "1", "crf": "23.0"}, "wall_ratio": 0.8108353685411942, "cpu_ratio": 0.7489239565680171, "size_ratio": 2.5204017014189093}
+{"profile": "superfast", "n": 5, "render_s_med": 24.17574582099951, "cpu_s_med": 40.004227, "bytes": 436204, "probe": {"codec_name": "h264", "pix_fmt": "yuv420p", "subme": "1", "me": "dia", "ref": "1", "crf": "23.0"}, "wall_ratio": 1.0808028974764288, "cpu_ratio": 1.1084547429451956, "size_ratio": 1.2613285756833579}
+{"profile": "preview-nozl", "n": 5, "render_s_med": 19.12883189400054, "cpu_s_med": 27.891884, "bytes": 871628, "probe": {"codec_name": "h264", "pix_fmt": "yuv420p", "subme": "0", "me": "dia", "ref": "1", "crf": "23.0"}, "wall_ratio": 0.8551751449346, "cpu_ratio": 0.7728406078057005, "size_ratio": 2.5204017014189093}

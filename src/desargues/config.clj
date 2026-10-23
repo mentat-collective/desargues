@@ -89,6 +89,11 @@
                       :type :string)
   :preload-libs  (env "DESARGUES_MANIM_PRELOAD"
                       :default (conda-preload-libs)
+                      :type :string)
+  ;; desargues.manim.encoder profile: "final" (x264 medium, Manim's own) or
+  ;; "preview" (x264 ultrafast; bigger files, far less encoder CPU).
+  :encoder       (env "DESARGUES_ENCODER"
+                      :default "final"
                       :type :string))
 
 (defn manim-config

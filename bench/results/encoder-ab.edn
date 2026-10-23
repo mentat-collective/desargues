@@ -1,0 +1,32 @@
+;; Encoder-profile A/B — bench/encoder_ab.py 5 final preview superfast preview-nozl
+;; Scene brachistochrone_full_derivation:BrachistochroneQuickDemo, medium_quality (720p30),
+;; manim 0.20.1, PyAV 18.1.0. One fresh python process per render, warm-up render per
+;; arm first, order alternated per round (ABCD, DCBA, ...). cpu-s = user+sys of the
+;; process + children (getrusage). Box: 22 cores, load average 39-44 throughout
+;; (CONTENDED). Preset verified from the x264 SEI string of each output file.
+{:date "2026-10-23"
+ :n 5
+ :load-avg [39 44]
+ :results
+ {:final        {:x264 {:subme 7 :me "hex" :ref 3}   :render-s-med 22.37 :cpu-s-med 36.09 :bytes 345829
+                 :render-s [31.77 22.37 26.71 18.54 19.64]}
+  :preview      {:x264 {:subme 0 :me "dia" :ref 1} :tune "zerolatency"
+                 :render-s-med 18.14 :cpu-s-med 27.03 :bytes 871628
+                 :wall-ratio 0.81 :cpu-ratio 0.75 :size-ratio 2.52}
+  :preview-nozl {:render-s-med 19.13 :cpu-s-med 27.89 :bytes 871628
+                 :wall-ratio 0.86 :cpu-ratio 0.77 :size-ratio 2.52}
+  :superfast    {:x264 {:subme 1 :me "dia" :ref 1}
+                 :render-s-med 24.18 :cpu-s-med 40.00 :bytes 436204
+                 :wall-ratio 1.08 :cpu-ratio 1.11 :size-ratio 1.26}
+  ;; n=1 smoke (load ~8-40): mjpeg q:v 5 in .mov
+  :mjpeg        {:render-s 22.70 :cpu-s 26.86 :bytes 12119432
+                 :wall-ratio-vs-final-same-round 1.11 :cpu-ratio 0.77 :size-ratio 35.0}}
+ :conclusions
+ ["preview saves ~9 CPU-s per render (-25%) consistently; wall -19% under contention."
+  "zerolatency is a small extra win over plain ultrafast (same bytes)."
+  "superfast is WORSE than medium here: it keeps x264 frame threading + lookahead, which
+   costs CPU on a contended box; not worth a profile."
+  "mjpeg: same CPU as preview, 35x the bytes — no reason to prefer it."]
+ :log "bench/results/encoder-ab.log"
+ :jvm-verify "bench/desargues/bench/encoder_verify.clj: ManimBackend -init!/-configure! {:encoder k}
+              -> :final subme=7 me=hex ref=3, :preview subme=0 me=dia ref=1, both h264 yuv420p"}
