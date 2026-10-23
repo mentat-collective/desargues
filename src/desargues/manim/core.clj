@@ -21,6 +21,21 @@
 ;; Initialization
 ;; ============================================================================
 
+(defn preload-paths
+  "Colon-separated preload string -> vector of non-blank paths. nil-safe."
+  [s]
+  (into [] (remove clojure.string/blank?) (clojure.string/split (or s "") #":")))
+
+(defn- preload-libs!
+  "dlopen each path RTLD_GLOBAL so a later extension import finds it by soname."
+  [paths]
+  (when (seq paths)
+    (let [ctypes (py/import-module "ctypes")
+          mode   (py/get-attr ctypes "RTLD_GLOBAL")
+          cdll   (py/get-attr ctypes "CDLL")]
+      (doseq [p paths]
+        (py/call-attr-kw cdll "__call__" [p] {:mode mode})))))
+
 (defn init!
   "Initialize Python with the Manim conda environment.
    Call this ONCE at the start of your REPL session.
@@ -28,13 +43,15 @@
    Options:
    - :python-executable - path to python binary
    - :library-path - path to libpython shared library
-   - :site-packages - path to site-packages directory"
+   - :site-packages - path to site-packages directory
+   - :preload-libs - colon-separated shared libs loaded before `import manim`"
   ([]
    (init! {}))
-  ([{:keys [python-executable library-path site-packages]
+  ([{:keys [python-executable library-path site-packages preload-libs]
      :or {python-executable (:python-exe (config/manim-config))
           library-path (:library-path (config/manim-config))
-          site-packages (:site-packages (config/manim-config))}}]
+          site-packages (:site-packages (config/manim-config))
+          preload-libs (:preload-libs (config/manim-config))}}]
    (when-not @initialized?
      (py/initialize!
       :python-executable python-executable
@@ -43,6 +60,9 @@
      ;; Add site-packages to Python path
      (let [sys (py/import-module "sys")]
        (py/call-attr (py/get-attr sys "path") "insert" 0 site-packages))
+
+     ;; An embedding host lacks python's RPATH; pathops needs libskia preloaded
+     (preload-libs! (preload-paths preload-libs))
 
      ;; Cache manim module
      (reset! manim-module (py/import-module "manim"))
@@ -119,6 +139,34 @@
   "Convert a Python object to Clojure."
   [obj]
   (py/->jvm obj))
+
+(defn fn-arities
+  "Set of fixed arities a Clojure fn declares, read from its invoke methods."
+  [f]
+  (into #{}
+        (comp (filter #(= "invoke" (.getName ^java.lang.reflect.Method %)))
+              (map #(alength (.getParameterTypes ^java.lang.reflect.Method %))))
+        (.getDeclaredMethods (class f))))
+
+(def ^:private updater-shims
+  (delay
+    (:globals (py/run-simple-string
+               (str "def desargues_timed_updater(f):\n"
+                    "    return lambda mob, dt: f(mob, dt)\n"
+                    "def desargues_plain_updater(f):\n"
+                    "    return lambda mob: f(mob)\n")))))
+
+(defn ->py-updater
+  "A manim updater from `f`. A Clojure fn becomes a Python lambda manim can
+   inspect.signature: arity 2 is time-based (mob dt), otherwise (mob).
+   Anything else (already a Python callable) passes through."
+  [f]
+  (if (fn? f)
+    (let [shim (if (contains? (fn-arities f) 2)
+                 "desargues_timed_updater"
+                 "desargues_plain_updater")]
+      ((get @updater-shims shim) f))
+    f))
 
 ;; ============================================================================
 ;; Scene Rendering
