@@ -1,0 +1,9 @@
+;; DESARGUES-PERF-LIVE-1 — desargues.bench.live-frames/run!, warm JVM, Manim CE 0.20.1,
+;; low_quality (854x480 @15 fps), scene = Create(Circle) 1 s + wait 0.5 s (22 frames),
+;; 5 warmup + 30 interleaved runs (live, preview, live, preview, ...). 2026-10-23.
+{:frames 22
+ :first-frame {:median-ms 14.57 :mad-ms 1.91 :mean-ms 18.58 :std-ms 8.45 :min-ms 11.07 :runs 30}
+ :live-total  {:median-ms 123.56 :mad-ms 20.12 :mean-ms 131.50 :std-ms 41.41 :min-ms 81.76 :runs 30}
+ :preview     {:median-ms 26.51 :mad-ms 5.72 :mean-ms 28.41 :std-ms 8.20 :min-ms 18.46 :runs 30}
+ ;; per frame, 854x480 RGBA (1.64 MB), Python-side perf_counter over 2000 calls into a NullSink
+ :crossing-ns {:zero-copy 859205 :copy 2919743}}
