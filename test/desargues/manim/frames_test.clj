@@ -38,6 +38,11 @@
       ;; numpy arange(0, rt, step) length = ceil(rt/step)
       (= (long (Math/ceil (/ rt step))) (fr/frame-count rt fps)))))
 
+(deftest frame-count-at-float-boundaries
+  (testing "run-time / step lands just above an integer, as numpy computes it"
+    (is (= 250 (fr/frame-count 8.3 30)) "np.arange(0, 8.3, 1/30) has 250 points")
+    (is (= 499 (fr/frame-count 16.6 30)) "np.arange(0, 16.6, 1/30) has 499 points")))
+
 ;; ---------------------------------------------------------------------------
 ;; Sinks (pure)
 ;; ---------------------------------------------------------------------------
@@ -105,3 +110,24 @@
       (let [copy-sink (fn [rgba _ _ n] (swap! seen assoc n (tech.v3.datatype/as-native-buffer rgba)))]
         (fr/crossing-ns frame copy-sink 1 {:copy? true})
         (is (nil? (get @seen 0)) "a :copy? frame lives on the JVM heap")))))
+
+(deftest address-crossing-views-the-numpy-buffer
+  (if-not @manim-env?
+    (println "[frames-test] no Manim env; skipping")
+    (let [_     (core/init!)
+          np    (py/import-module "numpy")
+          frame (py/call-attr-kw np "arange" [96] {:dtype "uint8"})
+          frame (py/call-attr frame "reshape" (py/->py-tuple [4 6 4]))
+          addr  (first (py/->jvm (py/get-item (py/get-attr frame "__array_interface__") "data")))
+          seen  (atom [])
+          sink  (fn [rgba w h n]
+                  (swap! seen conj [w h n (some-> (tech.v3.datatype/as-native-buffer rgba) .address)
+                                    (vec (take 5 (tech.v3.datatype/->byte-array rgba)))]))]
+      (fr/crossing-ns frame sink 2 {:crossing :address})
+      (is (= [[6 4 0 addr [0 1 2 3 4]] [6 4 1 addr [0 1 2 3 4]]] @seen))
+      (testing "a non-contiguous frame falls back to as-tensor"
+        (reset! seen [])
+        (let [t (py/call-attr frame "transpose" (py/->py-tuple [1 0 2]))]
+          (fr/crossing-ns t sink 1 {:crossing :address})
+          (is (= [4 6 0] (subvec (first @seen) 0 3)))
+          (is (= [0 1 2 3 24] (nth (first @seen) 4)) "strided view, values intact"))))))
