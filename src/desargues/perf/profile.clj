@@ -32,7 +32,8 @@
             [desargues.manim.patches :as mp]
             [desargues.manim.patches.native-display :as nd]
             [desargues.manim.patches.background-cache :as bc]
-            [desargues.manim.mobject-cache :as mcache]))
+            [desargues.manim.mobject-cache :as mcache]
+            [desargues.manim.patches.play-setup :as ps]))
 
 ;; ============================================================================
 ;; Schemas and values
@@ -120,6 +121,10 @@
 (defmethod patch-entry :background-cache [_]
   {:id :background-cache :rank 50 :profiles #{:fast} :exact? true
    :make bc/background-cache})
+
+(defmethod patch-entry :play-setup [_]
+  {:id :play-setup :rank 60 :profiles #{:fast} :exact? true
+   :make ps/play-setup})
 
 (defn- entry
   "The validated PatchEntry registered under `id`."
