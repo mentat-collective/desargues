@@ -32,7 +32,7 @@
 (deftest fast-holds-the-exact-patches-in-rank-order
   (let [p (perf/profile :fast)]
     (is (= [:svg-path-shared-copy :glyph-cache :native-cairo-path :native-display
-            :background-cache]
+            :background-cache :play-setup]
            (:patches p)))
     (is (= (:patches p) (mapv pp/-patch-id (perf/render-patches p)))
         "every entry builds its record without Manim")
@@ -138,8 +138,8 @@
       (try
         (let [fast (perf/install! :fast)]
           (is (= :fast (:profile fast)))
-          (is (= (:patches (perf/profile :fast))
-                 (into (:installed fast) (:unavailable fast)))
+          (is (= (set (:patches (perf/profile :fast)))
+                 (into (set (:installed fast)) (:unavailable fast)))
               "every patch is either installed or reported unavailable")
           (is (every? #{:native-cairo-path :native-display} (:unavailable fast))
               "only the native patches can be missing (no Zig library)")
