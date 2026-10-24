@@ -101,8 +101,9 @@
                       :default "lean"
                       :type :string)
   ;; desargues.manim.patches/path-builder: "manim" (Camera.set_cairo_context_path
-  ;; as shipped) or "native" (one Zig call per VMobject; build it with
-  ;; `bb native:path`, falls back to "manim" when the library is absent).
+  ;; as shipped), "native" (one Zig call per VMobject path) or "native-display"
+  ;; (also fill and stroke, one Zig call per batch); build with `bb native:path`,
+  ;; falls back to "manim" when the library is absent.
   :path-builder  (env "DESARGUES_PATH_BUILDER"
                       :default "manim"
                       :type :string)

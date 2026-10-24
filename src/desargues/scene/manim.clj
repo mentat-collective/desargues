@@ -19,7 +19,8 @@
             [desargues.domain.protocols :as dom]
             [desargues.manim.paths :as man-path]
             [desargues.manim.encoder :as encoder]
-            [desargues.manim.patches :as patches]))
+            [desargues.manim.patches :as patches]
+            [desargues.manim.patches.native-display]))
 
 ;; ============================================================================
 ;; Keyword resolution — the semantic layer that keeps Python out of consumers
