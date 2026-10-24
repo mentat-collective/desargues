@@ -147,17 +147,39 @@
             :rounds 7 :warmup 1}
            opts)))
 
+(defn- jar? [^String entry] (str/ends-with? entry ".jar"))
+
+(defn cds-opts
+  "JVM flags for the AOT cache (JEP 483, JDK 25+) at `archive`: use it when it
+   exists, else train it in this run (so a warmup sample records it).
+   `exists?` is path -> boolean."
+  ([archive] (cds-opts archive #(.exists (io/file %))))
+  ([archive exists?]
+   [(str (if (exists? archive) "-XX:AOTCache=" "-XX:AOTCacheOutput=") archive)
+    "-Xlog:aot=off" "-Xlog:cds=off"]))
+
 (defn child-cmd
   "argv that runs this namespace's child mode in a fresh JVM on our classpath.
-   `jvm` is a {:jvm-opts [..] :cp-prefix [dir ..]} launch profile."
+   `jvm` is a launch profile {:jvm-opts [..] :cp-prefix [path ..] :jar-only?
+   bool :aot-cache path}. :jar-only? puts only the jars on -cp and hands the
+   directories to desargues.devaot.launch (in target/devaot.jar), which adds
+   them at run time: the JVM writes an AOT/CDS archive only for a jar-only
+   classpath. :aot-cache adds cds-opts for that file."
   ([mode] (child-cmd mode {}))
-  ([mode {:keys [jvm-opts cp-prefix]}]
-   (into [(str (io/file (System/getProperty "java.home") "bin" "java"))]
-         (concat jvm-opts
-                 ["--enable-native-access=ALL-UNNAMED"
-                  "-cp" (str/join ":" (concat (map #(str (.getAbsoluteFile (io/file %))) cp-prefix)
-                                              [(System/getProperty "java.class.path")]))
-                  "clojure.main" "-m" "desargues.bench.render" "--child" mode]))))
+  ([mode {:keys [jvm-opts cp-prefix jar-only? aot-cache]}]
+   (let [entries (concat (map #(str (.getAbsoluteFile (io/file %))) cp-prefix)
+                         (str/split (System/getProperty "java.class.path") #":"))
+         main    ["desargues.bench.render" "--child" mode]]
+     (into [(str (io/file (System/getProperty "java.home") "bin" "java"))]
+           (concat jvm-opts
+                   (when aot-cache (cds-opts aot-cache))
+                   ["--enable-native-access=ALL-UNNAMED"]
+                   (if jar-only?
+                     (concat ["-cp" (str/join ":" (filter jar? entries))
+                              (str "-Ddesargues.devaot.dirs=" (str/join ":" (remove jar? entries)))
+                              "clojure.main" "-m" "desargues.devaot.launch"]
+                             main)
+                     (concat ["-cp" (str/join ":" entries) "clojure.main" "-m"] main)))))))
 
 (defn- run-child
   "Run a child, return its self-measurement as {::ab/measured {...}}, plus
@@ -207,31 +229,58 @@
   "Classes dir `clojure -M:pyaot-build` writes (desargues.pyaot)."
   "target/pyaot")
 
+(def devaot-jar
+  "Library classes jar `clojure -M:dev:bench:devaot-build` writes (desargues.devaot)."
+  "target/devaot.jar")
+
 (def launch-profiles
-  "Child JVM launch profiles: name -> {:jvm-opts :cp-prefix}."
+  "Child JVM launch profiles: name -> {:jvm-opts :cp-prefix :jar-only?
+   :aot-cache}. :aot-cache profiles each keep their own cache file (it is
+   tied to the JVM flags) and run jar-only (see child-cmd)."
   {"source"        {}
    "c1"            {:jvm-opts ["-XX:TieredStopAtLevel=1"]}
    "aot"           {:cp-prefix [pyaot-dir]}
    "aot+c1"        {:cp-prefix [pyaot-dir] :jvm-opts ["-XX:TieredStopAtLevel=1"]}
    "aot+c1+serial" {:cp-prefix [pyaot-dir] :jvm-opts ["-XX:TieredStopAtLevel=1" "-XX:+UseSerialGC"]}
-   "aot+ci2"       {:cp-prefix [pyaot-dir] :jvm-opts ["-XX:CICompilerCount=2"]}})
+   "aot+ci2"       {:cp-prefix [pyaot-dir] :jvm-opts ["-XX:CICompilerCount=2"]}
+   "devaot"        {:cp-prefix [devaot-jar]}
+   "devaot+c1"     {:cp-prefix [devaot-jar] :jvm-opts ["-XX:TieredStopAtLevel=1"]}
+   "devaot+cds"    {:cp-prefix [devaot-jar] :jar-only? true :aot-cache "target/bench-devaot.aot"}
+   "devaot+cds+c1" {:cp-prefix [devaot-jar] :jar-only? true :aot-cache "target/bench-devaot-c1.aot"
+                    :jvm-opts ["-XX:TieredStopAtLevel=1"]}})
 
 (defn- require-pyaot! []
   (when-not (.exists (io/file pyaot-dir "desargues" "pyaot-stamp.edn"))
     (throw (ex-info (str pyaot-dir " missing: run clojure -M:pyaot-build first") {}))))
 
+(defn- require-devaot! []
+  (when-not (.exists (io/file devaot-jar))
+    (throw (ex-info (str devaot-jar " missing: run clojure -M:dev:bench:devaot-build first") {}))))
+
+(defn- require-builds!
+  "Fail fast when a profile in `profiles` needs a build that is not there."
+  [profiles]
+  (let [prefixes (set (mapcat (comp :cp-prefix launch-profiles) profiles))]
+    (when (prefixes pyaot-dir) (require-pyaot!))
+    (when (prefixes devaot-jar) (require-devaot!))))
+
 (defn launch-arm
   "A child-JVM arm with one variant per launch profile in `profiles` (first is
-   the baseline), each sample running child `mode`."
+   the baseline), each sample running child `mode`. Warmup samples train the
+   AOT caches of the :aot-cache profiles."
   [id mode profiles whole-process? opts]
   (merge {:id id
-          :setup require-pyaot!
+          :setup #(require-builds! profiles)
           :variants (mapv (fn [p] {:name p
                                    :run (fn [_] (run-child mode (assoc (launch-profiles p)
                                                                       :whole-process? whole-process?)))})
                           profiles)
           :rounds 5 :warmup 1}
          opts))
+
+(def devaot-profiles
+  "The whole-classpath AOT ladder (desargues.devaot)."
+  ["source" "aot" "devaot" "devaot+c1" "devaot+cds" "devaot+cds+c1"])
 
 (defn pyinit-arm
   "Cold start to Python up (py-init child), whole child process from JVM
@@ -258,7 +307,18 @@
    reference scene after init! and 3 warmup renders, in a fresh child."
   [opts]
   (launch-arm "warm 3x render frames-only per launch" "warm:lean"
-              ["source" "aot" "aot+c1"] false opts))
+              ["source" "aot" "aot+c1" "devaot" "devaot+cds" "devaot+cds+c1"] false opts))
+
+(defn devaot-launch-arm
+  "Cold start to Manim imported (lean init!), whole child process, along the
+   devaot ladder: source, pyaot, whole-classpath AOT, plus C1 and the AOT cache."
+  [opts]
+  (launch-arm "cold init! lean whole process, devaot" "full:lean" devaot-profiles true opts))
+
+(defn devaot-pyinit-arm
+  "Cold start to Python up, whole child process, along the devaot ladder."
+  [opts]
+  (launch-arm "cold py-init whole process, devaot" "py" devaot-profiles true opts))
 
 (defn native-display-arm
   "Frames-only warm render, both variants with the Zig path builder: Manim's
@@ -369,19 +429,23 @@ def _bench_timer_take():
 
 (def arms
   "Arm name -> (fn [opts] arm). --only picks a subset. pyinit, init-launch,
-   init-aot and c1-warm need `clojure -M:pyaot-build` first."
-  {"warm"        warm-render-arm
-   "init"        cold-init-arm
-   "first"       first-render-arm
-   "svg-copy"    svg-copy-arm
-   "glyph-cache" glyph-cache-arm
-   "pyinit"      pyinit-arm
-   "init-launch" init-launch-arm
-   "init-aot"    init-aot-arm
-   "c1-warm"     c1-warm-arm
+   init-aot and c1-warm need `clojure -M:pyaot-build` first; c1-warm and the
+   devaot-* arms also `clojure -M:dev:bench:devaot-build`."
+  {"warm"          warm-render-arm
+   "init"          cold-init-arm
+   "first"         first-render-arm
+   "svg-copy"      svg-copy-arm
+   "glyph-cache"   glyph-cache-arm
+   "pyinit"        pyinit-arm
+   "init-launch"   init-launch-arm
+   "init-aot"      init-aot-arm
+   "c1-warm"       c1-warm-arm
+   "devaot-launch" devaot-launch-arm
+   "devaot-pyinit" devaot-pyinit-arm
    ;; Warm EDIT: the bench layout rendered once, then each sample changes one
    ;; cell (the same cell sequence for both variants) and renders frames-only
    ;; with svg-copy + glyph-cache, through a Manim backend without vs with a
+   ;; desargues.manim.mobject-cache LRU. :ttff-ms is edit-to-first-frame.
    ;; desargues.manim.mobject-cache LRU. :ttff-ms is edit-to-first-frame.
    "edit-one-cell"
    (fn [opts]
