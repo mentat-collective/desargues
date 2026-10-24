@@ -43,11 +43,12 @@
   (long (Math/floor (+ (* (double t) (double fps)) 1e-9))))
 
 (defn frame-count
-  "Frames Manim emits for an animation of `run-time` s at `fps`:
-   ceil(run-time*fps) (np.arange(0, run_time, 1/fps)), 0 for run-time <= 0."
+  "Frames Manim emits for an animation of `run-time` s at `fps`: the length of
+   np.arange(0, run_time, 1/fps), i.e. ceil(run-time / (1/fps)) in doubles,
+   0 for run-time <= 0."
   ^long [run-time fps]
-  (let [x (* (double run-time) (double fps))]
-    (if (pos? x) (long (Math/ceil (- x 1e-9))) 0)))
+  (let [x (/ (double run-time) (/ 1.0 (double fps)))]
+    (if (pos? x) (long (Math/ceil x)) 0)))
 
 (defn held-frame-count
   "Frames Manim emits for a frozen frame (a wait with nothing moving) of

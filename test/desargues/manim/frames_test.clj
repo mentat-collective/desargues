@@ -38,6 +38,11 @@
       ;; numpy arange(0, rt, step) length = ceil(rt/step)
       (= (long (Math/ceil (/ rt step))) (fr/frame-count rt fps)))))
 
+(deftest frame-count-at-float-boundaries
+  (testing "run-time / step lands just above an integer, as numpy computes it"
+    (is (= 250 (fr/frame-count 8.3 30)) "np.arange(0, 8.3, 1/30) has 250 points")
+    (is (= 499 (fr/frame-count 16.6 30)) "np.arange(0, 16.6, 1/30) has 499 points")))
+
 ;; ---------------------------------------------------------------------------
 ;; Sinks (pure)
 ;; ---------------------------------------------------------------------------
