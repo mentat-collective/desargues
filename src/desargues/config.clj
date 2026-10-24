@@ -94,6 +94,11 @@
   ;; "preview" (x264 ultrafast; bigger files, far less encoder CPU).
   :encoder       (env "DESARGUES_ENCODER"
                       :default "final"
+                      :type :string)
+  ;; desargues.manim.core/import-plan: "lean" (single-thread OpenBLAS, graph
+  ;; and code-highlight deps deferred to first use) or "eager" (plain import).
+  :import-mode   (env "DESARGUES_IMPORT_MODE"
+                      :default "lean"
                       :type :string))
 
 (defn manim-config
