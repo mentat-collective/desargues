@@ -8,7 +8,8 @@
   (:require [libpython-clj2.python :as py]
             [libpython-clj2.python.ffi :as py-ffi]
             [libpython-clj2.python.class :as py-class]
-            [desargues.config :as config]))
+            [desargues.config :as config]
+            [clojure.java.io :as io]))
 
 ;; ============================================================================
 ;; State
@@ -36,6 +37,42 @@
       (doseq [p paths]
         (py/call-attr-kw cdll "__call__" [p] {:mode mode})))))
 
+(defmulti import-plan
+  "Import mode name -> {:env {var value} :defer [module ...]}: environment set
+   inside Python before `import manim` (only where not already set) and modules
+   deferred to first use. \"eager\" is the original plain import."
+  identity)
+
+(defmethod import-plan "eager" [_] {:env {} :defer []})
+
+(defmethod import-plan "lean" [_]
+  {:env   {"OPENBLAS_NUM_THREADS" "1"}
+   :defer ["networkx" "bs4" "pygments" "pygments.lexers"
+           "pygments.formatters.html" "pygments.styles"]})
+
+(defmethod import-plan :default [mode]
+  (throw (ex-info (str "Unknown :import-mode " (pr-str mode) "; one of "
+                       (pr-str (sort (remove #{:default} (keys (methods import-plan))))))
+                  {:import-mode mode})))
+
+(def ^:private deferred-imports
+  (delay
+    (:globals (py/run-simple-string
+               (slurp (clojure.java.io/resource "desargues/manim/deferred_imports.py"))))))
+
+(defn- import-manim!
+  "Boundary: apply `plan`, import manim, end the deferral window."
+  [{:keys [env defer]}]
+  (let [os-env (py/get-attr (py/import-module "os") "environ")]
+    (doseq [[k v] env]
+      (py/call-attr os-env "setdefault" k v)))
+  (if (seq defer)
+    (let [{:strs [install seal]} @deferred-imports
+          stubs (install (py/->py-list defer))]
+      (try (py/import-module "manim")
+           (finally (seal stubs))))
+    (py/import-module "manim")))
+
 (defn init!
   "Initialize Python with the Manim conda environment.
    Call this ONCE at the start of your REPL session.
@@ -44,30 +81,33 @@
    - :python-executable - path to python binary
    - :library-path - path to libpython shared library
    - :site-packages - path to site-packages directory
-   - :preload-libs - colon-separated shared libs loaded before `import manim`"
+   - :preload-libs - colon-separated shared libs loaded before `import manim`
+   - :import-mode - \"lean\" (default) or \"eager\", see `import-plan`"
   ([]
    (init! {}))
-  ([{:keys [python-executable library-path site-packages preload-libs]
+  ([{:keys [python-executable library-path site-packages preload-libs import-mode]
      :or {python-executable (:python-exe (config/manim-config))
           library-path (:library-path (config/manim-config))
           site-packages (:site-packages (config/manim-config))
-          preload-libs (:preload-libs (config/manim-config))}}]
+          preload-libs (:preload-libs (config/manim-config))
+          import-mode (:import-mode (config/manim-config))}}]
    (when-not @initialized?
-     (py/initialize!
-      :python-executable python-executable
-      :library-path library-path)
+     (let [plan (import-plan import-mode)]
+       (py/initialize!
+        :python-executable python-executable
+        :library-path library-path)
 
-     ;; Add site-packages to Python path
-     (let [sys (py/import-module "sys")]
-       (py/call-attr (py/get-attr sys "path") "insert" 0 site-packages))
+       ;; Add site-packages to Python path
+       (let [sys (py/import-module "sys")]
+         (py/call-attr (py/get-attr sys "path") "insert" 0 site-packages))
 
-     ;; An embedding host lacks python's RPATH; pathops needs libskia preloaded
-     (preload-libs! (preload-paths preload-libs))
+       ;; An embedding host lacks python's RPATH; pathops needs libskia preloaded
+       (preload-libs! (preload-paths preload-libs))
 
-     ;; Cache manim module
-     (reset! manim-module (py/import-module "manim"))
-     (reset! initialized? true)
-     (println "Manim initialized successfully!"))
+       ;; Cache manim module
+       (reset! manim-module (import-manim! plan))
+       (reset! initialized? true)
+       (println "Manim initialized successfully!")))
    @manim-module))
 
 (defn initialized?*

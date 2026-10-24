@@ -108,30 +108,55 @@
     {::ab/measured (assoc (:bench-child (edn/read-string line)) :process-wall-ms pw)}))
 
 (defn cold-init-arm
-  "Cold init cost in a fresh JVM per sample: python only vs python + import manim."
+  "Cold init cost in a fresh JVM per sample: python only vs python + import
+   manim, under each desargues.manim.core/import-plan mode."
   [opts]
   (merge {:id "cold init!"
-          :variants [{:name "py-init" :run (fn [_] (run-child "py"))}
-                     {:name "init!"   :run (fn [_] (run-child "full"))}]
+          :variants [{:name "py-init"     :run (fn [_] (run-child "py"))}
+                     {:name "init! eager" :run (fn [_] (run-child "full:eager"))}
+                     {:name "init! lean"  :run (fn [_] (run-child "full:lean"))}]
+          :rounds 5 :warmup 1}
+         opts))
+
+(defn first-render-arm
+  "The first reference-scene render right after a cold init! (fresh JVM per
+   sample; init! itself is outside the number), per import mode: a deferred
+   import must not just move its cost here."
+  [opts]
+  (merge {:id "first render after init!"
+          :variants [{:name "eager" :run (fn [_] (run-child "render:eager"))}
+                     {:name "lean"  :run (fn [_] (run-child "render:lean"))}]
           :rounds 5 :warmup 1}
          opts))
 
 (def arms
   "Arm name -> (fn [opts] arm). --only picks a subset."
-  {"warm" warm-render-arm
-   "init" cold-init-arm})
+  {"warm"  warm-render-arm
+   "init"  cold-init-arm
+   "first" first-render-arm})
 
 (def default-arms ["warm" "init"])
 
 ;; ── child mode ───────────────────────────────────────────────────────────────
 
-(defn- child! [mode]
+(defn- child!
+  "mode: \"py\" | \"full[:import-mode]\" (time init!) | \"render:import-mode\"
+   (init! untimed, then time the first reference-scene render)."
+  [mode]
   (let [{:keys [python-exe library-path]} ((requiring-resolve 'desargues.config/manim-config))
         init!     (requiring-resolve 'desargues.manim.core/init!)
         py-init!  (requiring-resolve 'libpython-clj2.python/initialize!)
-        f (case mode
-            "py"   #(py-init! :python-executable python-exe :library-path library-path)
-            "full" #(init!))
+        [kind im] (str/split mode #":" 2)
+        init-opts (cond-> {} im (assoc :import-mode im))
+        f (case kind
+            "py"     #(py-init! :python-executable python-exe :library-path library-path)
+            "full"   #(init! init-opts)
+            "render" (do (init! init-opts)
+                         (quiet-manim!)
+                         ((requiring-resolve 'desargues.scene/configure!) {:quality "low_quality"})
+                         (set-cfg! "media_dir" media-dir)
+                         (set-cfg! "disable_caching" true)
+                         #(reference-scene! "BenchFirst")))
         m (ab/measure f)]
     (println (pr-str {:bench-child (dissoc m :value)}))
     (flush)
