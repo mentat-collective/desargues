@@ -557,6 +557,40 @@
     (swap! (:state this) assoc :on-key f)
     this))
 
+(defn- upload-raster!
+  "FX thread: write premultiplied BGRA `bs` (w x h) into the host's cached
+   WritableImage (re-made when the size changes) and draw it letterboxed on
+   the canvas. The pixel conversion already happened on the producer thread,
+   so this is one PixelWriter copy and one drawImage."
+  [state ^bytes bs w h]
+  (when-let [^Canvas c (:canvas @state)]
+    (let [w (int w) h (int h)
+          ^WritableImage img (let [^WritableImage i (:raster-img @state)]
+                               (if (and i (== w (.getWidth i)) (== h (.getHeight i)))
+                                 i
+                                 (let [i (WritableImage. w h)]
+                                   (swap! state assoc :raster-img i)
+                                   i)))
+          gc (.getGraphicsContext2D c)
+          cw (.getWidth c) ch (.getHeight c)
+          k  (min (/ cw w) (/ ch h))
+          dw (* k w) dh (* k h)]
+      (.setPixels (.getPixelWriter img) 0 0 w h
+                  (javafx.scene.image.PixelFormat/getByteBgraPreInstance)
+                  bs 0 (* 4 w))
+      (.setFill gc Color/BLACK)
+      (.fillRect gc 0 0 cw ch)
+      (.drawImage gc img (/ (- cw dw) 2.0) (/ (- ch dh) 2.0) dw dh))))
+
+(extend-type FxHost
+  p/IRaster
+  (-raster-layout [_] :bgra-pre)
+  (-present-raster! [this bs w h]
+    ;; the tick (AnimationTimer) is already on the FX thread; a caller from
+    ;; elsewhere blocks until the upload is done, since bs is only lent
+    (on-fx #(upload-raster! (:state this) bs w h))
+    this))
+
 (defn host
   "A fresh, unopened JavaFX host. Hand it to desargues.player/open!."
   []

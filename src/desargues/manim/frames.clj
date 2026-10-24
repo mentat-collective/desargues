@@ -20,7 +20,8 @@
             [libpython-clj2.python :as py]
             [libpython-clj2.python.base :as py-base]
             [tech.v3.datatype :as dt]
-            [tech.v3.tensor :as dtt]))
+            [tech.v3.tensor :as dtt]
+            [libpython-clj2.python.np-array]))
 
 ;; ============================================================================
 ;; Pure: frame pacing
