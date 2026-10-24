@@ -61,9 +61,11 @@
       (assoc (smp/summarize ms) :max-ms (reduce max ms)))))
 
 (defn live-run!
-  "Live path: play edit `i` into `host`. The play-live! report, condensed."
+  "Live path: play edit `i` into `host`. The play-live! report, condensed.
+   The perf profile defaults to :stock here, so each variant names exactly
+   the patches it measures; pass :profile to measure a profile."
   [M host i opts]
-  (let [{:keys [done]} (mr/play-live! host #((scene-class M i)) opts)
+  (let [{:keys [done]} (mr/play-live! host #((scene-class M i)) (merge {:profile :stock} opts))
         r (deref done 60000 ::timeout)]
     (when (= r ::timeout) (throw (ex-info "live run timed out" {:i i})))
     (when-let [e (:error r)] (throw e))

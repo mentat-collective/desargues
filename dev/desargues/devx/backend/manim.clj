@@ -10,7 +10,8 @@
             [libpython-clj2.python :as py]
             [libpython-clj2.python.class :as py-class]
             [clojure.java.io :as io]
-            [clojure.java.shell :refer [sh]]))
+            [clojure.java.shell :refer [sh]]
+            [desargues.perf.profile :as perf]))
 
 ;; =============================================================================
 ;; Manim Scene Creation
@@ -41,6 +42,8 @@
   (init-backend! [this]
     (when-not @initialized?
       (manim/init!)
+      ;; DESARGUES_PERF_PROFILE: "fast" by default, "stock" = Manim as shipped
+      (perf/install! nil)
       (seg/ensure-partial-dir!)
       (reset! initialized? true)
       (println "[ManimBackend] Initialized")))
