@@ -128,4 +128,16 @@
                                                                :git/sha "a67a5d1e25fc9601e9f8a6d8006aaf7eed1a7761"
                                                                :deps/root "render"}
                            org.babashka/sci {:git/url "https://github.com/babashka/sci"
-                                             :git/sha "c556f4474303c61da72e7a07eef496dcbf66a56e"}}}}}
+                                             :git/sha "c556f4474303c61da72e7a07eef496dcbf66a56e"}}}
+  ;; Fast Python start (opt-in, desargues.pyaot). libpython-clj, dtype-next and
+  ;; insn ship as Clojure source and generate their JNA bindings at runtime;
+  ;; a fresh JVM spends seconds of CPU on that before Python runs.
+  ;;   clojure -M:pyaot-build        # once (and after a dependency upgrade)
+  ;;   clojure -M:dev:pyaot          # classes + prebuilt binding class on the path
+  ;;   clojure -M:dev:pyaot:c1       # plus C1-only JIT: cheapest cold start
+  ;; :c1 trades steady-state JIT for startup; measure warm renders before
+  ;; using it for long sessions (bench: clojure -M:bench render --only pyinit,c1-warm).
+  :pyaot {:extra-paths ["target/pyaot"]}
+  :pyaot-build {:extra-paths ["dev" "target/pyaot"]
+                :main-opts ["-m" "desargues.pyaot"]}
+  :c1 {:jvm-opts ["-XX:TieredStopAtLevel=1"]}}}

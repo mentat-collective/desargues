@@ -147,29 +147,39 @@
             :rounds 7 :warmup 1}
            opts)))
 
-(defn- child-cmd
-  "argv that runs this namespace's child mode in a fresh JVM on our classpath."
-  [mode]
-  [(str (io/file (System/getProperty "java.home") "bin" "java"))
-   "--enable-native-access=ALL-UNNAMED"
-   "-cp" (System/getProperty "java.class.path")
-   "clojure.main" "-m" "desargues.bench.render" "--child" mode])
+(defn child-cmd
+  "argv that runs this namespace's child mode in a fresh JVM on our classpath.
+   `jvm` is a {:jvm-opts [..] :cp-prefix [dir ..]} launch profile."
+  ([mode] (child-cmd mode {}))
+  ([mode {:keys [jvm-opts cp-prefix]}]
+   (into [(str (io/file (System/getProperty "java.home") "bin" "java"))]
+         (concat jvm-opts
+                 ["--enable-native-access=ALL-UNNAMED"
+                  "-cp" (str/join ":" (concat (map #(str (.getAbsoluteFile (io/file %))) cp-prefix)
+                                              [(System/getProperty "java.class.path")]))
+                  "clojure.main" "-m" "desargues.bench.render" "--child" mode]))))
 
 (defn- run-child
   "Run a child, return its self-measurement as {::ab/measured {...}}, plus
    the child's whole-process wall time as :process-wall-ms. The child prints
    one line {:bench-child {:wall-ms :cpu-s}} (an unqualified key, so pr-str
-   does not turn it into #:ns{} map syntax)."
-  [mode]
-  (let [t0   (System/nanoTime)
-        {:keys [exit out err]} (apply sh/sh (child-cmd mode))
-        pw   (/ (- (System/nanoTime) t0) 1e6)
-        line (some->> (str/split-lines out) (filter #(str/starts-with? % "{:bench-child")) last)]
-    (when (or (not (zero? exit)) (nil? line))
-      (throw (ex-info "bench child failed"
-                      {:mode mode :exit exit
-                       :err (str/join "\n" (take-last 20 (str/split-lines err)))})))
-    {::ab/measured (assoc (:bench-child (edn/read-string line)) :process-wall-ms pw)}))
+   does not turn it into #:ns{} map syntax). With :whole-process? the child's
+   JVM-start-to-done numbers (:uptime-ms, :proc-cpu-s) become the sample."
+  ([mode] (run-child mode {}))
+  ([mode {:keys [whole-process?] :as jvm}]
+   (let [t0   (System/nanoTime)
+         {:keys [exit out err]} (apply sh/sh (child-cmd mode jvm))
+         pw   (/ (- (System/nanoTime) t0) 1e6)
+         line (some->> (str/split-lines out) (filter #(str/starts-with? % "{:bench-child")) last)]
+     (when (or (not (zero? exit)) (nil? line))
+       (throw (ex-info "bench child failed"
+                       {:mode mode :exit exit
+                        :err (str/join "\n" (take-last 20 (str/split-lines err)))})))
+     (let [m (assoc (:bench-child (edn/read-string line)) :process-wall-ms pw)]
+       {::ab/measured (cond-> m
+                        whole-process? (assoc :wall-ms (:uptime-ms m) :cpu-s (:proc-cpu-s m)
+                                              :section-wall-ms (:wall-ms m)
+                                              :section-cpu-s (:cpu-s m)))}))))
 
 (defn cold-init-arm
   "Cold init cost in a fresh JVM per sample: python only vs python + import
@@ -193,13 +203,75 @@
           :rounds 5 :warmup 1}
          opts))
 
+(def pyaot-dir
+  "Classes dir `clojure -M:pyaot-build` writes (desargues.pyaot)."
+  "target/pyaot")
+
+(def launch-profiles
+  "Child JVM launch profiles: name -> {:jvm-opts :cp-prefix}."
+  {"source"        {}
+   "c1"            {:jvm-opts ["-XX:TieredStopAtLevel=1"]}
+   "aot"           {:cp-prefix [pyaot-dir]}
+   "aot+c1"        {:cp-prefix [pyaot-dir] :jvm-opts ["-XX:TieredStopAtLevel=1"]}
+   "aot+c1+serial" {:cp-prefix [pyaot-dir] :jvm-opts ["-XX:TieredStopAtLevel=1" "-XX:+UseSerialGC"]}
+   "aot+ci2"       {:cp-prefix [pyaot-dir] :jvm-opts ["-XX:CICompilerCount=2"]}})
+
+(defn- require-pyaot! []
+  (when-not (.exists (io/file pyaot-dir "desargues" "pyaot-stamp.edn"))
+    (throw (ex-info (str pyaot-dir " missing: run clojure -M:pyaot-build first") {}))))
+
+(defn launch-arm
+  "A child-JVM arm with one variant per launch profile in `profiles` (first is
+   the baseline), each sample running child `mode`."
+  [id mode profiles whole-process? opts]
+  (merge {:id id
+          :setup require-pyaot!
+          :variants (mapv (fn [p] {:name p
+                                   :run (fn [_] (run-child mode (assoc (launch-profiles p)
+                                                                      :whole-process? whole-process?)))})
+                          profiles)
+          :rounds 5 :warmup 1}
+         opts))
+
+(defn pyinit-arm
+  "Cold start to Python up (py-init child), whole child process from JVM
+   start: Clojure loading of libpython-clj/dtype-next is inside the number."
+  [opts]
+  (launch-arm "cold py-init whole process" "py"
+              ["source" "c1" "aot" "aot+c1" "aot+c1+serial" "aot+ci2"] true opts))
+
+(defn init-launch-arm
+  "Cold start to Manim imported (lean init!), whole child process."
+  [opts]
+  (launch-arm "cold init! lean whole process" "full:lean"
+              ["source" "aot" "aot+c1"] true opts))
+
+(defn init-aot-arm
+  "Cold lean init! section only (Clojure load outside the number), per launch
+   profile: what the prebuilt binding class saves inside init! itself."
+  [opts]
+  (launch-arm "cold init! lean section" "full:lean"
+              ["source" "aot" "aot+c1"] false opts))
+
+(defn c1-warm-arm
+  "Warm render cost per launch profile: 3 timed frames-only renders of the
+   reference scene after init! and 3 warmup renders, in a fresh child."
+  [opts]
+  (launch-arm "warm 3x render frames-only per launch" "warm:lean"
+              ["source" "aot" "aot+c1"] false opts))
+
 (def arms
-  "Arm name -> (fn [opts] arm). --only picks a subset."
+  "Arm name -> (fn [opts] arm). --only picks a subset. pyinit, init-launch,
+   init-aot and c1-warm need `clojure -M:pyaot-build` first."
   {"warm"        warm-render-arm
    "init"        cold-init-arm
    "first"       first-render-arm
    "svg-copy"    svg-copy-arm
    "glyph-cache" glyph-cache-arm
+   "pyinit"      pyinit-arm
+   "init-launch" init-launch-arm
+   "init-aot"    init-aot-arm
+   "c1-warm"     c1-warm-arm
    ;; Frames-only warm render, Manim's Python path building vs the Zig one
    ;; (desargues.manim.patches/native-cairo-path; `bb native:path` builds it).
    "zig-path" (fn [opts]
@@ -229,24 +301,35 @@
 
 (defn- child!
   "mode: \"py\" | \"full[:import-mode]\" (time init!) | \"render:import-mode\"
-   (init! untimed, then time the first reference-scene render)."
+   (init! untimed, then time the first reference-scene render) |
+   \"warm:import-mode\" (init! and 3 untimed renders, then time 3 renders).
+   Also reports the whole process so far: :uptime-ms and :proc-cpu-s."
   [mode]
   (let [{:keys [python-exe library-path]} ((requiring-resolve 'desargues.config/manim-config))
         init!     (requiring-resolve 'desargues.manim.core/init!)
         py-init!  (requiring-resolve 'libpython-clj2.python/initialize!)
+        prebuilt  (requiring-resolve 'desargues.manim.core/prebuilt-library)
         [kind im] (str/split mode #":" 2)
         init-opts (cond-> {} im (assoc :import-mode im))
+        ready!    (fn []
+                    (init! init-opts)
+                    (quiet-manim!)
+                    ((requiring-resolve 'desargues.scene/configure!) {:quality "low_quality"})
+                    (set-cfg! "media_dir" media-dir)
+                    (set-cfg! "disable_caching" true)
+                    (set-cfg! "write_to_movie" false))
         f (case kind
-            "py"     #(py-init! :python-executable python-exe :library-path library-path)
+            "py"     #(py-init! :python-executable python-exe :library-path library-path
+                                :library-definition (prebuilt))
             "full"   #(init! init-opts)
-            "render" (do (init! init-opts)
-                         (quiet-manim!)
-                         ((requiring-resolve 'desargues.scene/configure!) {:quality "low_quality"})
-                         (set-cfg! "media_dir" media-dir)
-                         (set-cfg! "disable_caching" true)
-                         #(reference-scene! "BenchFirst")))
+            "render" (do (ready!) #(reference-scene! "BenchFirst"))
+            "warm"   (do (ready!)
+                         (dotimes [_ 3] (reference-scene! "BenchWarmup"))
+                         #(dotimes [_ 3] (reference-scene! "BenchWarm"))))
         m (ab/measure f)]
-    (println (pr-str {:bench-child (dissoc m :value)}))
+    (println (pr-str {:bench-child (assoc (dissoc m :value)
+                                          :uptime-ms (.getUptime (java.lang.management.ManagementFactory/getRuntimeMXBean))
+                                          :proc-cpu-s (ab/process-cpu-s))}))
     (flush)
     (System/exit 0)))
 
