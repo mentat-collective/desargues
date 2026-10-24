@@ -85,3 +85,78 @@ def desargues_copy_probe():
           (is (not (mp/installed? p)))
           (is (= [true false true true true] (py/->jvm (probe)))))
         (is (= :svg-path-shared-copy (pp/-patch-id p)))))))
+
+(def ^:private glyph-probe-src
+  "from manim import Text, MathTex, Tex, config
+import numpy as np
+def _pts(m):
+    return m.get_all_points()
+def desargues_glyph_probe():
+    out = {}
+    a = Text('glyph probe', font_size=30)
+    b = Text('glyph probe', font_size=30)
+    out['hit-equal'] = bool(np.array_equal(_pts(a), _pts(b)) and len(a) == len(b))
+    out['distinct'] = a is not b and a.submobjects[0] is not b.submobjects[0]
+    b.shift([1, 0, 0]); b.set_color('#FF0000'); b.submobjects[0].points[:] = 0
+    c = Text('glyph probe', font_size=30)
+    out['independent'] = bool(np.array_equal(_pts(a), _pts(c)) and a.get_color() == c.get_color())
+    d = Text('glyph probe', font_size=31)
+    out['kwargs-miss'] = not np.array_equal(_pts(a), _pts(d))
+    m1 = MathTex('x^2'); m2 = MathTex('x^2'); t = Tex('x')
+    out['mathtex-equal'] = bool(np.array_equal(_pts(m1), _pts(m2)))
+    out['tex-type'] = type(t).__name__
+    return out
+def desargues_glyph_with_pixel_width(w, f):
+    old = config.pixel_width
+    config.pixel_width = w
+    try:
+        return f()
+    finally:
+        config.pixel_width = old
+def desargues_glyph_build():
+    Text('glyph probe', font_size=30)
+    return True
+")
+
+(deftest glyph-cache-install-cycle
+  (if-not @manim-env?
+    (println "skip: no Manim env")
+    (do
+      (core/init!)
+      (let [g     (:globals (py/run-simple-string glyph-probe-src))
+            probe #(update-keys (py/->jvm ((get g "desargues_glyph_probe"))) keyword)
+            p     (mp/glyph-cache 8)]
+        (mp/uninstall! p)
+        (mp/glyph-cache-clear!)
+        (testing "patched: hits are equal, distinct and independent copies"
+          (is (true? (mp/install! p)))
+          (is (true? (mp/install! p)) "idempotent")
+          (is (mp/installed? p))
+          (is (= {:hit-equal true :distinct true :independent true :kwargs-miss true
+                  :mathtex-equal true :tex-type "Tex"}
+                 (probe)))
+          (let [{:keys [hits misses size]} (mp/glyph-cache-stats)]
+            (is (pos? hits))
+            (is (pos? misses))
+            (is (<= size 8) "LRU bound")))
+        (testing "a config change misses the cache"
+          (mp/glyph-cache-clear!)
+          ((get g "desargues_glyph_build"))
+          ((get g "desargues_glyph_with_pixel_width") 640 (get g "desargues_glyph_build"))
+          (is (= {:hits 0 :misses 2} (select-keys (mp/glyph-cache-stats) [:hits :misses])))
+          ((get g "desargues_glyph_build"))
+          (is (= 1 (:hits (mp/glyph-cache-stats)))))
+        (testing "LRU evicts past max-entries"
+          (mp/glyph-cache-clear!)
+          (py/run-simple-string "from manim import Text\nfor i in range(12): Text('lru %d' % i)")
+          (is (= 8 (:size (mp/glyph-cache-stats)))))
+        (testing "uninstall restores Manim; entries survive until cleared"
+          (is (true? (mp/uninstall! p)))
+          (is (false? (mp/uninstall! p)))
+          (is (not (mp/installed? p)))
+          (is (= 8 (:size (mp/glyph-cache-stats))))
+          (mp/glyph-cache-clear!)
+          (is (zero? (:size (mp/glyph-cache-stats))))
+          (probe)
+          (is (= {:hits 0 :misses 0} (select-keys (mp/glyph-cache-stats) [:hits :misses]))))
+        (is (= :glyph-cache (pp/-patch-id p)))))))
