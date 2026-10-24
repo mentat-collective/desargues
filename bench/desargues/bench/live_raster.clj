@@ -91,6 +91,24 @@
                 (live "live-paced" {:paced? true})
                 (live "live-unpaced" {:paced? false})]}))
 
+(defn native-arm
+  "DESARGUES-PERF-LIVE-3: Manim's RGBA converted on the render thread vs
+   cairo's native premultiplied BGRA copied as is (:native? in play-live!),
+   paced and unpaced, interleaved. Run with (ab/run-arm (native-arm M host
+   extras {})); per-frame conversion ms lands in `extras`."
+  [M host extras {:keys [rounds warmup] :or {rounds 9 warmup 1}}]
+  (let [i (atom 0)
+        live (fn [nm opts]
+               {:name nm
+                :run (fn [_] (let [r (live-run! M host (swap! i inc) opts)]
+                               (swap! extras update nm (fnil conj []) r)))})]
+    {:id "live rgba-convert vs bgra-native 480p15"
+     :rounds rounds :warmup warmup
+     :variants [(live "unpaced-convert" {:paced? false :native? false})
+                (live "unpaced-native" {:paced? false :native? true})
+                (live "paced-convert" {:paced? true :native? false})
+                (live "paced-native" {:paced? true :native? true})]}))
+
 (defn drops
   "Frames dropped per second of playback, paced, at each fps, `n` runs each.
    Per-run FX upload and conversion medians/max are in ms."
