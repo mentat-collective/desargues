@@ -83,6 +83,27 @@
             :rounds 5 :warmup 1}
            opts)))
 
+(defn svg-copy-arm
+  "Frames-only warm render of the reference scene, Manim as shipped vs the
+   desargues.manim.patches/svg-path-shared-copy patch (glyph copies share
+   their parsed SVG path)."
+  [opts]
+  (let [patch   @(requiring-resolve 'desargues.manim.patches/svg-path-shared-copy)
+        install (requiring-resolve 'desargues.manim.patches/install!)
+        remove  (requiring-resolve 'desargues.manim.patches/uninstall!)
+        variant (fn [nm patched?]
+                  {:name nm
+                   :setup (fn [_]
+                            (set-cfg! "write_to_movie" false)
+                            (if patched? (install patch) (remove patch)))
+                   :run (fn [_] (reference-scene! "BenchRef"))
+                   :teardown (fn [_] (remove patch) (set-cfg! "write_to_movie" true))})]
+    (merge (warm-render-arm {})
+           {:id "svg path shared copy 480p15 frames-only"
+            :variants [(variant "manim" false) (variant "svg-shared-copy" true)]
+            :rounds 5 :warmup 1}
+           opts)))
+
 (defn- child-cmd
   "argv that runs this namespace's child mode in a fresh JVM on our classpath."
   [mode]
@@ -118,8 +139,9 @@
 
 (def arms
   "Arm name -> (fn [opts] arm). --only picks a subset."
-  {"warm" warm-render-arm
-   "init" cold-init-arm})
+  {"warm"     warm-render-arm
+   "init"     cold-init-arm
+   "svg-copy" svg-copy-arm})
 
 (def default-arms ["warm" "init"])
 
