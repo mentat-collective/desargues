@@ -179,7 +179,8 @@
    IRaster `host`, shown on the host's IClock tick. Options: :profile (a
    desargues.perf.profile name or value; default DESARGUES_PERF_PROFILE,
    \"fast\" when unset: its render patches and live defaults apply, :stock is
-   Manim as shipped), :quality (default \"low_quality\"), :frame-rate
+   Manim as shipped, :preview is :fast plus lossy preview-aa rasterizing),
+   :quality (default \"low_quality\"), :frame-rate
    (overrides the preset's fps), :paced? (default true: publish frame n at
    first-frame + n/fps, a wait on time, never on the UI), :native? (default
    true: a host whose layout is cairo's native one gets frames with no

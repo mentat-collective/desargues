@@ -20,7 +20,10 @@
         :make (fn [] my-patch-record)})
 
    Only entries marked :exact? (frames proven SHA-256 identical to stock)
-   may join a profile marked :exact-only?, as :fast is. Entries whose
+   may join a profile marked :exact-only?, as :stock and :fast are. A
+   profile admits lossy entries only when its base declares :lossy-ok?
+   (:preview, opt in: DESARGUES_PERF_PROFILE=preview; a :base profile's
+   patches come along, so :preview is :fast plus preview-aa). Entries whose
    artifact is missing (the Zig library) still belong to the profile; their
    -install! answers false and Manim keeps its own code.
 
@@ -32,7 +35,8 @@
             [desargues.manim.patches :as mp]
             [desargues.manim.patches.native-display :as nd]
             [desargues.manim.patches.background-cache :as bc]
-            [desargues.manim.mobject-cache :as mcache]))
+            [desargues.manim.mobject-cache :as mcache]
+            [desargues.manim.patches.preview-aa :as paa]))
 
 ;; ============================================================================
 ;; Schemas and values
@@ -58,22 +62,31 @@
   (m/schema [:map [:mobject-cache? :boolean]]))
 
 (def ProfileBase
-  (m/schema [:map
-             [:doc :string]
-             [:exact-only? :boolean]
-             [:live LiveOpts]
-             [:backend BackendOpts]]))
+  "A profile declares whether it admits lossy patches: :lossy-ok? (default
+   the negation of :exact-only?; when both are given they must disagree)."
+  (m/schema [:and
+             [:map
+              [:doc :string]
+              [:exact-only? :boolean]
+              [:lossy-ok? {:optional true} :boolean]
+              [:base {:optional true} :keyword]
+              [:live LiveOpts]
+              [:backend BackendOpts]]
+             [:fn {:error/message ":lossy-ok? and :exact-only? disagree"}
+              (fn [{:keys [exact-only?] :as b}]
+                (or (not (contains? b :lossy-ok?)) (not= exact-only? (:lossy-ok? b))))]]))
 
 (def PerfProfileSchema
   (m/schema [:map
              [:id :keyword]
              [:doc :string]
              [:exact-only? :boolean]
+             [:lossy-ok? :boolean]
              [:patches [:vector :keyword]]
              [:live LiveOpts]
              [:backend BackendOpts]]))
 
-(defrecord PerfProfile [id doc exact-only? patches live backend])
+(defrecord PerfProfile [id doc exact-only? lossy-ok? patches live backend])
 
 ;; ============================================================================
 ;; Registries (open)
@@ -94,6 +107,17 @@
   {:doc "Every patch whose frames are SHA-256 identical to stock, plus
          surface reuse on the live path and an LRU of built mobjects."
    :exact-only? true
+   :live {:surface-reuse? true}
+   :backend {:mobject-cache? true}})
+
+(defmethod profile-base :preview [_]
+  {:doc "LOSSY, opt in only (DESARGUES_PERF_PROFILE=preview or :profile
+         :preview): every :fast patch plus the patches registered for
+         :preview, which trade exact frames for cheaper rasterizing. Never
+         for final renders."
+   :base :fast
+   :exact-only? false
+   :lossy-ok? true
    :live {:surface-reuse? true}
    :backend {:mobject-cache? true}})
 
@@ -120,6 +144,10 @@
 (defmethod patch-entry :background-cache [_]
   {:id :background-cache :rank 50 :profiles #{:fast} :exact? true
    :make bc/background-cache})
+
+(defmethod patch-entry :preview-aa [_]
+  {:id :preview-aa :rank 90 :profiles #{:preview} :exact? false
+   :make paa/preview-aa})
 
 (defn- entry
   "The validated PatchEntry registered under `id`."
@@ -152,20 +180,25 @@
 ;; ============================================================================
 
 (defn profile
-  "The PerfProfile named `k`: its base data plus the ids of every entry
-   that lists it, by rank. Throws when an :exact-only? profile would hold an
-   entry that is not :exact?."
+  "The PerfProfile named `k`: its base data plus the ids of every entry that
+   lists it and, when the base names a :base profile, every patch of that
+   profile, by rank. Throws when a profile that does not admit lossy patches
+   (:lossy-ok? false, the default of an :exact-only? profile such as :stock
+   and :fast) would hold an entry that is not :exact?."
   [k]
   (let [base (profile-base k)
         _    (when-not (m/validate ProfileBase base)
                (throw (ex-info (str "Invalid perf profile " k)
                                {:profile k :explain (m/explain ProfileBase base)})))
-        mine (filterv #(contains? (:profiles %) k) (entries))
+        lossy-ok? (boolean (get base :lossy-ok? (not (:exact-only? base))))
+        inherited (set (some-> (:base base) profile :patches))
+        mine  (filterv #(or (contains? (:profiles %) k) (inherited (:id %))) (entries))
         lossy (remove :exact? mine)]
-    (when (and (:exact-only? base) (seq lossy))
+    (when (and (not lossy-ok?) (seq lossy))
       (throw (ex-info (str "Perf profile " k " admits only exact patches")
                       {:profile k :not-exact (mapv :id lossy)})))
-    (map->PerfProfile (assoc base :id k :patches (mapv :id mine)))))
+    (map->PerfProfile (-> (dissoc base :base)
+                          (assoc :id k :lossy-ok? lossy-ok? :patches (mapv :id mine))))))
 
 (defn valid? [p] (m/validate PerfProfileSchema p))
 
@@ -176,7 +209,8 @@
     (if (str/blank? n) :fast (keyword n))))
 
 (defconfig PerfConfig
-  ;; desargues.perf.profile: "fast" (default) or "stock" (Manim as shipped).
+  ;; desargues.perf.profile: "fast" (default), "stock" (Manim as shipped) or
+  ;; "preview" (lossy: :fast plus preview-aa; never for final renders).
   :profile (env "DESARGUES_PERF_PROFILE" :default "fast" :type :string))
 
 (defn configured-name
