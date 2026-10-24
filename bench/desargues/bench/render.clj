@@ -26,7 +26,7 @@
             [clojure.java.shell :as sh]
             [clojure.pprint :as pp]
             [clojure.string :as str]
-            [desargues.bench :as bench]
+            [desargues.bench.reference :as reference]
             [desargues.bench.ab :as ab]
             [desargues.bench.sample :as smp]))
 
@@ -57,7 +57,7 @@
   "Render the reference scene once with the current Manim config."
   [scene-name]
   (let [s-render (requiring-resolve 'desargues.scene/render-layout!)]
-    (s-render scene-name (bench/layout-tree 16) :hold 1)))
+    (s-render scene-name (reference/layout-tree 16) :hold 1)))
 
 ;; ── arms ─────────────────────────────────────────────────────────────────────
 
@@ -161,15 +161,17 @@
 (defn child-cmd
   "argv that runs this namespace's child mode in a fresh JVM on our classpath.
    `jvm` is a launch profile {:jvm-opts [..] :cp-prefix [path ..] :jar-only?
-   bool :aot-cache path}. :jar-only? puts only the jars on -cp and hands the
-   directories to desargues.devaot.launch (in target/devaot.jar), which adds
-   them at run time: the JVM writes an AOT/CDS archive only for a jar-only
-   classpath. :aot-cache adds cds-opts for that file."
+   bool :aot-cache path :preload [ns ..]}. :jar-only? puts only the jars on -cp
+   and hands the directories to desargues.devaot.launch (in target/devaot.jar),
+   which adds them at run time: the JVM writes an AOT/CDS archive only for a
+   jar-only classpath. :aot-cache adds cds-opts for that file. :preload makes
+   the child require those namespaces before its mode runs (--preload)."
   ([mode] (child-cmd mode {}))
-  ([mode {:keys [jvm-opts cp-prefix jar-only? aot-cache]}]
+  ([mode {:keys [jvm-opts cp-prefix jar-only? aot-cache preload]}]
    (let [entries (concat (map #(str (.getAbsoluteFile (io/file %))) cp-prefix)
                          (str/split (System/getProperty "java.class.path") #":"))
-         main    ["desargues.bench.render" "--child" mode]]
+         main    (into ["desargues.bench.render" "--child" mode]
+                       (mapcat (fn [n] ["--preload" (str n)]) preload))]
      (into [(str (io/file (System/getProperty "java.home") "bin" "java"))]
            (concat jvm-opts
                    (when aot-cache (cds-opts aot-cache))
@@ -186,17 +188,24 @@
    the child's whole-process wall time as :process-wall-ms. The child prints
    one line {:bench-child {:wall-ms :cpu-s}} (an unqualified key, so pr-str
    does not turn it into #:ns{} map syntax). With :whole-process? the child's
-   JVM-start-to-done numbers (:uptime-ms, :proc-cpu-s) become the sample."
+   JVM-start-to-done numbers (:uptime-ms, :proc-cpu-s) become the sample.
+   A profile with :train-mode whose :aot-cache is missing first runs an
+   untimed child in that mode, which records the cache."
   ([mode] (run-child mode {}))
-  ([mode {:keys [whole-process?] :as jvm}]
-   (let [t0   (System/nanoTime)
-         {:keys [exit out err]} (apply sh/sh (child-cmd mode jvm))
-         pw   (/ (- (System/nanoTime) t0) 1e6)
+  ([mode {:keys [whole-process? train-mode aot-cache] :as jvm}]
+   (let [run! (fn [m]
+                (let [t0 (System/nanoTime)
+                      r  (apply sh/sh (child-cmd m jvm))]
+                  (assoc r :pw (/ (- (System/nanoTime) t0) 1e6))))
+         fail (fn [m {:keys [exit err]}]
+                (throw (ex-info "bench child failed"
+                                {:mode m :exit exit
+                                 :err (str/join "\n" (take-last 20 (str/split-lines err)))})))
+         _    (when (and train-mode aot-cache (not (.exists (io/file aot-cache))))
+                (let [r (run! train-mode)] (when-not (zero? (:exit r)) (fail train-mode r))))
+         {:keys [exit out pw] :as r} (run! mode)
          line (some->> (str/split-lines out) (filter #(str/starts-with? % "{:bench-child")) last)]
-     (when (or (not (zero? exit)) (nil? line))
-       (throw (ex-info "bench child failed"
-                       {:mode mode :exit exit
-                        :err (str/join "\n" (take-last 20 (str/split-lines err)))})))
+     (when (or (not (zero? exit)) (nil? line)) (fail mode r))
      (let [m (assoc (:bench-child (edn/read-string line)) :process-wall-ms pw)]
        {::ab/measured (cond-> m
                         whole-process? (assoc :wall-ms (:uptime-ms m) :cpu-s (:proc-cpu-s m)
@@ -235,8 +244,13 @@
 
 (def launch-profiles
   "Child JVM launch profiles: name -> {:jvm-opts :cp-prefix :jar-only?
-   :aot-cache}. :aot-cache profiles each keep their own cache file (it is
-   tied to the JVM flags) and run jar-only (see child-cmd)."
+   :aot-cache :preload :train-mode}. :aot-cache profiles each keep their own
+   cache file (it is tied to the JVM flags and to what the recording run
+   loaded) and run jar-only (see child-cmd). :preload namespaces load before
+   the child mode (bench-root: the pre-COLDBOOT load path, where
+   desargues.bench.render required desargues.bench). :train-mode records a
+   missing cache with that child mode instead of the measured one (train: a
+   cache whose method profiles come from renders)."
   {"source"        {}
    "c1"            {:jvm-opts ["-XX:TieredStopAtLevel=1"]}
    "aot"           {:cp-prefix [pyaot-dir]}
@@ -247,7 +261,13 @@
    "devaot+c1"     {:cp-prefix [devaot-jar] :jvm-opts ["-XX:TieredStopAtLevel=1"]}
    "devaot+cds"    {:cp-prefix [devaot-jar] :jar-only? true :aot-cache "target/bench-devaot.aot"}
    "devaot+cds+c1" {:cp-prefix [devaot-jar] :jar-only? true :aot-cache "target/bench-devaot-c1.aot"
-                    :jvm-opts ["-XX:TieredStopAtLevel=1"]}})
+                    :jvm-opts ["-XX:TieredStopAtLevel=1"]}
+   "devaot+cds+bench-root" {:cp-prefix [devaot-jar] :jar-only? true
+                            :aot-cache "target/bench-devaot-benchroot.aot"
+                            :preload ['desargues.bench]}
+   "devaot+cds+train" {:cp-prefix [devaot-jar] :jar-only? true
+                       :aot-cache "target/bench-devaot-train.aot"
+                       :train-mode "warm:lean"}})
 
 (defn- require-pyaot! []
   (when-not (.exists (io/file pyaot-dir "desargues" "pyaot-stamp.edn"))
@@ -320,6 +340,23 @@
   [opts]
   (launch-arm "cold py-init whole process, devaot" "py" devaot-profiles true opts))
 
+(def coldboot-profiles
+  "The COLDBOOT comparison: the old render root (desargues.bench preloaded),
+   the slim root, and the slim root on a render-trained AOT cache."
+  ["devaot+cds+bench-root" "devaot+cds" "devaot+cds+train"])
+
+(defn coldboot-launch-arm
+  "Cold start to Manim imported (lean init!), whole child process, along
+   coldboot-profiles."
+  [opts]
+  (launch-arm "cold init! lean whole process, coldboot" "full:lean" coldboot-profiles true opts))
+
+(defn coldboot-first-arm
+  "The first reference-scene render after a cold lean init! (init! outside
+   the number), along coldboot-profiles."
+  [opts]
+  (launch-arm "first render after init!, coldboot" "render:lean" coldboot-profiles false opts))
+
 (defn native-display-arm
   "Frames-only warm render, both variants with the Zig path builder: Manim's
    per-VMobject display_vectorized (\"zig-path\", baseline) vs one Zig call
@@ -384,11 +421,10 @@ def _bench_timer_uninstall():
 def _bench_timer_take():
     v = _bench_begin[0]; _bench_begin[0] = 0; return v")))
         call    (fn [nm] ((requiring-resolve 'libpython-clj2.python/->jvm) ((get @timer nm))))
-        edited  (fn [k] (update-in (bench/layout-tree 16) [:children (inc (quot k 4)) :children (mod k 4) :children 0]
+        edited  (fn [k] (update-in (reference/layout-tree 16) [:children (inc (quot k 4)) :children (mod k 4) :children 0]
                                    (fn [_] (l-text (str "edited " k)))))
         render! (fn [b tree]
-                  (binding [desargues.scene/*backend* b]
-                    (let [install! (requiring-resolve 'desargues.manim.frames/install!)
+                  (with-bindings {(requiring-resolve 'desargues.scene/*backend*) b} (let [install! (requiring-resolve 'desargues.manim.frames/install!)
                           uninst!  (requiring-resolve 'desargues.manim.frames/uninstall!)
                           ->bytes  (requiring-resolve 'tech.v3.datatype/->byte-array)
                           md       (java.security.MessageDigest/getInstance "SHA-256")
@@ -414,7 +450,7 @@ def _bench_timer_take():
                      :setup (fn [_]
                               (set-cfg! "write_to_movie" false) (install svg) (install glyph)
                               (if patched? (install fadein) (remove fadein))
-                              (when (zero? @n) (render! @b (bench/layout-tree 16))))
+                              (when (zero? @n) (render! @b (reference/layout-tree 16))))
                      :run (fn [_] (render! @b (edited (mod (dec (swap! n inc)) 16))))
                      :teardown (fn [_] (remove fadein) (set-cfg! "write_to_movie" true))}))]
     (merge (warm-render-arm {})
@@ -442,6 +478,8 @@ def _bench_timer_take():
    "c1-warm"       c1-warm-arm
    "devaot-launch" devaot-launch-arm
    "devaot-pyinit" devaot-pyinit-arm
+   "coldboot-launch" coldboot-launch-arm
+   "coldboot-first"  coldboot-first-arm
    ;; Warm EDIT: the bench layout rendered once, then each sample changes one
    ;; cell (the same cell sequence for both variants) and renders frames-only
    ;; with svg-copy + glyph-cache, through a Manim backend without vs with a
@@ -456,11 +494,10 @@ def _bench_timer_take():
            backend (requiring-resolve 'desargues.scene.manim/manim-backend)
            lru     (requiring-resolve 'desargues.manim.mobject-cache/lru-cache)
            l-text  (requiring-resolve 'desargues.layout.core/text)
-           edited  (fn [k] (update-in (bench/layout-tree 16) [:children (inc (quot k 4)) :children (mod k 4) :children 0]
+           edited  (fn [k] (update-in (reference/layout-tree 16) [:children (inc (quot k 4)) :children (mod k 4) :children 0]
                                       (fn [_] (l-text (str "edited " k)))))
            render! (fn [b tree]
-                     (binding [desargues.scene/*backend* b]
-                       (let [install! (requiring-resolve 'desargues.manim.frames/install!)
+                     (with-bindings {(requiring-resolve 'desargues.scene/*backend*) b} (let [install! (requiring-resolve 'desargues.manim.frames/install!)
                              uninst!  (requiring-resolve 'desargues.manim.frames/uninstall!)
                              sink     ((requiring-resolve 'desargues.manim.frames/collecting-sink))
                              t0       (System/nanoTime)
@@ -475,7 +512,7 @@ def _bench_timer_take():
                        {:name nm
                         :setup (fn [_]
                                  (set-cfg! "write_to_movie" false) (install svg) (install glyph)
-                                 (when (zero? @n) (render! @b (bench/layout-tree 16))))
+                                 (when (zero? @n) (render! @b (reference/layout-tree 16))))
                         :run (fn [_] (render! @b (edited (mod (dec (swap! n inc)) 16))))
                         :teardown (fn [_] (set-cfg! "write_to_movie" true))}))]
        (merge (warm-render-arm {})
@@ -564,11 +601,12 @@ def _bench_timer_take():
   (loop [[a & more] args opts {:out "bench"}]
     (case a
       nil opts
-      "--child"  (recur (rest more) (assoc opts :child (first more)))
-      "--only"   (recur (rest more) (assoc opts :only (str/split (first more) #",")))
-      "--rounds" (recur (rest more) (assoc opts :rounds (parse-long (first more))))
-      "--warmup" (recur (rest more) (assoc opts :warmup (parse-long (first more))))
-      "--out"    (recur (rest more) (assoc opts :out (first more)))
+      "--child"   (recur (rest more) (assoc opts :child (first more)))
+      "--preload" (recur (rest more) (update opts :preload (fnil conj []) (first more)))
+      "--only"    (recur (rest more) (assoc opts :only (str/split (first more) #",")))
+      "--rounds"  (recur (rest more) (assoc opts :rounds (parse-long (first more))))
+      "--warmup"  (recur (rest more) (assoc opts :warmup (parse-long (first more))))
+      "--out"     (recur (rest more) (assoc opts :out (first more)))
       (recur more opts))))
 
 (defn print-summary [{:keys [arms]}]
@@ -585,9 +623,10 @@ def _bench_timer_take():
                      :load1 (some->> (:median load1) (format "%.1f"))})))
 
 (defn -main [& args]
-  (let [{:keys [child out] :as opts} (parse-args args)]
+  (let [{:keys [child preload out] :as opts} (parse-args args)]
     (if child
-      (child! child)
+      (do (run! (comp require symbol) preload)
+          (child! child))
       (if-not (manim-env?)
         (do (say "no Manim env resolved (see clojure -M:doctor); nothing to run")
             (shutdown-agents) (System/exit 0))
