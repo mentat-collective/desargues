@@ -149,7 +149,7 @@
         opts   {:dt 0.01 :duration 8.0}
         ks     (kernel-solver)
         tight  (tight-tsit5)
-        cold   (fn [f] #(do (reset! @#'lag/compiled-cache {}) (f)))]
+        cold   (fn [f] #(do (reset! @#'desargues.physics.lagrangian/compiled-cache {}) (f)))]
     (cond-> [(row :lagrangian "compile planar" (smp/sample (cold #(lag/double-pendulum {})) slow))
              (row :lagrangian "compile spherical" (smp/sample (cold #(lag/spherical-double-pendulum spherical-opts)) slow))
              (row :lagrangian "construct planar (cached)" (smp/sample #(lag/double-pendulum {})))

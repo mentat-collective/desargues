@@ -209,24 +209,28 @@
 (defn -main
   "bb bench: run, write latest.edn and the charts. --check: also compare
    against baseline.edn and exit 1 on a regression. --save-baseline: write the
-   run as the new baseline.edn. --charts-only: reuse latest.edn."
+   run as the new baseline.edn. --charts-only: reuse latest.edn.
+   `render ARGS...` runs the interleaved render A/B arms instead
+   (desargues.bench.render -> bench/results/render.edn)."
   [& args]
-  (let [{:keys [out manim? charts-only? only check? save-baseline? tolerance]} (parse-args args)
-        results-file  (io/file out "results" "latest.edn")
-        baseline-file (io/file out "results" "baseline.edn")
-        rep (if charts-only?
-              (edn/read-string (slurp results-file))
-              (doto (report (cond-> {:manim? manim?} only (assoc :only only)))
-                (->> (write-edn! results-file))))
-        verdict (when check?
-                  (check/compare-reports (edn/read-string (slurp baseline-file)) rep
-                                         (cond-> {} tolerance (assoc :tolerance tolerance))))]
-    (print-table rep)
-    (say "results: " results-file)
-    (say "charts:  doc/bench/" (chart/write-all! rep "doc/bench"))
-    (when save-baseline?
-      (write-edn! baseline-file rep)
-      (say "baseline: " baseline-file))
-    (when verdict (run! say (check/summary-lines verdict)))
-    (shutdown-agents)
-    (System/exit (if (and verdict (not (:ok? verdict))) 1 0))))
+  (if (= "render" (first args))
+    (apply (requiring-resolve 'desargues.bench.render/-main) (rest args))
+    (let [{:keys [out manim? charts-only? only check? save-baseline? tolerance]} (parse-args args)
+          results-file  (io/file out "results" "latest.edn")
+          baseline-file (io/file out "results" "baseline.edn")
+          rep (if charts-only?
+                (edn/read-string (slurp results-file))
+                (doto (report (cond-> {:manim? manim?} only (assoc :only only)))
+                  (->> (write-edn! results-file))))
+          verdict (when check?
+                    (check/compare-reports (edn/read-string (slurp baseline-file)) rep
+                                           (cond-> {} tolerance (assoc :tolerance tolerance))))]
+      (print-table rep)
+      (say "results: " results-file)
+      (say "charts:  doc/bench/" (chart/write-all! rep "doc/bench"))
+      (when save-baseline?
+        (write-edn! baseline-file rep)
+        (say "baseline: " baseline-file))
+      (when verdict (run! say (check/summary-lines verdict)))
+      (shutdown-agents)
+      (System/exit (if (and verdict (not (:ok? verdict))) 1 0)))))
