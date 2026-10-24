@@ -34,11 +34,15 @@ from manim.utils import file_ops as _fo
 
 _LE = _sys.byteorder == 'little'
 _SR = {}
+_RO = [None, None]
 
 def _bg_paint(cam, bg):
     memo = cam.__dict__.get('_desargues_bg_memo')
     if memo is not None and memo[0] is bg:
         return memo[1]
+    if _RO[0] is bg:
+        cam.__dict__['_desargues_bg_memo'] = (bg, _RO[1])
+        return _RO[1]
     rgb = None
     if (_LE and bg.dtype == _np.uint8 and bg.ndim == 3 and bg.shape[-1] == 4
             and bg.size and bg[0, 0, 3] == 255):
@@ -46,6 +50,8 @@ def _bg_paint(cam, bg):
         if (bg == p).all():
             rgb = (p[2] / 255.0, p[1] / 255.0, p[0] / 255.0)
     cam.__dict__['_desargues_bg_memo'] = (bg, rgb)
+    if not bg.flags.writeable:
+        _RO[0], _RO[1] = bg, rgb
     return rgb
 
 def _reset(self):

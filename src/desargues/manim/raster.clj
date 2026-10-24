@@ -160,9 +160,12 @@
    cairo's native one gets frames with no conversion), :surface-reuse?
    (default false: the surface-reuse patch plus the :address crossing, so
    the Camera buffer is painted, handed over and viewed with no numpy copy
-   and no per-frame wrap), :on-done (fn [report]).
+   and no per-frame wrap), :patches (more IManimPatch values installed for
+   this render, after the ones the options above choose), :on-done
+   (fn [report]).
    Returns {:presenter :sink :done (promise of the report)}."
   [host scene {:keys [quality frame-rate paced? native? surface-reuse? on-done]
+               extra-patches :patches
                :or {quality "low_quality" paced? true native? true}}]
   (let [slot (raster/slot)
         pres (raster/presenter host slot)
@@ -171,7 +174,9 @@
         layout (p/-raster-layout host)
         {:keys [src-layout patches]} (source-plan layout (native-layout (ByteOrder/nativeOrder))
                                                   mp/camera-bgra-pre native?)
-        patches (cond-> patches surface-reuse? (conj sr/surface-reuse))
+        patches (cond-> patches
+                  surface-reuse? (conj sr/surface-reuse)
+                  (seq extra-patches) (into extra-patches))
         crossing (if surface-reuse? :address :tensor)
         sink (raster-sink slot layout {:fps (when paced? fps) :src-layout src-layout})
         done (promise)
