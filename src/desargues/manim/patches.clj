@@ -431,11 +431,13 @@ def desargues_glyph_cache_clear():
 
 (defn install-path-builder!
   "Install the path builder named by config (or `nm`), uninstalling the
-   other path-builder patches. Returns {:path-builder nm :installed [ids]};
-   a native builder whose library is not built installs nothing."
+   patches of every other path builder. Returns {:path-builder nm :installed
+   [ids]}; a native builder whose library is not built installs nothing."
   ([] (install-path-builder! (:path-builder (config/manim-config))))
   ([nm]
-   (let [want (path-builder-patches nm)]
-     (uninstall! (native-cairo-path))
+   (let [want (path-builder-patches nm)
+         all  (into [] (comp (filter string?) (mapcat path-builder-patches))
+                    (keys (methods path-builder-patches)))]
+     (run! uninstall! (rseq all))
      {:path-builder nm
       :installed (into [] (comp (filter install!) (map pp/-patch-id)) want)})))

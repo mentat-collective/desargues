@@ -260,6 +260,33 @@
   (launch-arm "warm 3x render frames-only per launch" "warm:lean"
               ["source" "aot" "aot+c1"] false opts))
 
+(defn native-display-arm
+  "Frames-only warm render, both variants with the Zig path builder: Manim's
+   per-VMobject display_vectorized (\"zig-path\", baseline) vs one Zig call
+   per batch drawing path, fill and stroke
+   (desargues.manim.patches.native-display; `bb native:path` builds it)."
+  [opts]
+  (let [path    ((requiring-resolve 'desargues.manim.patches/native-cairo-path))
+        disp    ((requiring-resolve 'desargues.manim.patches.native-display/native-display))
+        install (requiring-resolve 'desargues.manim.patches/install!)
+        remove  (requiring-resolve 'desargues.manim.patches/uninstall!)
+        need!   (fn [p] (when-not (install p)
+                          (throw (ex-info "native library not built (bb native:path)"
+                                          {:lib-path (:lib-path p)}))))
+        variant (fn [nm display?]
+                  {:name nm
+                   :setup (fn [_]
+                            (set-cfg! "write_to_movie" false)
+                            (need! path)
+                            (if display? (need! disp) (remove disp)))
+                   :run (fn [_] (reference-scene! "BenchRef"))
+                   :teardown (fn [_] (remove disp) (remove path) (set-cfg! "write_to_movie" true))})]
+    (merge (warm-render-arm {})
+           {:id "zig display 480p15 frames-only"
+            :variants [(variant "zig-path" false) (variant "native-display" true)]
+            :rounds 5 :warmup 1}
+           opts)))
+
 (def arms
   "Arm name -> (fn [opts] arm). --only picks a subset. pyinit, init-launch,
    init-aot and c1-warm need `clojure -M:pyaot-build` first."
@@ -293,7 +320,8 @@
                          {:id "zig cairo path 480p15 frames-only"
                           :variants [(variant "manim" false) (variant "zig-path" true)]
                           :rounds 5 :warmup 1}
-                         opts)))})
+                         opts)))
+   "native-display" native-display-arm})
 
 (def default-arms ["warm" "init"])
 
