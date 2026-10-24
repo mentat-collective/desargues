@@ -104,6 +104,49 @@
             :rounds 5 :warmup 1}
            opts)))
 
+(defn- sunk-render!
+  "Render the reference scene frames-only with a CollectingSink installed;
+   the measurement plus :ttff-ms (run start to the first frame at the sink)
+   and :frames."
+  []
+  (let [install! (requiring-resolve 'desargues.manim.frames/install!)
+        uninst!  (requiring-resolve 'desargues.manim.frames/uninstall!)
+        sink     ((requiring-resolve 'desargues.manim.frames/collecting-sink))
+        collect  (requiring-resolve 'desargues.manim.frames/collected)
+        t0       (System/nanoTime)
+        m        (ab/measure (fn []
+                               (install! sink)
+                               (try (reference-scene! "BenchRef") (finally (uninst!)))))
+        {:keys [first-ns count]} (collect sink)]
+    {::ab/measured (-> (dissoc m :value)
+                       (assoc :frames count
+                              :ttff-ms (some-> first-ns (- t0) (/ 1e6))))}))
+
+(defn glyph-cache-arm
+  "Frames-only warm render with svg-path-shared-copy installed in both
+   variants, without vs with desargues.manim.patches/glyph-cache (Text and
+   MathTex builds reused across renders). Each sample also records the time
+   to the first frame at a CollectingSink (:ttff-ms)."
+  [opts]
+  (let [svg     @(requiring-resolve 'desargues.manim.patches/svg-path-shared-copy)
+        cache   ((requiring-resolve 'desargues.manim.patches/glyph-cache))
+        install (requiring-resolve 'desargues.manim.patches/install!)
+        remove  (requiring-resolve 'desargues.manim.patches/uninstall!)
+        variant (fn [nm cached?]
+                  {:name nm
+                   :setup (fn [_]
+                            (set-cfg! "write_to_movie" false)
+                            (install svg)
+                            (if cached? (install cache) (remove cache)))
+                   :run (fn [_] (sunk-render!))
+                   :teardown (fn [_] (set-cfg! "write_to_movie" true))})]
+    (merge (warm-render-arm {})
+           {:id "glyph cache 480p15 frames-only"
+            :variants [(variant "svg-copy" false) (variant "svg-copy+glyph-cache" true)]
+            :teardown (fn [] (remove cache) (remove svg))
+            :rounds 7 :warmup 1}
+           opts)))
+
 (defn- child-cmd
   "argv that runs this namespace's child mode in a fresh JVM on our classpath."
   [mode]
@@ -152,10 +195,11 @@
 
 (def arms
   "Arm name -> (fn [opts] arm). --only picks a subset."
-  {"warm"     warm-render-arm
-   "init"     cold-init-arm
-   "first"    first-render-arm
-   "svg-copy" svg-copy-arm})
+  {"warm"        warm-render-arm
+   "init"        cold-init-arm
+   "first"       first-render-arm
+   "svg-copy"    svg-copy-arm
+   "glyph-cache" glyph-cache-arm})
 
 (def default-arms ["warm" "init"])
 
