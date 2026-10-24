@@ -1,7 +1,8 @@
 {:paths ["src"]
  :tasks
  {:requires ([babashka.fs :as fs]
-             [babashka.process :refer [shell]])
+             [babashka.process :refer [shell]]
+             [clojure.string :as str])
 
   doctor        {:doc "Check the JVM, the Manim env, LaTeX and ffmpeg"
                  :task (shell "clojure -M:doctor")}
@@ -30,6 +31,24 @@
                  :task (apply shell "clojure -M -m desargues.lesson.export build" *command-line-args*)}
   lesson:verify {:doc "Rebuild a lesson bundle dir in a temp dir and compare sha256s with its manifest; exits 1 on a mismatch. Args: <dir>"
                  :task (apply shell "clojure -M -m desargues.lesson.export verify" *command-line-args*)}
+  devaot:build  {:doc "Prebuild the dev classpath's libraries -> target/devaot.jar (+ target/pyaot). Rebuild after a dependency change"
+                 :task (do (shell "clojure -M:dev:bench:devaot-build")
+                           (shell "clojure -M:pyaot-build"))}
+  devaot:run    {:doc "Run on target/devaot.jar with the JDK AOT cache target/devaot.aot (the first run records it at exit, later runs use it). Args: [main-ns args...], default a REPL. Aliases: DEVAOT_ALIASES (default :dev:devaot)"
+                 :task (let [aliases (or (System/getenv "DEVAOT_ALIASES") ":dev:devaot")
+                             cp      (str/trim (:out (shell {:out :string} (str "clojure -Spath -M" aliases))))
+                             entries (remove str/blank? (str/split cp (re-pattern ":")))
+                             jar?    (fn [e] (str/ends-with? e ".jar"))
+                             cache   "target/devaot.aot"
+                             [main & args] (or (seq *command-line-args*) ["clojure.main"])]
+                         (when-not (fs/exists? "target/devaot.jar")
+                           (throw (ex-info "target/devaot.jar missing: run bb devaot:build" {})))
+                         (apply shell "java"
+                                (str (if (fs/exists? cache) "-XX:AOTCache=" "-XX:AOTCacheOutput=") cache)
+                                "-Xlog:aot=off" "-Xlog:cds=off" "--enable-native-access=ALL-UNNAMED"
+                                "-cp" (str/join ":" (filter jar? entries))
+                                (str "-Ddesargues.devaot.dirs=" (str/join ":" (remove jar? entries)))
+                                "clojure.main" "-m" "desargues.devaot.launch" main args))}
   serve         {:doc "Serve dist/site on http://localhost:8087"
                  :task (shell "python3 -m http.server 8087 --directory dist/site")}
   native:path {:doc "Build the Zig Cairo path builder -> native/zigpath/zig-out/lib/libdesargues_path.so (needs zig 0.16 and the conda Manim env: DESARGUES_CONDA_PREFIX or CONDA_PREFIX). Opt in with DESARGUES_PATH_BUILDER=native"

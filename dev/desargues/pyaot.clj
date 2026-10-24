@@ -41,6 +41,17 @@
   (vec (sort (filter #(re-find #"libpython-clj|dtype-next|ham-fisted|insn" %)
                      (str/split cp #":")))))
 
+(defn write-library-class!
+  "Generate the libpython JNA binding class (desargues.manim.core/
+   prebuilt-library-class) into classes dir `out`; returns its name. Loads
+   desargues.manim.core and libpython-clj2.python.ffi if they are not loaded."
+  [out]
+  (let [cls  @(requiring-resolve 'desargues.manim.core/prebuilt-library-class)
+        gen! (requiring-resolve 'libpython-clj2.python.ffi/define-library!)]
+    (binding [*compile-path* out *compile-files* true]
+      (gen! (symbol cls)))
+    cls))
+
 (defn build!
   "Compile `namespaces` and the libpython binding class into `out`. `out` must
    be on the classpath (Clojure's compile requires it)."
@@ -52,13 +63,10 @@
     (.mkdirs (io/file out))
     (binding [*compile-path* out *compile-files* true]
       (doseq [n namespaces] (compile n)))
-    (let [cls  @(requiring-resolve 'desargues.manim.core/prebuilt-library-class)
-          gen! (requiring-resolve 'libpython-clj2.python.ffi/define-library!)]
-      (binding [*compile-path* out *compile-files* true]
-        (gen! (symbol cls)))
-      (let [stamp (io/file out "desargues" "pyaot-stamp.edn")]
-        (io/make-parents stamp)
-        (spit stamp (pr-str {:library-class cls :namespaces namespaces :deps (dep-stamp cp)})))
+    (let [cls (write-library-class! out)
+          stamp (io/file out "desargues" "pyaot-stamp.edn")]
+      (io/make-parents stamp)
+      (spit stamp (pr-str {:library-class cls :namespaces namespaces :deps (dep-stamp cp)}))
       {:out out :library-class cls})))
 
 (defn -main [& [out]]

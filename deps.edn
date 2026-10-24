@@ -140,4 +140,16 @@
   :pyaot {:extra-paths ["target/pyaot"]}
   :pyaot-build {:extra-paths ["dev" "target/pyaot"]
                 :main-opts ["-m" "desargues.pyaot"]}
-  :c1 {:jvm-opts ["-XX:TieredStopAtLevel=1"]}}}
+  :c1 {:jvm-opts ["-XX:TieredStopAtLevel=1"]}
+  ;; Fast cold start of the whole dev classpath (opt-in, desargues.devaot):
+  ;; the library closure (emmy, sci, malli, typed.clj, libpython-clj, ...)
+  ;; AOT-compiled into target/devaot.jar; desargues' own namespaces stay
+  ;; source so REPL reloads behave as before. Includes the :pyaot classes.
+  ;;   clojure -M:dev:bench:devaot-build   # once (and after a dependency change)
+  ;;   clojure -M:dev:devaot               # REPL on the prebuilt classes
+  ;;   bb devaot:run [main args]           # plus the JDK AOT cache (class
+  ;;                                       # archive; needs a jar-only -cp, so it
+  ;;                                       # goes through desargues.devaot.launch)
+  :devaot {:extra-paths ["target/devaot.jar"]}
+  :devaot-build {:extra-paths ["target/devaot"]
+                 :main-opts ["-m" "desargues.devaot"]}}}
