@@ -109,6 +109,25 @@
                 (live "paced-convert" {:paced? true :native? false})
                 (live "paced-native" {:paced? true :native? true})]}))
 
+(defn surface-reuse-arm
+  "DESARGUES-PERF-LIVE-4: the current live path (native BGRA, as-tensor
+   crossing, Manim's reset and frame copy) vs `surface-reuse` (the
+   surface-reuse patch: one cairo paint() background reset, the Camera
+   buffer handed over uncopied, one long-lived JVM view of it), unpaced,
+   interleaved ABAB/BABA. :quality defaults to \"low_quality\" (480p15).
+   Run with (ab/run-arm (surface-reuse-arm M host extras {})); per-run
+   reports land in `extras`."
+  [M host extras {:keys [rounds warmup quality] :or {rounds 15 warmup 1 quality "low_quality"}}]
+  (let [i (atom 0)
+        live (fn [nm opts]
+               {:name nm
+                :run (fn [_] (let [r (live-run! M host (swap! i inc) (assoc opts :quality quality))]
+                               (swap! extras update nm (fnil conj []) r)))})]
+    {:id (str "live current vs surface-reuse " quality " unpaced")
+     :rounds rounds :warmup warmup :alternate? true
+     :variants [(live "current" {:paced? false :native? true})
+                (live "surface-reuse" {:paced? false :native? true :surface-reuse? true})]}))
+
 (defn drops
   "Frames dropped per second of playback, paced, at each fps, `n` runs each.
    Per-run FX upload and conversion medians/max are in ms."
