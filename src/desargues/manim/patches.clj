@@ -161,9 +161,12 @@ def desargues_native_path_installed():
 (defn native-path-lib
   "Path of the native path library: DESARGUES_NATIVE_PATH_LIB, else
    <project-root>/native/zigpath/zig-out/lib/libdesargues_path.so. nil when
-   neither resolves."
-  ([] (let [cfg (config/manim-config)]
-        (native-path-lib (:native-path-lib cfg) (:project-root cfg))))
+   neither resolves. Needs no Manim env: without a valid manim config it reads
+   DESARGUES_NATIVE_PATH_LIB and takes the working directory as project root."
+  ([] (let [cfg (try (config/manim-config)
+                     (catch clojure.lang.ExceptionInfo _ nil))]
+        (native-path-lib (or (:native-path-lib cfg) (System/getenv "DESARGUES_NATIVE_PATH_LIB"))
+                         (or (:project-root cfg) (System/getProperty "user.dir")))))
   ([explicit project-root]
    (cond
      (not (str/blank? explicit)) explicit
