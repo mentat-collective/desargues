@@ -271,7 +271,29 @@
    "pyinit"      pyinit-arm
    "init-launch" init-launch-arm
    "init-aot"    init-aot-arm
-   "c1-warm"     c1-warm-arm})
+   "c1-warm"     c1-warm-arm
+   ;; Frames-only warm render, Manim's Python path building vs the Zig one
+   ;; (desargues.manim.patches/native-cairo-path; `bb native:path` builds it).
+   "zig-path" (fn [opts]
+                (let [patch   ((requiring-resolve 'desargues.manim.patches/native-cairo-path))
+                      install (requiring-resolve 'desargues.manim.patches/install!)
+                      remove  (requiring-resolve 'desargues.manim.patches/uninstall!)
+                      variant (fn [nm native?]
+                                {:name nm
+                                 :setup (fn [_]
+                                          (set-cfg! "write_to_movie" false)
+                                          (if native?
+                                            (when-not (install patch)
+                                              (throw (ex-info "native path library not built (bb native:path)"
+                                                              {:lib-path (:lib-path patch)})))
+                                            (remove patch)))
+                                 :run (fn [_] (reference-scene! "BenchRef"))
+                                 :teardown (fn [_] (remove patch) (set-cfg! "write_to_movie" true))})]
+                  (merge (warm-render-arm {})
+                         {:id "zig cairo path 480p15 frames-only"
+                          :variants [(variant "manim" false) (variant "zig-path" true)]
+                          :rounds 5 :warmup 1}
+                         opts)))})
 
 (def default-arms ["warm" "init"])
 

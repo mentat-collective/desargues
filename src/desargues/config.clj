@@ -99,7 +99,17 @@
   ;; and code-highlight deps deferred to first use) or "eager" (plain import).
   :import-mode   (env "DESARGUES_IMPORT_MODE"
                       :default "lean"
-                      :type :string))
+                      :type :string)
+  ;; desargues.manim.patches/path-builder: "manim" (Camera.set_cairo_context_path
+  ;; as shipped) or "native" (one Zig call per VMobject; build it with
+  ;; `bb native:path`, falls back to "manim" when the library is absent).
+  :path-builder  (env "DESARGUES_PATH_BUILDER"
+                      :default "manim"
+                      :type :string)
+  ;; The native path library; "" = <project-root>/native/zigpath/zig-out/lib.
+  :native-path-lib (env "DESARGUES_NATIVE_PATH_LIB"
+                        :default ""
+                        :type :string))
 
 (defn manim-config
   "Resolve the manim configuration to a typed map, throwing on invalid config."

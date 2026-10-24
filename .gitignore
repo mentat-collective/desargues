@@ -27,3 +27,7 @@ __pycache__/*
 # browser host: npm deps of the headless check, compiled bundle
 node_modules/
 /browser/public/js/
+
+# native/zigpath: Zig build output (bb native:path)
+zig-out/
+.zig-cache/
