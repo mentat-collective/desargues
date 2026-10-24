@@ -21,7 +21,9 @@
             [desargues.manim.encoder :as encoder]
             [desargues.manim.patches :as patches]
             [desargues.manim.patches.native-display]
-            [desargues.manim.mobject-cache :as mcache]))
+            [desargues.manim.mobject-cache :as mcache]
+            [desargues.perf.profile :as perf]
+            [desargues.config :as config]))
 
 ;; ============================================================================
 ;; Keyword resolution — the semantic layer that keeps Python out of consumers
@@ -91,19 +93,31 @@
 ;; ManimBackend — implements every scene protocol by delegating to manim.*
 ;; ============================================================================
 
-(defrecord ManimBackend [mobject-cache]
+(defn- install-perf!
+  "Install perf profile `profile`, then the path builder when
+   DESARGUES_PATH_BUILDER names one explicitly (it wins over the profile)."
+  [profile]
+  (perf/install! profile)
+  (let [pb (:path-builder (config/manim-config))]
+    (when-not (contains? #{nil "" "manim"} (some-> pb str/trim str/lower-case))
+      (patches/install-path-builder! pb))))
+
+(defrecord ManimBackend [mobject-cache perf-profile]
   p/IStudio
   (-init! [b]
     (man-quick/init!)
     ;; DESARGUES_ENCODER: the encoder profile this backend's renders use
     (encoder/install!)
-    ;; DESARGUES_PATH_BUILDER: "manim" (default) or "native" (Zig path builder)
-    (patches/install-path-builder!)
+    ;; DESARGUES_PERF_PROFILE: "fast" (default) or "stock"
+    (install-perf! perf-profile)
     b)
-  (-configure! [_ {:keys [width height fps quality encoder path-builder]}]
+  (-configure! [_ {:keys [width height fps quality encoder path-builder]
+                   override :perf-profile}]
     (let [cfg (man-core/get-attr (man-core/manim) "config")]
       ;; :encoder overrides DESARGUES_ENCODER for the session (:preview, "final" or a profile)
       (when encoder (encoder/install! encoder))
+      ;; :perf-profile overrides DESARGUES_PERF_PROFILE (:fast | :stock)
+      (when override (perf/install! override))
       ;; :path-builder overrides DESARGUES_PATH_BUILDER ("manim" | "native")
       (when path-builder (patches/install-path-builder! path-builder))
       (when width   (man-core/set-attr! cfg "pixel_width"  width))
@@ -179,9 +193,12 @@
 (defn manim-backend
   "Construct a Manim scene backend. Cheap — no Python is touched until the first
    render/constant lookup, so this is safe to build eagerly. opts:
-   :mobject-cache, the IMobjectCache render-layout! reuses built mobjects
-   through across renders (desargues.manim.mobject-cache/lru-cache); default
-   a NullCache, which builds every mobject anew."
+   :perf-profile, a desargues.perf.profile name or value (default
+   DESARGUES_PERF_PROFILE, \"fast\" when unset), whose patches -init!
+   installs; :mobject-cache, the IMobjectCache render-layout! reuses built
+   mobjects through across renders (desargues.manim.mobject-cache/lru-cache);
+   default the profile's (an LRU under :fast, a NullCache under :stock)."
   ([] (manim-backend {}))
-  ([{:keys [mobject-cache]}]
-   (->ManimBackend (or mobject-cache (mcache/null-cache)))))
+  ([{:keys [mobject-cache perf-profile]}]
+   (let [prof (perf/->profile perf-profile)]
+     (->ManimBackend (or mobject-cache (perf/mobject-cache prof)) prof))))
