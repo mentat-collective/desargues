@@ -320,6 +320,113 @@
   [opts]
   (launch-arm "cold py-init whole process, devaot" "py" devaot-profiles true opts))
 
+(defn native-display-arm
+  "Frames-only warm render, both variants with the Zig path builder: Manim's
+   per-VMobject display_vectorized (\"zig-path\", baseline) vs one Zig call
+   per batch drawing path, fill and stroke
+   (desargues.manim.patches.native-display; `bb native:path` builds it)."
+  [opts]
+  (let [path    ((requiring-resolve 'desargues.manim.patches/native-cairo-path))
+        disp    ((requiring-resolve 'desargues.manim.patches.native-display/native-display))
+        install (requiring-resolve 'desargues.manim.patches/install!)
+        remove  (requiring-resolve 'desargues.manim.patches/uninstall!)
+        need!   (fn [p] (when-not (install p)
+                          (throw (ex-info "native library not built (bb native:path)"
+                                          {:lib-path (:lib-path p)}))))
+        variant (fn [nm display?]
+                  {:name nm
+                   :setup (fn [_]
+                            (set-cfg! "write_to_movie" false)
+                            (need! path)
+                            (if display? (need! disp) (remove disp)))
+                   :run (fn [_] (reference-scene! "BenchRef"))
+                   :teardown (fn [_] (remove disp) (remove path) (set-cfg! "write_to_movie" true))})]
+    (merge (warm-render-arm {})
+           {:id "zig display 480p15 frames-only"
+            :variants [(variant "zig-path" false) (variant "native-display" true)]
+            :rounds 5 :warmup 1}
+           opts)))
+
+(defn fadein-setup-arm
+  "Warm EDIT with the mobject cache on in both variants: the bench layout
+   rendered once, then each sample changes one cell (the same cell sequence
+   for both) and renders frames-only with svg-copy + glyph-cache through a
+   Manim backend with a desargues.manim.mobject-cache LRU (one per variant),
+   stock FadeIn vs desargues.manim.patches.fadein-setup. Each sample records
+   :ttff-ms (edit to first frame), :begin-ms (Scene.begin_animations, i.e.
+   FadeIn.begin) and :frames-sha256 over every frame, which must match the
+   other variant's for the same edit."
+  [opts]
+  (let [svg     @(requiring-resolve 'desargues.manim.patches/svg-path-shared-copy)
+        glyph   ((requiring-resolve 'desargues.manim.patches/glyph-cache))
+        fadein  ((requiring-resolve 'desargues.manim.patches.fadein-setup/fadein-setup))
+        install (requiring-resolve 'desargues.manim.patches/install!)
+        remove  (requiring-resolve 'desargues.manim.patches/uninstall!)
+        backend (requiring-resolve 'desargues.scene.manim/manim-backend)
+        lru     (requiring-resolve 'desargues.manim.mobject-cache/lru-cache)
+        l-text  (requiring-resolve 'desargues.layout.core/text)
+        py-run  (requiring-resolve 'libpython-clj2.python/run-simple-string)
+        timer   (delay (:globals (py-run "import time as _t
+from manim.scene.scene import Scene as _S
+_bench_begin = [0]
+def _bench_timer_install():
+    if '_bench_orig_begin' in _S.__dict__: return
+    _S._bench_orig_begin = _S.begin_animations
+    def begin_animations(self):
+        t0 = _t.perf_counter_ns()
+        try: return _S._bench_orig_begin(self)
+        finally: _bench_begin[0] += _t.perf_counter_ns() - t0
+    _S.begin_animations = begin_animations
+def _bench_timer_uninstall():
+    if '_bench_orig_begin' in _S.__dict__:
+        _S.begin_animations = _S._bench_orig_begin
+        del _S._bench_orig_begin
+def _bench_timer_take():
+    v = _bench_begin[0]; _bench_begin[0] = 0; return v")))
+        call    (fn [nm] ((requiring-resolve 'libpython-clj2.python/->jvm) ((get @timer nm))))
+        edited  (fn [k] (update-in (bench/layout-tree 16) [:children (inc (quot k 4)) :children (mod k 4) :children 0]
+                                   (fn [_] (l-text (str "edited " k)))))
+        render! (fn [b tree]
+                  (binding [desargues.scene/*backend* b]
+                    (let [install! (requiring-resolve 'desargues.manim.frames/install!)
+                          uninst!  (requiring-resolve 'desargues.manim.frames/uninstall!)
+                          ->bytes  (requiring-resolve 'tech.v3.datatype/->byte-array)
+                          md       (java.security.MessageDigest/getInstance "SHA-256")
+                          state    (atom {:count 0 :first-ns nil})
+                          sink     (fn [rgba _ _ _]
+                                     (swap! state (fn [s] (-> (update s :count inc)
+                                                              (update :first-ns #(or % (System/nanoTime))))))
+                                     (.update md ^bytes (->bytes rgba)))
+                          _        (call "_bench_timer_take")
+                          t0       (System/nanoTime)
+                          m        (ab/measure #(do (install! sink)
+                                                    (try ((requiring-resolve 'desargues.scene/render-layout!) "BenchFadeIn" tree :hold 1)
+                                                         (finally (uninst!)))))
+                          {:keys [first-ns count]} @state]
+                      {::ab/measured (-> (dissoc m :value)
+                                         (assoc :frames count
+                                                :ttff-ms (some-> first-ns (- t0) (/ 1e6))
+                                                :begin-ms (/ (call "_bench_timer_take") 1e6)
+                                                :frames-sha256 (apply str (map #(format "%02x" %) (.digest md)))))})))
+        variant (fn [nm patched?]
+                  (let [b (delay (backend {:mobject-cache (lru)})) n (atom 0)]
+                    {:name nm
+                     :setup (fn [_]
+                              (set-cfg! "write_to_movie" false) (install svg) (install glyph)
+                              (if patched? (install fadein) (remove fadein))
+                              (when (zero? @n) (render! @b (bench/layout-tree 16))))
+                     :run (fn [_] (render! @b (edited (mod (dec (swap! n inc)) 16))))
+                     :teardown (fn [_] (remove fadein) (set-cfg! "write_to_movie" true))}))]
+    (merge (warm-render-arm {})
+           {:id "fadein setup, edit one cell, mobject cache 480p15 frames-only"
+            :setup (fn []
+                     ((:setup (warm-render-arm {})))
+                     (call "_bench_timer_install"))
+            :variants [(variant "stock-fadein" false) (variant "fadein-setup" true)]
+            :teardown (fn [] (remove fadein) (remove glyph) (remove svg) (call "_bench_timer_uninstall"))
+            :rounds 16 :warmup 2}
+           opts)))
+
 (def arms
   "Arm name -> (fn [opts] arm). --only picks a subset. pyinit, init-launch,
    init-aot and c1-warm need `clojure -M:pyaot-build` first; c1-warm and the
@@ -335,6 +442,48 @@
    "c1-warm"       c1-warm-arm
    "devaot-launch" devaot-launch-arm
    "devaot-pyinit" devaot-pyinit-arm
+   ;; Warm EDIT: the bench layout rendered once, then each sample changes one
+   ;; cell (the same cell sequence for both variants) and renders frames-only
+   ;; with svg-copy + glyph-cache, through a Manim backend without vs with a
+   ;; desargues.manim.mobject-cache LRU. :ttff-ms is edit-to-first-frame.
+   ;; desargues.manim.mobject-cache LRU. :ttff-ms is edit-to-first-frame.
+   "edit-one-cell"
+   (fn [opts]
+     (let [svg     @(requiring-resolve 'desargues.manim.patches/svg-path-shared-copy)
+           glyph   ((requiring-resolve 'desargues.manim.patches/glyph-cache))
+           install (requiring-resolve 'desargues.manim.patches/install!)
+           remove  (requiring-resolve 'desargues.manim.patches/uninstall!)
+           backend (requiring-resolve 'desargues.scene.manim/manim-backend)
+           lru     (requiring-resolve 'desargues.manim.mobject-cache/lru-cache)
+           l-text  (requiring-resolve 'desargues.layout.core/text)
+           edited  (fn [k] (update-in (bench/layout-tree 16) [:children (inc (quot k 4)) :children (mod k 4) :children 0]
+                                      (fn [_] (l-text (str "edited " k)))))
+           render! (fn [b tree]
+                     (binding [desargues.scene/*backend* b]
+                       (let [install! (requiring-resolve 'desargues.manim.frames/install!)
+                             uninst!  (requiring-resolve 'desargues.manim.frames/uninstall!)
+                             sink     ((requiring-resolve 'desargues.manim.frames/collecting-sink))
+                             t0       (System/nanoTime)
+                             m        (ab/measure #(do (install! sink)
+                                                       (try ((requiring-resolve 'desargues.scene/render-layout!) "BenchEdit" tree :hold 1)
+                                                            (finally (uninst!)))))
+                             {:keys [first-ns count]} ((requiring-resolve 'desargues.manim.frames/collected) sink)]
+                         {::ab/measured (-> (dissoc m :value)
+                                            (assoc :frames count :ttff-ms (some-> first-ns (- t0) (/ 1e6))))})))
+           variant (fn [nm make-cache]
+                     (let [b (delay (backend {:mobject-cache (make-cache)})) n (atom 0)]
+                       {:name nm
+                        :setup (fn [_]
+                                 (set-cfg! "write_to_movie" false) (install svg) (install glyph)
+                                 (when (zero? @n) (render! @b (bench/layout-tree 16))))
+                        :run (fn [_] (render! @b (edited (mod (dec (swap! n inc)) 16))))
+                        :teardown (fn [_] (set-cfg! "write_to_movie" true))}))]
+       (merge (warm-render-arm {})
+              {:id "edit one cell 480p15 frames-only"
+               :variants [(variant "rebuild" (constantly nil)) (variant "mobject-cache" #(lru))]
+               :teardown (fn [] (remove glyph) (remove svg))
+               :rounds 16 :warmup 2}
+              opts)))
    ;; Frames-only warm render, Manim's Python path building vs the Zig one
    ;; (desargues.manim.patches/native-cairo-path; `bb native:path` builds it).
    "zig-path" (fn [opts]
@@ -356,7 +505,9 @@
                          {:id "zig cairo path 480p15 frames-only"
                           :variants [(variant "manim" false) (variant "zig-path" true)]
                           :rounds 5 :warmup 1}
-                         opts)))})
+                         opts)))
+   "native-display" native-display-arm
+   "fadein-setup"   fadein-setup-arm})
 
 (def default-arms ["warm" "init"])
 

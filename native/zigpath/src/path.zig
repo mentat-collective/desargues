@@ -13,7 +13,7 @@
 
 const std = @import("std");
 
-const cairo_t = opaque {};
+pub const cairo_t = opaque {};
 
 extern "cairo" fn cairo_new_path(cr: *cairo_t) callconv(.c) void;
 extern "cairo" fn cairo_new_sub_path(cr: *cairo_t) callconv(.c) void;
@@ -55,7 +55,7 @@ fn emitSubpath(cr: *cairo_t, pts: [*]const f64, stride: usize, lo: usize, hi: us
 ///   points: n rows of `stride` doubles (C order; x, y first), read in place
 ///   atol:   the VMobject's tolerance_for_point_equality
 /// Returns cairo_status(cr) after the calls (0 = CAIRO_STATUS_SUCCESS).
-export fn desargues_build_path(cr: *cairo_t, points: [*]const f64, n: usize, stride: usize, atol: f64) c_int {
+pub export fn desargues_build_path(cr: *cairo_t, points: [*]const f64, n: usize, stride: usize, atol: f64) c_int {
     if (n == 0) return cairo_status(cr);
     cairo_new_path(cr);
     // Split indices: 0, every k in nppcc, 2*nppcc, ... < n whose anchor does

@@ -110,23 +110,34 @@
                 (live "paced-native" {:paced? true :native? true})]}))
 
 (defn surface-reuse-arm
-  "DESARGUES-PERF-LIVE-4: the current live path (native BGRA, as-tensor
-   crossing, Manim's reset and frame copy) vs `surface-reuse` (the
-   surface-reuse patch: one cairo paint() background reset, the Camera
-   buffer handed over uncopied, one long-lived JVM view of it), unpaced,
-   interleaved ABAB/BABA. :quality defaults to \"low_quality\" (480p15).
-   Run with (ab/run-arm (surface-reuse-arm M host extras {})); per-run
-   reports land in `extras`."
-  [M host extras {:keys [rounds warmup quality] :or {rounds 15 warmup 1 quality "low_quality"}}]
+  "DESARGUES-PERF-LIVE-4/5: the live path with the surface-reuse patch (one
+   cairo paint() background reset, the Camera buffer handed over uncopied,
+   one long-lived JVM view of it), unpaced, interleaved ABAB/BABA.
+   Variants: \"current\" (native BGRA, as-tensor crossing, Manim's reset and
+   frame copy), \"surface-reuse\", \"+native-display\" (plus the Zig batch
+   drawer, DESARGUES_PATH_BUILDER=native-display, when built) and
+   \"+bg-cache\" (plus background-cache: each new Scene's Camera reuses the
+   background array instead of rebuilding it). :quality defaults to
+   \"low_quality\" (480p15). :variants narrows to the named ones. Run with
+   (ab/run-arm (surface-reuse-arm M host extras {})); per-run reports land
+   in `extras`."
+  [M host extras {:keys [rounds warmup quality variants]
+                  :or {rounds 15 warmup 1 quality "low_quality"}}]
   (let [i (atom 0)
+        nd ((requiring-resolve 'desargues.manim.patches/path-builder-patches) "native-display")
+        bc ((requiring-resolve 'desargues.manim.patches.background-cache/background-cache))
         live (fn [nm opts]
                {:name nm
                 :run (fn [_] (let [r (live-run! M host (swap! i inc) (assoc opts :quality quality))]
-                               (swap! extras update nm (fnil conj []) r)))})]
+                               (swap! extras update nm (fnil conj []) r)))})
+        sr {:paced? false :native? true :surface-reuse? true}
+        all [(live "current" {:paced? false :native? true})
+             (live "surface-reuse" sr)
+             (live "+native-display" (assoc sr :patches nd))
+             (live "+bg-cache" (assoc sr :patches (conj nd bc)))]]
     {:id (str "live current vs surface-reuse " quality " unpaced")
      :rounds rounds :warmup warmup :alternate? true
-     :variants [(live "current" {:paced? false :native? true})
-                (live "surface-reuse" {:paced? false :native? true :surface-reuse? true})]}))
+     :variants (if variants (filterv (comp (set variants) :name) all) all)}))
 
 (defn drops
   "Frames dropped per second of playback, paced, at each fps, `n` runs each.
