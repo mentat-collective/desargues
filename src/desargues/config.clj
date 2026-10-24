@@ -42,6 +42,23 @@
   (when-let [p (conda-prefix)]
     (first-existing (map #(str p "/lib/python" % "/site-packages") python-abis))))
 
+(def ^:private preload-candidates
+  "Conda libs a manim extension NEEDs but cannot find from an embedding host:
+   pathops' RPATH ($ORIGIN/../../lib) misses the env lib dir."
+  ["libskia.so"])
+
+(defn- conda-preload-libs
+  "Colon-separated absolute paths of the preload candidates present in the
+   conda lib dir; \"\" when none (an empty field is valid config)."
+  []
+  (or (when-let [p (conda-prefix)]
+        (->> preload-candidates
+             (map #(str p "/lib/" %))
+             (filter #(.exists (io/file %)))
+             seq
+             (str/join ":")))
+      ""))
+
 (defn- detect-project-root
   "Repo root, derived from where this namespace was loaded from
    (<root>/src/desargues/config.clj). Resolves under a source checkout and
@@ -69,6 +86,9 @@
                       :type :string)
   :quality       (env "DESARGUES_QUALITY"
                       :default "medium_quality"
+                      :type :string)
+  :preload-libs  (env "DESARGUES_MANIM_PRELOAD"
+                      :default (conda-preload-libs)
                       :type :string))
 
 (defn manim-config
