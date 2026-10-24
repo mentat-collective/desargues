@@ -110,6 +110,8 @@ def desargues_ps_compare(src, cp):
                                          (fn [t _ _ _] (swap! out conj (digest (dt/->byte-array t))))))
                      @out))
           p      (ps/play-setup)
+          ;; an earlier test may have left a profile (and this patch) installed
+          _      (mp/uninstall! p)
           stock  (frames [])
           before (ps/stats)
           lean   (frames [p])
