@@ -19,7 +19,8 @@
             [desargues.domain.protocols :as dom]
             [desargues.manim.paths :as man-path]
             [desargues.manim.encoder :as encoder]
-            [desargues.manim.patches :as patches]))
+            [desargues.manim.patches :as patches]
+            [desargues.manim.mobject-cache :as mcache]))
 
 ;; ============================================================================
 ;; Keyword resolution — the semantic layer that keeps Python out of consumers
@@ -89,7 +90,7 @@
 ;; ManimBackend — implements every scene protocol by delegating to manim.*
 ;; ============================================================================
 
-(defrecord ManimBackend []
+(defrecord ManimBackend [mobject-cache]
   p/IStudio
   (-init! [b]
     (man-quick/init!)
@@ -167,7 +168,7 @@
     (let [cfg (man-core/get-attr (man-core/manim) "config")]
       (man-core/set-attr! cfg "output_file" ""))
     (let [construct (fn [self]
-                      (let [L    (layout/realize tree)
+                      (let [L    (layout/realize tree {:mobject-cache mobject-cache})
                             fade (dom/animate-creation L)] ; ManimAnimation wrapping FadeIn(vgroup)
                         (man-core/play! self (:py-obj fade))
                         (man-core/wait! self (or (:hold opts) 3))))
@@ -176,6 +177,10 @@
 
 (defn manim-backend
   "Construct a Manim scene backend. Cheap — no Python is touched until the first
-   render/constant lookup, so this is safe to build eagerly."
-  []
-  (->ManimBackend))
+   render/constant lookup, so this is safe to build eagerly. opts:
+   :mobject-cache, the IMobjectCache render-layout! reuses built mobjects
+   through across renders (desargues.manim.mobject-cache/lru-cache); default
+   a NullCache, which builds every mobject anew."
+  ([] (manim-backend {}))
+  ([{:keys [mobject-cache]}]
+   (->ManimBackend (or mobject-cache (mcache/null-cache)))))

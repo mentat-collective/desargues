@@ -272,6 +272,47 @@
    "init-launch" init-launch-arm
    "init-aot"    init-aot-arm
    "c1-warm"     c1-warm-arm
+   ;; Warm EDIT: the bench layout rendered once, then each sample changes one
+   ;; cell (the same cell sequence for both variants) and renders frames-only
+   ;; with svg-copy + glyph-cache, through a Manim backend without vs with a
+   ;; desargues.manim.mobject-cache LRU. :ttff-ms is edit-to-first-frame.
+   "edit-one-cell"
+   (fn [opts]
+     (let [svg     @(requiring-resolve 'desargues.manim.patches/svg-path-shared-copy)
+           glyph   ((requiring-resolve 'desargues.manim.patches/glyph-cache))
+           install (requiring-resolve 'desargues.manim.patches/install!)
+           remove  (requiring-resolve 'desargues.manim.patches/uninstall!)
+           backend (requiring-resolve 'desargues.scene.manim/manim-backend)
+           lru     (requiring-resolve 'desargues.manim.mobject-cache/lru-cache)
+           l-text  (requiring-resolve 'desargues.layout.core/text)
+           edited  (fn [k] (update-in (bench/layout-tree 16) [:children (inc (quot k 4)) :children (mod k 4) :children 0]
+                                      (fn [_] (l-text (str "edited " k)))))
+           render! (fn [b tree]
+                     (binding [desargues.scene/*backend* b]
+                       (let [install! (requiring-resolve 'desargues.manim.frames/install!)
+                             uninst!  (requiring-resolve 'desargues.manim.frames/uninstall!)
+                             sink     ((requiring-resolve 'desargues.manim.frames/collecting-sink))
+                             t0       (System/nanoTime)
+                             m        (ab/measure #(do (install! sink)
+                                                       (try ((requiring-resolve 'desargues.scene/render-layout!) "BenchEdit" tree :hold 1)
+                                                            (finally (uninst!)))))
+                             {:keys [first-ns count]} ((requiring-resolve 'desargues.manim.frames/collected) sink)]
+                         {::ab/measured (-> (dissoc m :value)
+                                            (assoc :frames count :ttff-ms (some-> first-ns (- t0) (/ 1e6))))})))
+           variant (fn [nm make-cache]
+                     (let [b (delay (backend {:mobject-cache (make-cache)})) n (atom 0)]
+                       {:name nm
+                        :setup (fn [_]
+                                 (set-cfg! "write_to_movie" false) (install svg) (install glyph)
+                                 (when (zero? @n) (render! @b (bench/layout-tree 16))))
+                        :run (fn [_] (render! @b (edited (mod (dec (swap! n inc)) 16))))
+                        :teardown (fn [_] (set-cfg! "write_to_movie" true))}))]
+       (merge (warm-render-arm {})
+              {:id "edit one cell 480p15 frames-only"
+               :variants [(variant "rebuild" (constantly nil)) (variant "mobject-cache" #(lru))]
+               :teardown (fn [] (remove glyph) (remove svg))
+               :rounds 16 :warmup 2}
+              opts)))
    ;; Frames-only warm render, Manim's Python path building vs the Zig one
    ;; (desargues.manim.patches/native-cairo-path; `bb native:path` builds it).
    "zig-path" (fn [opts]
