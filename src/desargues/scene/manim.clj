@@ -18,7 +18,8 @@
             [desargues.layout.realize :as layout]
             [desargues.domain.protocols :as dom]
             [desargues.manim.paths :as man-path]
-            [desargues.manim.encoder :as encoder]))
+            [desargues.manim.encoder :as encoder]
+            [desargues.manim.patches :as patches]))
 
 ;; ============================================================================
 ;; Keyword resolution — the semantic layer that keeps Python out of consumers
@@ -94,11 +95,15 @@
     (man-quick/init!)
     ;; DESARGUES_ENCODER: the encoder profile this backend's renders use
     (encoder/install!)
+    ;; DESARGUES_PATH_BUILDER: "manim" (default) or "native" (Zig path builder)
+    (patches/install-path-builder!)
     b)
-  (-configure! [_ {:keys [width height fps quality encoder]}]
+  (-configure! [_ {:keys [width height fps quality encoder path-builder]}]
     (let [cfg (man-core/get-attr (man-core/manim) "config")]
       ;; :encoder overrides DESARGUES_ENCODER for the session (:preview, "final" or a profile)
       (when encoder (encoder/install! encoder))
+      ;; :path-builder overrides DESARGUES_PATH_BUILDER ("manim" | "native")
+      (when path-builder (patches/install-path-builder! path-builder))
       (when width   (man-core/set-attr! cfg "pixel_width"  width))
       (when height  (man-core/set-attr! cfg "pixel_height" height))
       (when fps     (man-core/set-attr! cfg "frame_rate"   fps))
