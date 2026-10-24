@@ -39,6 +39,22 @@
     "Paint 3D `frame` (its 3D shapes in space, its 2D shapes as an overlay),
      replacing what was shown. Same threading contract as -present!."))
 
+(defprotocol IRaster
+  "A surface that shows finished pixels (a frame rasterised elsewhere: a
+   Manim render, a video decode). Opt-in capability (ISP): a host without it
+   is untouched and simply cannot show raster content (LSP). The producer
+   converts to the host's layout on its own thread, so the host's UI thread
+   only uploads (desargues.manim.raster)."
+  (-raster-layout [surface]
+    "The pixel layout -present-raster! wants: :rgba (8-bit straight RGBA, a
+     canvas ImageData) or :bgra-pre (8-bit premultiplied BGRA, JavaFX's and
+     most GPUs' native order). Rows top first, w*h*4 bytes, no padding.")
+  (-present-raster! [surface rgba w h]
+    "Show the `w` x `h` image in `rgba` (a byte array in -raster-layout),
+     replacing what was shown. `rgba` is only valid during the call: a host
+     that keeps pixels copies them. Called on the host's tick (IClock) thread;
+     an adapter marshals onto its UI thread when called from elsewhere."))
+
 (defprotocol IWindow
   "A top-level window holding a surface."
   (-show! [window opts] "Open or raise the window. opts: {:title :w :h}.")
