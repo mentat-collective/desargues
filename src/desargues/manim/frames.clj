@@ -10,7 +10,10 @@
 
    Crossing: by default the numpy RGBA buffer [h w 4] reaches the sink as a
    ZERO-COPY dtype-next tensor (same address as numpy), valid only during the
-   call. :copy? true hands the sink a JVM-heap clone instead.
+   call. :copy? true hands the sink a JVM-heap clone instead. :crossing
+   :address passes the buffer address and shape instead of the array, and
+   the JVM keeps one native view per buffer (`address-view`): with the
+   surface-reuse patch Manim hands over the same Camera buffer every frame.
 
    Sections:
    - pure pacing math: frame <-> time at an fps, wall-clock schedule
@@ -21,7 +24,8 @@
             [libpython-clj2.python.base :as py-base]
             [tech.v3.datatype :as dt]
             [tech.v3.tensor :as dtt]
-            [libpython-clj2.python.np-array]))
+            [libpython-clj2.python.np-array]
+            [tech.v3.datatype.native-buffer :as nb]))
 
 ;; ============================================================================
 ;; Pure: frame pacing
@@ -117,17 +121,30 @@
   "import numpy as _np
 import manim.scene.scene_file_writer as _sfw
 
-def desargues_frames_install(cb):
+_U8 = _np.dtype(_np.uint8)
+
+def _address(frame):
+    if (frame.dtype == _U8 and frame.ndim == 3 and frame.shape[2] == 4
+            and frame.flags.c_contiguous):
+        return frame.__array_interface__['data'][0]
+    return 0
+
+def desargues_frames_install(cb, by_address=False):
     W = _sfw.SceneFileWriter
     if not hasattr(W, '_desargues_orig_write_frame'):
         W._desargues_orig_write_frame = W.write_frame
     orig = W._desargues_orig_write_frame
+    if by_address:
+        def deliver(frame):
+            cb(frame, _address(frame), frame.shape[0], frame.shape[1])
+    else:
+        deliver = cb
     def write_frame(self, frame_or_renderer, num_frames=1):
         frame = frame_or_renderer
         if not isinstance(frame, _np.ndarray):
             frame = frame_or_renderer.get_frame()
         for _ in range(num_frames):
-            cb(frame)
+            deliver(frame)
         return orig(self, frame_or_renderer, num_frames=num_frames)
     W.write_frame = write_frame
     return True
@@ -143,11 +160,15 @@ def desargues_frames_uninstall():
 def desargues_frames_installed():
     return hasattr(_sfw.SceneFileWriter, '_desargues_orig_write_frame')
 
-def desargues_frames_drive(cb, frame, k):
+def desargues_frames_drive(cb, frame, k, by_address=False):
     import time
     t0 = time.perf_counter_ns()
-    for _ in range(k):
-        cb(frame)
+    if by_address:
+        for _ in range(k):
+            cb(frame, _address(frame), frame.shape[0], frame.shape[1])
+    else:
+        for _ in range(k):
+            cb(frame)
     return time.perf_counter_ns() - t0
 ")
 
@@ -156,24 +177,53 @@ def desargues_frames_drive(cb, frame, k):
 
 (defn- shim [nm] (get @shims nm))
 
+(defn address-view
+  "A [h w 4] uint8 tensor over native memory at `addr`, reusing the view in
+   `cache` (an atom of {:addr :h :w :t}) while the buffer key is unchanged:
+   a fixed numpy buffer is wrapped once, not once per frame. The view is
+   valid only while the caller holds the buffer it names."
+  [cache ^long addr ^long h ^long w]
+  (let [c @cache]
+    (if (and c (== addr (long (:addr c))) (== h (long (:h c))) (== w (long (:w c))))
+      (:t c)
+      (let [t (-> (nb/wrap-address addr (* h w 4) :uint8 :little-endian nil)
+                  (dtt/reshape [h w 4]))]
+        (reset! cache {:addr addr :h h :w w :t t})
+        t))))
+
+(defn- deliver!
+  [sink counter copy? t w h]
+  (let [n (dec (long (swap! counter inc)))]
+    (fp/-frame! sink (if copy? (dt/clone t) t) w h n)
+    nil))
+
 (defn frame-callback
   "The Python callable the hook calls once per frame index: views the numpy
    frame as a dtype-next tensor (zero-copy, or cloned with `copy?`) and hands
    it to `sink` with its width, height and a running index from `counter`
-   (an atom of the next index)."
-  [sink counter copy?]
-  (py/make-callable
-   (fn [frame]
-     (let [t   (dtt/as-tensor frame)
-           sh  (dt/shape t)
-           h   (long (nth sh 0))
-           w   (long (nth sh 1))
-           n   (dec (long (swap! counter inc)))]
-       (fp/-frame! sink (if copy? (dt/clone t) t) w h n)
-       nil))
-   {:arg-converter py-base/as-jvm
-    :result-converter (fn [_] (py/->python nil))
-    :name "desargues_frame_sink"}))
+   (an atom of the next index). `crossing` :address takes the frame's buffer
+   address and shape from Python and reuses one native view per buffer
+   (`address-view`); :tensor (default) wraps each frame with as-tensor."
+  ([sink counter copy?] (frame-callback sink counter copy? :tensor))
+  ([sink counter copy? crossing]
+   (let [opts {:arg-converter py-base/as-jvm
+               :result-converter (fn [_] (py/->python nil))
+               :name "desargues_frame_sink"}]
+     (if (= :address crossing)
+       (let [cache (atom nil)]
+         (py/make-callable
+          (fn [frame addr h w]
+            (let [addr (long addr) h (long h) w (long w)]
+              (if (zero? addr)
+                (deliver! sink counter copy? (dtt/as-tensor frame) w h)
+                (deliver! sink counter copy? (address-view cache addr h w) w h))))
+          opts))
+       (py/make-callable
+        (fn [frame]
+          (let [t  (dtt/as-tensor frame)
+                sh (dt/shape t)]
+            (deliver! sink counter copy? t (long (nth sh 1)) (long (nth sh 0)))))
+        opts)))))
 
 (defonce ^:private hook (atom nil))
 
@@ -186,13 +236,14 @@ def desargues_frames_drive(cb, frame, k):
   "Wrap SceneFileWriter.write_frame so every frame reaches `sink` before Manim
    writes (or, with write_to_movie off, drops) it. Replaces any sink already
    installed; the frame index restarts at 0. Options: :copy? (default false)
-   clones each frame onto the JVM heap. Returns the hook {:sink :counter}."
+   clones each frame onto the JVM heap; :crossing :tensor (default) or
+   :address (see `frame-callback`). Returns the hook {:sink :counter}."
   ([sink] (install! sink {}))
-  ([sink {:keys [copy?] :or {copy? false}}]
+  ([sink {:keys [copy? crossing] :or {copy? false crossing :tensor}}]
    (let [counter (atom 0)
-         cb      (frame-callback sink counter copy?)]
-     ((shim "desargues_frames_install") cb)
-     (reset! hook {:sink sink :counter counter :callback cb :copy? copy?}))))
+         cb      (frame-callback sink counter copy? crossing)]
+     ((shim "desargues_frames_install") cb (= :address crossing))
+     (reset! hook {:sink sink :counter counter :callback cb :copy? copy? :crossing crossing}))))
 
 (defn uninstall!
   "Restore SceneFileWriter.write_frame. Idempotent; true when a hook was removed."
@@ -238,12 +289,12 @@ def desargues_frames_drive(cb, frame, k):
    inside the live config so the renderer sees it) with every frame streamed
    to `sink` and nothing encoded or written. The hook is uninstalled after.
    Options: :quality (manim quality string, default \"low_quality\" = 480p15),
-   :copy?. Returns the number of frames delivered."
+   :copy?, :crossing (see `install!`). Returns the number of frames delivered."
   ([scene sink] (render-live! scene sink {}))
-  ([scene sink {:keys [quality copy?] :or {quality "low_quality"}}]
+  ([scene sink {:keys [quality copy? crossing] :or {quality "low_quality" crossing :tensor}}]
    (with-live-config* {"quality" quality}
      (fn []
-       (let [{:keys [counter]} (install! sink {:copy? copy?})]
+       (let [{:keys [counter]} (install! sink {:copy? copy? :crossing crossing})]
          (try
            (let [s (if (fn? scene) (scene) scene)]
              (py/call-attr s "render")
@@ -252,7 +303,8 @@ def desargues_frames_drive(cb, frame, k):
 
 (defn crossing-ns
   "Python-measured ns to push `frame` (numpy) through the hook callback for
-   `sink` `k` times: the per-frame Python -> JVM crossing cost, render excluded."
-  [frame sink k {:keys [copy?]}]
-  (let [cb (frame-callback sink (atom 0) copy?)]
-    (py/->jvm ((shim "desargues_frames_drive") cb frame k))))
+   `sink` `k` times: the per-frame Python -> JVM crossing cost, render excluded.
+   :crossing as in `install!`."
+  [frame sink k {:keys [copy? crossing] :or {crossing :tensor}}]
+  (let [cb (frame-callback sink (atom 0) copy? crossing)]
+    (py/->jvm ((shim "desargues_frames_drive") cb frame k (= :address crossing)))))
