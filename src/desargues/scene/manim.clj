@@ -17,7 +17,8 @@
             [desargues.manim-quickstart :as man-quick]
             [desargues.layout.realize :as layout]
             [desargues.domain.protocols :as dom]
-            [desargues.manim.paths :as man-path]))
+            [desargues.manim.paths :as man-path]
+            [desargues.manim.encoder :as encoder]))
 
 ;; ============================================================================
 ;; Keyword resolution — the semantic layer that keeps Python out of consumers
@@ -89,9 +90,15 @@
 
 (defrecord ManimBackend []
   p/IStudio
-  (-init! [b] (man-quick/init!) b)
-  (-configure! [_ {:keys [width height fps quality]}]
+  (-init! [b]
+    (man-quick/init!)
+    ;; DESARGUES_ENCODER: the encoder profile this backend's renders use
+    (encoder/install!)
+    b)
+  (-configure! [_ {:keys [width height fps quality encoder]}]
     (let [cfg (man-core/get-attr (man-core/manim) "config")]
+      ;; :encoder overrides DESARGUES_ENCODER for the session (:preview, "final" or a profile)
+      (when encoder (encoder/install! encoder))
       (when width   (man-core/set-attr! cfg "pixel_width"  width))
       (when height  (man-core/set-attr! cfg "pixel_height" height))
       (when fps     (man-core/set-attr! cfg "frame_rate"   fps))
