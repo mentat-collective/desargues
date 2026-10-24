@@ -73,6 +73,24 @@
            (finally (seal stubs))))
     (py/import-module "manim")))
 
+(def prebuilt-library-class
+  "Name of the libpython JNA binding class `clojure -M:pyaot-build` writes."
+  "desargues.pyaot.PythonLibrary")
+
+(defn class-on-classpath
+  "Default class finder: name -> Class, or nil when it is not on the classpath."
+  [class-name]
+  (try (Class/forName class-name) (catch ClassNotFoundException _ nil)))
+
+(defn prebuilt-library
+  "libpython-clj :library-definition for the pre-generated binding class, or
+   nil (libpython-clj then generates the bindings at runtime). `find-class`
+   is name -> Class or nil."
+  ([] (prebuilt-library class-on-classpath))
+  ([find-class]
+   (when-let [cls (find-class prebuilt-library-class)]
+     {:library-class cls})))
+
 (defn init!
   "Initialize Python with the Manim conda environment.
    Call this ONCE at the start of your REPL session.
@@ -82,20 +100,26 @@
    - :library-path - path to libpython shared library
    - :site-packages - path to site-packages directory
    - :preload-libs - colon-separated shared libs loaded before `import manim`
-   - :import-mode - \"lean\" (default) or \"eager\", see `import-plan`"
+   - :import-mode - \"lean\" (default) or \"eager\", see `import-plan`
+   - :library-definition - libpython-clj binding class; defaults to
+     `prebuilt-library` (nil unless `clojure -M:pyaot-build` ran and the
+     :pyaot alias is on, see desargues.pyaot)"
   ([]
    (init! {}))
-  ([{:keys [python-executable library-path site-packages preload-libs import-mode]
+  ([{:keys [python-executable library-path site-packages preload-libs import-mode
+            library-definition]
      :or {python-executable (:python-exe (config/manim-config))
           library-path (:library-path (config/manim-config))
           site-packages (:site-packages (config/manim-config))
           preload-libs (:preload-libs (config/manim-config))
-          import-mode (:import-mode (config/manim-config))}}]
+          import-mode (:import-mode (config/manim-config))
+          library-definition (prebuilt-library)}}]
    (when-not @initialized?
      (let [plan (import-plan import-mode)]
        (py/initialize!
         :python-executable python-executable
-        :library-path library-path)
+        :library-path library-path
+        :library-definition library-definition)
 
        ;; Add site-packages to Python path
        (let [sys (py/import-module "sys")]
