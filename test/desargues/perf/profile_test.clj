@@ -32,7 +32,7 @@
 (deftest fast-holds-the-exact-patches-in-rank-order
   (let [p (perf/profile :fast)]
     (is (= [:svg-path-shared-copy :glyph-cache :native-cairo-path :native-display
-            :background-cache]
+            :background-cache :play-setup]
            (:patches p)))
     (is (= (:patches p) (mapv pp/-patch-id (perf/render-patches p)))
         "every entry builds its record without Manim")
