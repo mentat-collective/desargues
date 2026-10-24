@@ -160,3 +160,50 @@ def desargues_glyph_build():
           (probe)
           (is (= {:hits 0 :misses 0} (select-keys (mp/glyph-cache-stats) [:hits :misses]))))
         (is (= :glyph-cache (pp/-patch-id p)))))))
+
+(def ^:private bgra-probe-src
+  "from manim import Circle, Square, Dot, config
+from manim.camera.camera import Camera
+import numpy as np
+def desargues_bgra_probe(opacity):
+    old = config.background_opacity
+    config.background_opacity = opacity
+    try:
+        cam = Camera()
+        s = Square(side_length=2.0, fill_opacity=0.5)
+        s.set_color_by_gradient('#FF0000', '#00FF88', '#2244FF')
+        ms = [Circle(radius=1.5, color='#FFD700', fill_opacity=0.4), s, Dot(color='#3399FF')]
+        cam.capture_mobjects(ms)
+        return cam.pixel_array.tobytes()
+    finally:
+        config.background_opacity = old
+")
+
+(defn- swap-rb
+  "Swap bytes 0 and 2 of every 4-byte pixel in the byte vector `bs`."
+  [bs]
+  (into [] (mapcat (fn [[r g b a]] [b g r a])) (partition 4 bs)))
+
+(deftest camera-bgra-pre-is-manims-frame-with-red-and-blue-swapped
+  (if-not @manim-env?
+    (println "skip: no Manim env")
+    (do
+      (core/init!)
+      (let [probe (get (:globals (py/run-simple-string bgra-probe-src)) "desargues_bgra_probe")
+            frame (fn [op] (vec (py/->jvm (probe op))))
+            p     mp/camera-bgra-pre]
+        (mp/uninstall! p)
+        (let [rgba-opaque (frame 1.0) rgba-clear (frame 0.0)]
+          (is (true? (mp/install! p)))
+          (is (true? (mp/install! p)) "idempotent")
+          (is (mp/installed? p))
+          (let [bgra-opaque (frame 1.0) bgra-clear (frame 0.0)]
+            (is (not= rgba-opaque bgra-opaque) "the patch changes the bytes")
+            (is (= (swap-rb rgba-opaque) bgra-opaque) "opaque background: identical pixels")
+            (is (= (swap-rb rgba-clear) bgra-clear)
+                "transparent background: identical, already premultiplied"))
+          (is (true? (mp/uninstall! p)))
+          (is (false? (mp/uninstall! p)))
+          (is (not (mp/installed? p)))
+          (is (= rgba-opaque (frame 1.0)) "uninstall restores")
+          (is (= :camera-bgra-pre (pp/-patch-id p))))))))

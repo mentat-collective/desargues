@@ -91,11 +91,14 @@
 
 (deftest rgba-to-premultiplied-bgra
   (is (= 0xFFFF0000 (mr/rgba->bgra-pre 0xFF0000FF)) "opaque red")
-  (is (= 0x80808080 (mr/rgba->bgra-pre 0x80FFFFFF)) "half white premultiplies")
+  (is (= 0x80808080 (mr/rgba->bgra-pre 0x80FFFFFF)) "straight half white premultiplies")
   (is (= 0 (mr/rgba->bgra-pre 0)))
-  (is (= [(unchecked-int 0xFF112233) (unchecked-int 0x80808080)]
-         (vec (mr/convert-words! (int-array [(unchecked-int 0xFF332211) (unchecked-int 0x80FFFFFF)])
-                                 :bgra-pre))))
+  (testing "Manim's words are already premultiplied: only red and blue swap"
+    (is (= 0x6A5C5010 (mr/rgba-pre->bgra-pre 0x6A10505C)))
+    (is (= [(unchecked-int 0xFF112233) (unchecked-int 0x6A5C5010)]
+           (vec (mr/convert-words! (int-array [(unchecked-int 0xFF332211) (unchecked-int 0x6A10505C)])
+                                   :bgra-pre)))
+        "never premultiplied a second time"))
   (is (= [7] (vec (mr/convert-words! (int-array [7]) :rgba))) ":rgba is the identity"))
 
 (defspec opaque-fast-path-matches-the-general-formula 200
@@ -114,3 +117,37 @@
     (let [r (raster/take! s)]
       (is (= [0 0 -1 -1 -1 0 0 -1] (vec (:bytes r))) "red, blue as BGRA bytes")
       (is (= [2 1 0] [(:w r) (:h r) (:n r)])))))
+
+(deftest raster-sink-copies-frames-already-in-the-host-layout
+  (let [s    (raster/slot)
+        sink (mr/raster-sink s :bgra-pre {:src-layout :bgra-pre})
+        t    (dtt/->tensor [[[1 2 3 4] [5 6 7 8]]] :datatype :uint8)]
+    (fr/frame! sink t 2 1 0)
+    (is (= [1 2 3 4 5 6 7 8] (vec (:bytes (raster/take! s)))) "bytes as they came")))
+
+(defspec native-copy-equals-converted-swizzle 100
+  (prop/for-all [px (gen/vector (gen/tuple (gen/choose 0 255) (gen/choose 0 255)
+                                           (gen/choose 0 255) (gen/choose 0 255)) 1 16)]
+    ;; a premultiplied pixel: no channel above alpha
+    (let [pre  (mapv (fn [[r g b a]] [(min r a) (min g a) (min b a) a]) px)
+          bgra (mapv (fn [[r g b a]] [b g r a]) pre)
+          run  (fn [rows src]
+                 (let [s (raster/slot)]
+                   (fr/frame! (mr/raster-sink s :bgra-pre {:src-layout src})
+                              (dtt/->tensor [rows] :datatype :uint8) (count rows) 1 0)
+                   (vec (:bytes (raster/take! s)))))]
+      (= (run pre :rgba) (run bgra :bgra-pre)))))
+
+(def ^:private camera-patch-stub ::camera-bgra-pre)
+
+(deftest source-plan-picks-native-bytes-only-for-a-native-host
+  (is (= {:src-layout :bgra-pre :patches [camera-patch-stub]}
+         (mr/source-plan :bgra-pre :bgra-pre camera-patch-stub true)))
+  (is (= {:src-layout :rgba :patches []} (mr/source-plan :rgba :bgra-pre camera-patch-stub true))
+      "an :rgba host keeps Manim's RGBA")
+  (is (= {:src-layout :rgba :patches []} (mr/source-plan :bgra-pre :bgra-pre camera-patch-stub false))
+      "opt-out")
+  (is (= {:src-layout :rgba :patches []} (mr/source-plan :bgra-pre nil camera-patch-stub true))
+      "big-endian host: no native layout")
+  (is (= :bgra-pre (mr/native-layout java.nio.ByteOrder/LITTLE_ENDIAN)))
+  (is (nil? (mr/native-layout java.nio.ByteOrder/BIG_ENDIAN))))
