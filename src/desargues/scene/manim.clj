@@ -20,6 +20,7 @@
             [desargues.manim.paths :as man-path]
             [desargues.manim.encoder :as encoder]
             [desargues.manim.patches :as patches]
+            [desargues.manim.patches.native-display]
             [desargues.manim.mobject-cache :as mcache]))
 
 ;; ============================================================================

@@ -32,13 +32,13 @@
                  :task (apply shell "clojure -M -m desargues.lesson.export verify" *command-line-args*)}
   serve         {:doc "Serve dist/site on http://localhost:8087"
                  :task (shell "python3 -m http.server 8087 --directory dist/site")}
-  native:path {:doc "Build the Zig Cairo path builder -> native/zigpath/zig-out/lib/libdesargues_path.so (needs zig 0.16 and the conda Manim env: DESARGUES_CONDA_PREFIX or CONDA_PREFIX). Opt in with DESARGUES_PATH_BUILDER=native"
+  native:path {:doc "Build the Zig Cairo path builder and batch displayer -> native/zigpath/zig-out/lib/libdesargues_path.so (needs zig 0.16 and the conda Manim env: DESARGUES_CONDA_PREFIX or CONDA_PREFIX). Opt in with DESARGUES_PATH_BUILDER=native or native-display"
                :task (let [prefix (or (System/getenv "DESARGUES_CONDA_PREFIX") (System/getenv "CONDA_PREFIX")
                                       (throw (ex-info "set DESARGUES_CONDA_PREFIX to the Manim conda env" {})))
                            lib    (str prefix "/lib")]
                        (fs/create-dirs "native/zigpath/zig-out/lib")
                        (shell {:dir "native/zigpath"}
-                              "zig" "build-lib" "-dynamic" "-O" "ReleaseFast" "-fPIC" "src/path.zig"
+                              "zig" "build-lib" "-dynamic" "-O" "ReleaseFast" "-fPIC" "src/lib.zig"
                               (str "-L" lib) "-lcairo" "-lc" "-rpath" lib
                               "--name" "desargues_path"
                               "-femit-bin=zig-out/lib/libdesargues_path.so"

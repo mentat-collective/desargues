@@ -19,7 +19,8 @@
             [desargues.player.raster :as raster]
             [tech.v3.datatype :as dt]
             [tech.v3.datatype.native-buffer :as nb]
-            [desargues.manim.patches :as mp])
+            [desargues.manim.patches :as mp]
+            [desargues.manim.patches.surface-reuse :as sr])
   (:import [java.nio ByteBuffer ByteOrder]
            [java.util.concurrent.locks LockSupport]))
 
@@ -156,9 +157,12 @@
    (default \"low_quality\"), :frame-rate (overrides the preset's fps),
    :paced? (default true: publish frame n at first-frame + n/fps, a wait on
    time, never on the UI), :native? (default true: a host whose layout is
-   cairo's native one gets frames with no conversion), :on-done (fn [report]).
+   cairo's native one gets frames with no conversion), :surface-reuse?
+   (default false: the surface-reuse patch plus the :address crossing, so
+   the Camera buffer is painted, handed over and viewed with no numpy copy
+   and no per-frame wrap), :on-done (fn [report]).
    Returns {:presenter :sink :done (promise of the report)}."
-  [host scene {:keys [quality frame-rate paced? native? on-done]
+  [host scene {:keys [quality frame-rate paced? native? surface-reuse? on-done]
                :or {quality "low_quality" paced? true native? true}}]
   (let [slot (raster/slot)
         pres (raster/presenter host slot)
@@ -167,6 +171,8 @@
         layout (p/-raster-layout host)
         {:keys [src-layout patches]} (source-plan layout (native-layout (ByteOrder/nativeOrder))
                                                   mp/camera-bgra-pre native?)
+        patches (cond-> patches surface-reuse? (conj sr/surface-reuse))
+        crossing (if surface-reuse? :address :tensor)
         sink (raster-sink slot layout {:fps (when paced? fps) :src-layout src-layout})
         done (promise)
         t0   (System/nanoTime)]
@@ -177,7 +183,7 @@
                                        #(fr/render-live!
                                          (fn [] (when frame-rate (set-frame-rate! frame-rate))
                                            (scene))
-                                         sink {:quality quality}))}
+                                         sink {:quality quality :crossing crossing}))}
                             (catch Throwable t {:error t}))
                    ;; let the last frame reach the screen
                    _   (loop [k 0] (when (and (< k 50) (:pending? (raster/counts slot)))
