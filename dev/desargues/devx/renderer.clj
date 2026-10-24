@@ -21,7 +21,8 @@
             [libpython-clj2.python :as py]
             [libpython-clj2.python.class :as py-class]
             [clojure.java.io :as io]
-            [clojure.java.shell :refer [sh]]))
+            [clojure.java.shell :refer [sh]]
+            [desargues.perf.profile :as perf]))
 
 ;; =============================================================================
 ;; Configuration
@@ -62,10 +63,14 @@
    Options:
    - :quality - :low, :medium, :high, or custom registered preset
    - :preview - if true, only render last frame
-   - :output-file - override output path"
-  [segment & {:keys [quality preview output-file]
+   - :output-file - override output path
+   - :perf-profile - desargues.perf.profile name or value (default
+     DESARGUES_PERF_PROFILE, :fast when unset; :stock is Manim as shipped)"
+  [segment & {:keys [quality preview output-file perf-profile]
               :or {quality *quality* preview *preview-mode*}}]
   (manim/init!)
+  ;; DESARGUES_PERF_PROFILE (or :perf-profile): "fast" by default, "stock" = Manim as shipped
+  (perf/install! perf-profile)
   (seg/ensure-partial-dir!)
 
   (let [seg-id (seg/segment-id segment)

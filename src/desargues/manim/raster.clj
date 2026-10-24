@@ -20,7 +20,8 @@
             [tech.v3.datatype :as dt]
             [tech.v3.datatype.native-buffer :as nb]
             [desargues.manim.patches :as mp]
-            [desargues.manim.patches.surface-reuse :as sr])
+            [desargues.manim.patches.surface-reuse :as sr]
+            [desargues.perf.profile :as perf])
   (:import [java.nio ByteBuffer ByteOrder]
            [java.util.concurrent.locks LockSupport]))
 
@@ -151,33 +152,49 @@
     {:src-layout native :patches [native-patch]}
     {:src-layout :rgba :patches []}))
 
+(defn live-plan
+  "How play-live! renders for a host wanting `layout`, from its options
+   (see play-live!) under their perf profile: {:quality :fps :frame-rate
+   :paced? :src-layout :patches :crossing}. Building it imports no Python."
+  [layout opts]
+  (let [{:keys [quality frame-rate paced? native? surface-reuse?]
+         extra-patches :patches
+         :or {quality "low_quality" paced? true native? true}}
+        (perf/live-opts (:profile opts) opts)
+        {:keys [src-layout patches]} (source-plan layout (native-layout (ByteOrder/nativeOrder))
+                                                  mp/camera-bgra-pre native?)]
+    {:quality    quality
+     :frame-rate frame-rate
+     :fps        (or frame-rate ({"low_quality" 15 "medium_quality" 30 "high_quality" 60
+                                  "production_quality" 60} quality 15))
+     :paced?     paced?
+     :src-layout src-layout
+     :patches    (cond-> patches
+                   surface-reuse? (conj sr/surface-reuse)
+                   (seq extra-patches) (into extra-patches))
+     :crossing   (if surface-reuse? :address :tensor)}))
+
 (defn play-live!
   "Render `scene` (a zero-arg fn returning a Scene) on a fresh thread into
-   IRaster `host`, shown on the host's IClock tick. Options: :quality
-   (default \"low_quality\"), :frame-rate (overrides the preset's fps),
-   :paced? (default true: publish frame n at first-frame + n/fps, a wait on
-   time, never on the UI), :native? (default true: a host whose layout is
-   cairo's native one gets frames with no conversion), :surface-reuse?
-   (default false: the surface-reuse patch plus the :address crossing, so
-   the Camera buffer is painted, handed over and viewed with no numpy copy
-   and no per-frame wrap), :patches (more IManimPatch values installed for
-   this render, after the ones the options above choose), :on-done
+   IRaster `host`, shown on the host's IClock tick. Options: :profile (a
+   desargues.perf.profile name or value; default DESARGUES_PERF_PROFILE,
+   \"fast\" when unset: its render patches and live defaults apply, :stock is
+   Manim as shipped), :quality (default \"low_quality\"), :frame-rate
+   (overrides the preset's fps), :paced? (default true: publish frame n at
+   first-frame + n/fps, a wait on time, never on the UI), :native? (default
+   true: a host whose layout is cairo's native one gets frames with no
+   conversion), :surface-reuse? (default from the profile: the
+   surface-reuse patch plus the :address crossing, so the Camera buffer is
+   painted, handed over and viewed with no numpy copy and no per-frame
+   wrap), :patches (more IManimPatch values installed for this render,
+   after the profile's and the ones the options above choose), :on-done
    (fn [report]).
    Returns {:presenter :sink :done (promise of the report)}."
-  [host scene {:keys [quality frame-rate paced? native? surface-reuse? on-done]
-               extra-patches :patches
-               :or {quality "low_quality" paced? true native? true}}]
+  [host scene {:keys [on-done] :as opts}]
   (let [slot (raster/slot)
         pres (raster/presenter host slot)
-        fps  (or frame-rate ({"low_quality" 15 "medium_quality" 30 "high_quality" 60
-                              "production_quality" 60} quality 15))
         layout (p/-raster-layout host)
-        {:keys [src-layout patches]} (source-plan layout (native-layout (ByteOrder/nativeOrder))
-                                                  mp/camera-bgra-pre native?)
-        patches (cond-> patches
-                  surface-reuse? (conj sr/surface-reuse)
-                  (seq extra-patches) (into extra-patches))
-        crossing (if surface-reuse? :address :tensor)
+        {:keys [quality frame-rate fps paced? src-layout patches crossing]} (live-plan layout opts)
         sink (raster-sink slot layout {:fps (when paced? fps) :src-layout src-layout})
         done (promise)
         t0   (System/nanoTime)]
