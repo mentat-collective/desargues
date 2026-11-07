@@ -5,7 +5,8 @@
             [desargues.wallpaper.girih :as g]
             [desargues.wallpaper.loop :as lp]
             [desargues.wallpaper.render :as r]
-            [desargues.wallpaper.post :as post])
+            [desargues.wallpaper.post :as post]
+            [desargues.wallpaper.curves :as cv])
   (:import (java.awt.image BufferedImage)
            (java.nio.file Files)
            (java.nio.file.attribute FileAttribute)))
@@ -73,6 +74,24 @@
         (is (= 13 (count bs)))
         (is (= (round6 (/ 4.0 13)) (round6 (g/vlen (g/v- (second bs) (first bs))))))))
     (is (= [0.5 0.0] (mapv #(round6 %) (second (g/beads sq 0.5 0.0 true)))))))
+
+(deftest space-filling-curves
+  (testing "Hilbert order n visits 4^n cells with unit-length steps"
+    (let [p (cv/curve :hilbert 4)]
+      (is (= 256 (count p)))
+      (is (= 1 (count (distinct (map (fn [a b] (round6 (g/vlen (g/v- b a)))) p (rest p))))))))
+  (testing "the Moore curve of order n visits 4^(n+1) cells and closes"
+    (let [p (cv/curve :moore 3)]
+      (is (= (first p) (peek p)))
+      (is (= 257 (count p)))))
+  (testing "every preset fits [-1, 1] and its arc parameter runs 0 .. 1"
+    (doseq [k (keys cv/systems)]
+      (let [p (cv/curve k 3)
+            s (cv/arc-params p)]
+        (is (<= (apply max (map #(Math/abs (double %)) (flatten p))) 1.0000001) (name k))
+        (is (= 0.0 (first s)))
+        (is (< (Math/abs (- 1.0 (peek s))) 1e-9)))))
+  (is (thrown? clojure.lang.ExceptionInfo (cv/curve :sierpinski-carpet 2))))
 
 (deftest post-effects-run-and-scale
   (let [img (r/image 64 36)]
