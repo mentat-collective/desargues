@@ -121,6 +121,20 @@
 
 ;; ── Layers ────────────────────────────────────────────────────────────────
 
+;; ── Port: scene engine ────────────────────────────────────────────────────
+
+(defmulti scene-render
+  "Paint 3D scene map `scene` into BufferedImage `img` at opts {:view}.
+   Dispatches on the engine key (:luxcore: desargues.wallpaper.luxcore)."
+  (fn [engine _img _scene _opts] engine))
+
+(defmethod scene-render :default [k img scene opts]
+  (backend/dispatch-default scene-render "scene engine" k [img scene opts]))
+
+(backend/register-backend! :luxcore
+                           {:namespaces '[desargues.wallpaper.luxcore]
+                            :requires "LuxCoreRender's luxcoreconsole on PATH (or $DESARGUES_LUXCORE)"})
+
 (defn- fit-frame
   "Frame `f` rescaled from the `view` window onto the headless host's own
    Manim window, so shapes keep their place in the spec's scene units."
@@ -179,18 +193,22 @@
     img))
 
 (defn render-frame
-  "The loop `spec` at phase `u` as a BufferedImage. opts: {:size [w h]
-   :backend k} override the spec's size and the field backend (:jvm)."
+  "The loop `spec` at phase `u` as a BufferedImage. Layers, bottom-up:
+   :scene (a 3D scene map, rendered by the spec's :engine, default :luxcore),
+   :field, :frame, :light. opts: {:size [w h] :backend k} override the
+   spec's size and the field backend (:jvm)."
   ^BufferedImage [spec u & [{:keys [size backend] :or {backend :jvm}}]]
   (let [[w h] (or size (:size spec) [1280 720])
         view (or (:view spec) default-view)
         opts {:view view :ss (or (:ss spec) 1)}
         img (image w h)
         u (double u)]
+    (when-let [scene-fn (:scene spec)]
+      (scene-render (or (:engine spec) :luxcore) img (scene-fn u) opts))
     (when-let [field (:field spec)]
       (field-raster backend img (field u) opts))
     (when-let [frame-fn (:frame spec)]
-      (paint-shapes! img (fit-frame (frame-fn u) view) (nil? (:field spec))))
+      (paint-shapes! img (fit-frame (frame-fn u) view) (not (or (:field spec) (:scene spec)))))
     (when-let [light (:light spec)]
       (light! img (light u) opts))
     img))
@@ -212,11 +230,12 @@
     out))
 
 (defn- each-frame!
-  "Render `spec`'s frames in order, a batch at a time across cores, calling
-   (sink i img) for frame i in order."
+  "Render `spec`'s frames in order, calling (sink i img) for frame i in order.
+   Frames run a batch at a time across cores; a spec with a :scene renders
+   one frame at a time, its engine already spending every core."
   [spec opts sink]
   (let [n (frames spec opts)
-        batch (max 1 (.availableProcessors (Runtime/getRuntime)))
+        batch (if (:scene spec) 1 (max 1 (.availableProcessors (Runtime/getRuntime))))
         progress (:progress opts)]
     (doseq [idx (partition-all batch (range n))]
       (let [imgs (doall (pmap #(render-frame spec (/ (double %) n) opts) idx))]
