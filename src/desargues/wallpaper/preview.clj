@@ -45,18 +45,22 @@
   (boolean (some-> ^Process (:proc @state) .isAlive)))
 
 (defn open!
-  "Open the preview window (idempotent). opts: {:geometry \"960x540\" :title}."
+  "Open the preview window (idempotent). opts: {:geometry \"960x540\" :title}.
+   mpv's own output is discarded: an unread pipe would fill and freeze it."
   ([] (open! {}))
   ([{:keys [geometry title] :or {geometry "960x540" title "desargues wallpaper"}}]
    (when-not (open?)
      (let [sock (socket-path)
            _ (io/delete-file sock true)
-           proc (.start (ProcessBuilder.
-                         ^"[Ljava.lang.String;"
-                         (into-array String [(mpv) "--idle=yes" "--force-window=yes" "--keep-open=yes"
-                                             "--loop-file=inf" (str "--geometry=" geometry)
-                                             (str "--title=" title) "--osd-level=0"
-                                             (str "--input-ipc-server=" sock)])))]
+           proc (.start (doto (ProcessBuilder.
+                               ^"[Ljava.lang.String;"
+                               (into-array String [(mpv) "--idle=yes" "--force-window=yes" "--keep-open=yes"
+                                                   "--loop-file=inf" (str "--geometry=" geometry)
+                                                   (str "--title=" title) "--osd-level=0"
+                                                   "--really-quiet" "--no-terminal"
+                                                   (str "--input-ipc-server=" sock)]))
+                          (.redirectOutput java.lang.ProcessBuilder$Redirect/DISCARD)
+                          (.redirectError java.lang.ProcessBuilder$Redirect/DISCARD)))]
        (swap! state assoc :proc proc)
        (loop [i 0]
          (when (and (< i 100) (not (.exists (io/file sock))))
