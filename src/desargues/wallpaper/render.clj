@@ -33,7 +33,8 @@
             [clojure.string :as str]
             [desargues.backend :as backend]
             [desargues.player.headless :as hl]
-            [desargues.wallpaper.loop :as lp])
+            [desargues.wallpaper.loop :as lp]
+            [desargues.wallpaper.post :as post])
   (:import (java.awt AlphaComposite)
            (java.awt.image BufferedImage DataBufferInt)
            (java.io OutputStream)
@@ -195,8 +196,9 @@
 (defn render-frame
   "The loop `spec` at phase `u` as a BufferedImage. Layers, bottom-up:
    :scene (a 3D scene map, rendered by the spec's :engine, default :luxcore),
-   :field, :frame, :light. opts: {:size [w h] :backend k} override the
-   spec's size and the field backend (:jvm)."
+   :field, :frame, :light; then :post, (fn [u] [effect ..]) of
+   desargues.wallpaper.post, in order. opts: {:size [w h] :backend k}
+   override the spec's size and the field backend (:jvm)."
   ^BufferedImage [spec u & [{:keys [size backend] :or {backend :jvm}}]]
   (let [[w h] (or size (:size spec) [1280 720])
         view (or (:view spec) default-view)
@@ -211,6 +213,8 @@
       (paint-shapes! img (fit-frame (frame-fn u) view) (not (or (:field spec) (:scene spec)))))
     (when-let [light (:light spec)]
       (light! img (light u) opts))
+    (when-let [post-fn (:post spec)]
+      (post/apply-all! (post-fn u) img))
     img))
 
 ;; ── Port: encoders ────────────────────────────────────────────────────────

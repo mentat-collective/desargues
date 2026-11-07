@@ -164,6 +164,33 @@
             (merge poly (hankin (:vertices poly) (f theta-of poly) (f delta-of poly))))
           (cover t rect))))
 
+(defn beads
+  "Points every `spacing` along polyline `pts` (closed when `closed?`),
+   the first one `phase` spacings from the start, so advancing `phase` by 1
+   lands every bead where its neighbour was."
+  [pts spacing phase closed?]
+  (let [pts (vec pts)
+        segs (vec (partition 2 1 (cond-> pts closed? (conj (first pts)))))
+        lens (mapv (fn [[a b]] (vlen (v- b a))) segs)
+        total (reduce + lens)
+        spacing (double spacing)
+        n (long (Math/floor (/ total spacing)))
+        spacing (if (pos? n) (/ total n) spacing)
+        start (* spacing (lp/frac (double phase)))]
+    (loop [k 0 out [] si 0 acc 0.0]
+      (let [s (+ start (* k spacing))]
+        (cond
+          (or (>= k n) (>= si (count segs))) out
+          (> s (+ acc (lens si))) (recur k out (inc si) (+ acc (lens si)))
+          :else (let [[a b] (segs si)
+                      t (if (zero? (lens si)) 0.0 (/ (- s acc) (lens si)))]
+                  (recur (inc k) (conj out (v+ a (v* t (v- b a)))) si acc)))))))
+
+(defn scale-about
+  "Polygon `pts` scaled by `k` and turned by `turn` radians about point `c`."
+  [pts c k turn]
+  (mapv #(v+ c (v* k (rot turn (v- % c)))) pts))
+
 (defn khatam-angle
   "The contact angle that makes the classic eight-pointed khatam star on
    the 4.8.8 tiling: 3π/8."

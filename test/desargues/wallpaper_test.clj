@@ -4,7 +4,8 @@
             [clojure.test :refer [deftest is testing]]
             [desargues.wallpaper.girih :as g]
             [desargues.wallpaper.loop :as lp]
-            [desargues.wallpaper.render :as r])
+            [desargues.wallpaper.render :as r]
+            [desargues.wallpaper.post :as post])
   (:import (java.awt.image BufferedImage)
            (java.nio.file Files)
            (java.nio.file.attribute FileAttribute)))
@@ -62,6 +63,31 @@
 
 (deftest unknown-tiling-is-an-error
   (is (thrown? clojure.lang.ExceptionInfo (g/tiling :penrose))))
+
+(deftest beads-march-one-spacing-per-phase
+  (let [sq [[0 0] [1 0] [1 1] [0 1]]]
+    (is (= 16 (count (g/beads sq 0.25 0.0 true))))
+    (is (= (g/beads sq 0.25 0.0 true) (g/beads sq 0.25 1.0 true)))
+    (testing "spacing is fitted so the beads close evenly: perimeter 4 at 0.3 is 13 beads 4/13 apart"
+      (let [bs (g/beads sq 0.3 0.0 true)]
+        (is (= 13 (count bs)))
+        (is (= (round6 (/ 4.0 13)) (round6 (g/vlen (g/v- (second bs) (first bs))))))))
+    (is (= [0.5 0.0] (mapv #(round6 %) (second (g/beads sq 0.5 0.0 true)))))))
+
+(deftest post-effects-run-and-scale
+  (let [img (r/image 64 36)]
+    (.setRGB img 32 18 0xFFFFFF)
+    (post/apply-all! [{:type :bloom :radius 30 :strength 1.0}
+                      {:type :chroma :shift 60}
+                      {:type :dof}
+                      {:type :vignette :strength 0.5}
+                      {:type :fade :level 0.8}]
+                     img)
+    (testing "bloom spread the dot; chroma moved red right and blue left"
+      (is (pos? (bit-and (.getRGB img 34 18) 0xFF0000)))
+      (is (pos? (bit-and (.getRGB img 30 18) 0x0000FF))))
+    (is (= 2 (post/px-at img 60)))
+    (is (thrown? clojure.lang.ExceptionInfo (post/effect! {:type :sparkle} img)))))
 
 ;; ── render ────────────────────────────────────────────────────────────────
 
