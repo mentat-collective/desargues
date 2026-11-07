@@ -21,6 +21,12 @@
     (is (lines "scene.objects.floor.material = floor"))
     (is (lines "scene.objects.floor.faces = 0 1 2 0 2 3"))))
 
+(deftest extra-object-keys-pass-through
+  (let [s (assoc-in tiny [:objects :lamp :camerainvisible] true)
+        pairs (into {} (lx/scene-props s))]
+    (is (= 1 (pairs "scene.objects.lamp.camerainvisible")))
+    (is (not (contains? pairs "scene.objects.floor.camerainvisible")))))
+
 (deftest config-names-the-film
   (let [cfg (into {} (lx/config-props tiny 64 36 "/tmp/f.png"))]
     (is (= 64 (cfg "film.width")))

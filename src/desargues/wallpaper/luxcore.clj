@@ -45,7 +45,9 @@
     [(str prefix "." (name id) "." (name k)) v]))
 
 (defn scene-props
-  "The [key value] property pairs of scene map `s`."
+  "The [key value] property pairs of scene map `s`. An object's keys beyond
+   :material, :vertices and :faces (:camerainvisible, :transformation ...)
+   are written verbatim."
   [{:keys [camera materials objects lights]}]
   (let [{:keys [orig target up fov] :or {up [0 0 1] fov 40}} camera]
     (concat
@@ -55,10 +57,13 @@
       ["scene.camera.fieldofview" fov]]
      (entries "scene.materials" materials)
      (entries "scene.lights" lights)
-     (for [[id {:keys [material vertices faces]}] (sort-by (comp str key) objects)
-           pair [[(str "scene.objects." (name id) ".material") material]
-                 [(str "scene.objects." (name id) ".vertices") vertices]
-                 [(str "scene.objects." (name id) ".faces") faces]]]
+     (for [[id {:keys [material vertices faces] :as o}] (sort-by (comp str key) objects)
+           :let [p (str "scene.objects." (name id) ".")]
+           pair (concat [[(str p "material") material]
+                         [(str p "vertices") vertices]
+                         [(str p "faces") faces]]
+                        (for [[k v] (sort-by (comp str key) (dissoc o :material :vertices :faces))]
+                          [(str p (name k)) (if (boolean? v) (if v 1 0) v)]))]
        pair))))
 
 (defn config-props
@@ -141,7 +146,8 @@
     (try
       (spit (io/file dir "scene.scn") (props->text (scene-props s)))
       (spit (io/file dir "render.cfg") (props->text (config-props s w h (.getPath png))))
-      (let [proc (.start (doto (ProcessBuilder. ^java.util.List [(console) "render.cfg"])
+      (let [^"[Ljava.lang.String;" argv (into-array String [(console) "render.cfg"])
+            proc (.start (doto (ProcessBuilder. argv)
                            (.directory dir)
                            (.redirectErrorStream true)))
             log (slurp (.getInputStream proc))
