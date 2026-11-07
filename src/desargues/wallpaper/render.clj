@@ -34,7 +34,8 @@
             [desargues.backend :as backend]
             [desargues.player.headless :as hl]
             [desargues.wallpaper.loop :as lp]
-            [desargues.wallpaper.post :as post])
+            [desargues.wallpaper.post :as post]
+            [desargues.wallpaper.splat :as splat])
   (:import (java.awt AlphaComposite)
            (java.awt.image BufferedImage DataBufferInt)
            (java.io OutputStream)
@@ -193,13 +194,36 @@
                                                (ch 0)))))))))
     img))
 
-(defn render-frame
-  "The loop `spec` at phase `u` as a BufferedImage. Layers, bottom-up:
-   :scene (a 3D scene map, rendered by the spec's :engine, default :luxcore),
-   :field, :frame, :light; then :post, (fn [u] [effect ..]) of
-   desargues.wallpaper.post, in order. opts: {:size [w h] :backend k}
-   override the spec's size and the field backend (:jvm)."
-  ^BufferedImage [spec u & [{:keys [size backend] :or {backend :jvm}}]]
+(declare frames)
+
+(defn- blend-mean
+  "The per-channel mean of equal-size images `imgs`, as one new image."
+  ^BufferedImage [imgs]
+  (let [^BufferedImage a (first imgs)
+        w (.getWidth a) h (.getHeight a)
+        n (* w h) k (count imgs)
+        sums (long-array (* 3 n))
+        out (image w h)]
+    (doseq [^BufferedImage im imgs]
+      (let [px (pixels im)]
+        (dotimes [i n]
+          (let [c (aget px i) j (* 3 i)]
+            (aset sums j (+ (aget sums j) (bit-and (bit-shift-right c 16) 0xFF)))
+            (aset sums (+ j 1) (+ (aget sums (+ j 1)) (bit-and (bit-shift-right c 8) 0xFF)))
+            (aset sums (+ j 2) (+ (aget sums (+ j 2)) (bit-and c 0xFF)))))))
+    (let [px (pixels out) kd (double k)
+          m (fn ^long [^long v] (Math/round (/ (double v) kd)))]
+      (dotimes [i n]
+        (let [j (* 3 i)]
+          (aset px i (unchecked-int (bit-or (bit-shift-left (m (aget sums j)) 16)
+                                            (bit-shift-left (m (aget sums (+ j 1))) 8)
+                                            (m (aget sums (+ j 2)))))))))
+    out))
+
+(defn- render-layers
+  "The spec's picture at phase `u` before :post: :scene, :field, :frame,
+   :splat, :light, bottom-up, in a fresh image of `size`."
+  ^BufferedImage [spec u {:keys [size backend] :or {backend :jvm}}]
   (let [[w h] (or size (:size spec) [1280 720])
         view (or (:view spec) default-view)
         opts {:view view :ss (or (:ss spec) 1)}
@@ -211,8 +235,35 @@
       (field-raster backend img (field u) opts))
     (when-let [frame-fn (:frame spec)]
       (paint-shapes! img (fit-frame (frame-fn u) view) (not (or (:field spec) (:scene spec)))))
+    (when-let [splat-fn (:splat spec)]
+      (splat/splat! img (splat-fn u) {:view view :exposure (or (:exposure spec) 1.0)}))
     (when-let [light (:light spec)]
       (light! img (light u) opts))
+    img))
+
+(defn render-frame
+  "The loop `spec` at phase `u` as a BufferedImage. Layers, bottom-up:
+   :scene (a 3D scene map, rendered by the spec's :engine, default :luxcore),
+   :field, :frame, :splat (rows for desargues.wallpaper.splat), :light; then
+   :post, (fn [u] [effect ..]) of desargues.wallpaper.post, in order. opts:
+   {:size [w h] :backend k} override the spec's size and the field backend
+   (:jvm); :fps :seconds override the loop length.
+
+   Motion blur: with :blur {:samples S :shutter s} the layers are rendered S
+   times at u + (k/S)*s/N (mod 1), k in [0, S), N the frame count, and
+   averaged; :post then runs once, on the mean, at u. The shutter is in
+   frames (1 = a full frame of exposure). The samples are taken in the loop's
+   own phase, so frame N - 1 blurs into frame 0 and the seam stays exact."
+  ^BufferedImage [spec u & [opts]]
+  (let [{:keys [samples shutter] :or {samples 1 shutter 1.0}} (:blur spec)
+        s (max 1 (long samples))
+        u (double u)
+        img (if (= 1 s)
+              (render-layers spec u opts)
+              (let [n (double (frames spec opts))]
+                (blend-mean
+                 (mapv #(render-layers spec (lp/frac (+ u (* (/ (double %) s) (/ (double shutter) n)))) opts)
+                       (range s)))))]
     (when-let [post-fn (:post spec)]
       (post/apply-all! (post-fn u) img))
     img))

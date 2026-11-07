@@ -6,7 +6,8 @@
             [desargues.wallpaper.loop :as lp]
             [desargues.wallpaper.render :as r]
             [desargues.wallpaper.post :as post]
-            [desargues.wallpaper.curves :as cv])
+            [desargues.wallpaper.curves :as cv]
+            [desargues.wallpaper.space :as sp])
   (:import (java.awt.image BufferedImage)
            (java.nio.file Files)
            (java.nio.file.attribute FileAttribute)))
@@ -163,3 +164,89 @@
           mp4 (r/encode! :mp4 probe-spec (str dir "/probe.mp4") {})]
       (is (= 4 (count (filter #(.endsWith (.getName ^java.io.File %) ".png") (.listFiles (io/file png))))))
       (is (pos? (.length (io/file mp4)))))))
+
+(def ^:private cam
+  (sp/camera {:eye [0 -6 0] :target [0 0 0] :up [0 0 1] :fov 40 :view [16.0 8.0]}))
+
+(deftest projection-math
+  (testing "the target sits at the window centre, at its distance"
+    (let [[x y d] (sp/project cam [0 0 0])]
+      (is (< (Math/abs x) 1e-12)) (is (< (Math/abs y) 1e-12)) (is (< (Math/abs (- d 6.0)) 1e-12))))
+  (testing "fov is the vertical field of view: the edge ray lands on the window edge"
+    (let [h (* 6.0 (Math/tan (Math/toRadians 20.0)))
+          [_ y _] (sp/project cam [0 0 h])]
+      (is (< (Math/abs (- y 4.0)) 1e-9))))
+  (testing "x right, y up; farther is smaller"
+    (let [[x1 _ _] (sp/project cam [1 0 0]) [x2 _ _] (sp/project cam [1 3 0])]
+      (is (pos? x1)) (is (< 0 x2 x1))))
+  (testing "points behind the near plane have no image"
+    (is (nil? (sp/project cam [0 -7 0])))
+    (is (nil? (sp/project cam [0 -5.99 0])))))
+
+(deftest near-clipping-cuts-the-segment
+  (let [runs (sp/clip-polyline cam [[0 -7 0] [0 0 0]])]
+    (is (= 1 (count runs)))
+    (is (< (Math/abs (- (:near cam) (get-in runs [0 0 2]))) 1e-9))
+    (is (empty? (sp/clip-polyline cam [[0 -8 0] [0 -7 0]])))))
+
+(deftest backface-and-depth-order
+  (let [tri [[0 0 0] [1 0 0] [0 0 1]]]
+    (is (some? (sp/face-shape cam tri {:cull? true})))
+    (is (nil? (sp/face-shape cam (reverse tri) {:cull? true}))))
+  (testing "shapes are painted far to near"
+    (let [dots (sp/dot-shapes cam [[0 3 0] [0 -2 0] [0 0 0]])
+          ds (map :depth (sp/sort-far-to-near dots))
+          f (sp/frame dots)]
+      (is (= ds (sort > ds)))
+      (is (every? #(not (contains? % :depth)) (:shapes f)))
+      (is (= [9 6 4] (mapv #(Math/round (* 1.0 (:depth %))) (sp/sort-far-to-near dots)))))))
+
+(deftest depth-cue-is-linear-and-clamped
+  (let [cue {:range [4.0 8.0] :alpha [1.0 0.2] :size [1.0 0.5] :fog [0.0 1.0]}]
+    (is (= 1.0 (:alpha (sp/depth-cue cue 2.0))))
+    (is (< (Math/abs (- 0.6 (:alpha (sp/depth-cue cue 6.0)))) 1e-12))
+    (is (< (Math/abs (- 0.5 (:size (sp/depth-cue cue 99.0)))) 1e-12))
+    (is (= {:t 0.0 :alpha 1.0 :size 1.0 :fog 0.0} (sp/depth-cue nil 5.0))))
+  (testing "a cued far dot is dimmer and smaller than a near one"
+    (let [cue {:range [4.0 8.0] :alpha [1.0 0.2] :size [1.0 0.5]}
+          [far near'] (sp/sort-far-to-near (sp/dot-shapes cam [[0 2 0] [0 -2 0]] {:cue cue}))]
+      (is (< (:opacity far) (:opacity near')))
+      (is (< (get-in far [:opts :radius]) (get-in near' [:opts :radius]))))))
+
+(deftest space-shapes-render
+  (let [spec {:id :s :seconds 1 :fps 4 :size [128 72] :view [16.0 8.0]
+              :frame (fn [u]
+                       (sp/frame (concat (sp/dot-shapes cam [[0 0 0] [1 0 1]] {:radius 0.2})
+                                         (sp/segment-shapes cam [[-2 0 0] [2 0 0]] {:width 6})
+                                         (sp/path-shapes cam [[-2 0 1] [2 0 1]] {:width 6}))))}
+        img (r/render-frame spec 0.0)]
+    (is (pos? (bit-and 0xFFFFFF (.getRGB img 64 36))))))
+
+(def ^:private blur-spec
+  {:id :blur :seconds 1 :fps 8 :size [96 54] :view [16.0 8.0]
+   :splat (fn [u] [[(* 4.0 (Math/cos (* lp/tau (double u)))) 0.0 0.25 1.0 0.6 0.3]])
+   :blur {:samples 4 :shutter 1.0}})
+
+(deftest motion-blur-preserves-the-seam
+  (is (= (pixels (r/render-frame blur-spec 0.0)) (pixels (r/render-frame blur-spec 1.0))))
+  (testing "the last frame blurs forward through the wrap, so it equals phase 7/8 + samples across 0"
+    (let [last-u (/ 7.0 8.0)
+          manual (r/render-frame (assoc blur-spec :blur {:samples 1}) 0.0)]
+      (is (not= (pixels (r/render-frame blur-spec last-u)) (pixels manual))))))
+
+(deftest motion-blur-spreads-light
+  (let [sharp (r/render-frame (dissoc blur-spec :blur) 0.0)
+        soft  (r/render-frame blur-spec 0.0)
+        lit   (fn [img] (count (filter #(pos? (bit-and % 0xFF0000)) (pixels img))))]
+    (is (> (lit soft) (lit sharp)))
+    (testing "one sample with any shutter is the unblurred frame"
+      (is (= (pixels sharp)
+             (pixels (r/render-frame (assoc blur-spec :blur {:samples 1 :shutter 3.0}) 0.0)))))))
+
+(deftest splat-adds-and-tone-maps
+  (let [rows (repeat 50 [0.0 0.0 0.3 1.0 1.0 1.0])
+        one  (r/render-frame {:size [64 36] :view [16.0 8.0] :splat (fn [_] [[0.0 0.0 0.3 1.0 1.0 1.0]])} 0.0)
+        many (r/render-frame {:size [64 36] :view [16.0 8.0] :splat (fn [_] rows)} 0.0)
+        g    (fn [img] (bit-and (.getRGB img 32 18) 0xFF))]
+    (is (< 0 (g one) (g many) 256))
+    (is (= 0 (bit-and (.getRGB one 0 0) 0xFFFFFF)))))
