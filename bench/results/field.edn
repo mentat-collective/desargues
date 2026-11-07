@@ -1,0 +1,16 @@
+;; desargues.bench.field/run!, 1920x1080, 7-wave quasicrystal + cosine palette,
+;; warm, interleaved ABAB/BABA, 9 rounds + 2 warmup, 2026-11-07, JDK 27
+;; (--enable-preview), 22 cores, RTX 4070 Laptop (OpenCL), host load1 ~13
+;; (other agents running). Wall ms per frame, median / min; cpu-s per frame.
+{:ss1 {"jvm-closure" {:median-ms 45 :min-ms 35 :cpu-s 0.51}
+       "jvm-form"    {:median-ms 36 :min-ms 30 :cpu-s 0.47}
+       "raster"      {:median-ms 39 :min-ms 36 :cpu-s 0.48}
+       "gpu"         {:median-ms 16 :min-ms 15 :cpu-s 0.02}}
+ :ss2 {"jvm-closure" {:median-ms 163 :min-ms 149 :cpu-s 2.14}
+       "jvm-form"    {:median-ms 144 :min-ms 127 :cpu-s 1.94}
+       "raster"      {:median-ms 145 :min-ms 125 :cpu-s 1.88}
+       "gpu"         {:median-ms 30 :min-ms 26 :cpu-s 0.03}}
+ ;; gpu ss1 breakdown before buffers became resident (43 ms/frame):
+ ;; alloc 7, kernel 7, download of 2073600 doubles 13, blit 3, rest launch/upload
+ :gpu-breakdown-ms {:alloc 7.0 :invoke 6.9 :download 13.3 :blit 3.2}
+ :agreement {:jvm-vs-raster "bit-identical" :jvm-vs-gpu "0 levels at 1080p ss1 (test bound: 1)"}}

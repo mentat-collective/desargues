@@ -24,6 +24,8 @@
 
      (field-raster backend img shader opts)   fills an image from a shader
                                               :jvm: rows in parallel on the JVM
+                                              :raster :gpu: a field form as a
+                                              raster kernel (JVM bands; OpenCL)
      (encode! format spec out-path opts)      writes the loop's N frames
                                               :mp4 :webm :gif (ffmpeg), :png (a sequence)
 
@@ -32,6 +34,7 @@
   (:require [clojure.java.io :as io]
             [clojure.string :as str]
             [desargues.backend :as backend]
+            [desargues.wallpaper.field :as field]
             [desargues.player.headless :as hl]
             [desargues.wallpaper.loop :as lp]
             [desargues.wallpaper.post :as post]
@@ -82,7 +85,9 @@
 
 (defmulti field-raster
   "Fill BufferedImage `img` (TYPE_INT_RGB) from `shader` at opts
-   {:view [w h] :ss k}. Dispatches on the backend key."
+   {:view [w h] :ss k}. Dispatches on the backend key. `shader` is a
+   primitive fn (:jvm only) or a bound field form
+   (desargues.wallpaper.field/bind), which every backend runs."
   (fn [backend _img _shader _opts] backend))
 
 (defmethod field-raster :default [k img shader opts]
@@ -96,7 +101,7 @@
         cx (/ w 2.0) cy (/ h 2.0)
         k  (long ss)
         k2 (double (* k k))
-        ^clojure.lang.IFn$DDL f shader]
+        ^clojure.lang.IFn$DDL f (if (field/bound? shader) (field/jvm-shader shader) shader)]
     (par-rows!
      h
      (fn [^long py]
@@ -120,6 +125,12 @@
                               (bit-shift-left (Math/round (/ (aget acc 1) k2)) 8)
                               (Math/round (/ (aget acc 2) k2))))))))))))
   img)
+
+;; Field forms (desargues.wallpaper.field) as raster kernels: :raster on the
+;; JVM in parallel bands, :gpu one OpenCL work item per pixel. Both run bound
+;; field forms only; :jvm runs those and closures.
+(doseq [k [:raster :gpu]]
+  (backend/provide! k 'desargues.infrastructure.raster-field))
 
 ;; ── Layers ────────────────────────────────────────────────────────────────
 

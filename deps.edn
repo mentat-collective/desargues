@@ -112,8 +112,11 @@
                           org.typedclojure/typed.clj.runtime {:mvn/version "1.4.0"}
                           com.dylibso.chicory/runtime {:mvn/version "1.5.1"}
                           com.dylibso.chicory/compiler {:mvn/version "1.5.1"}}
+             ;; --enable-preview: on JDK 27+ raster's defval emits Valhalla value
+             ;; classes (class file minor 65535), which load only under preview.
              :jvm-opts ["--enable-native-access=ALL-UNNAMED"
-                        "--add-modules=jdk.incubator.vector"]}
+                        "--add-modules=jdk.incubator.vector"
+                        "--enable-preview"]}
   :ansatz {:extra-paths ["ansatz"]
            :extra-deps {org.replikativ/ansatz {:mvn/version "0.2.115"}}
            :jvm-opts ["--enable-native-access=ALL-UNNAMED"]}
