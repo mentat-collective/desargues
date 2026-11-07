@@ -8,7 +8,8 @@
       :materials {:gold {:type \"metal2\" :preset \"gold\" :roughness 0.08}}
       :objects   {:bar {:material :gold :vertices [[x y z] ..] :faces [[i j k] ..]}}
       :lights    {:sky {:type \"sky2\" :gain [1 1 1]}}      ; optional
-      :spp 32 :seed 1 :engine \"PATHCPU\"}                  ; optional
+      :spp 32 :seed 1 :engine \"PATHCPU\"                   ; optional
+      :config {\"opencl.cpu.use\" 0}}                      ; optional, render.cfg
 
    Material and light entries are LuxCore properties, written verbatim
    (vectors space-separated). Collect: `scene-props`, `config-props`.
@@ -67,17 +68,22 @@
        pair))))
 
 (defn config-props
-  "The render.cfg property pairs for a `w` x `h` film written to `png`."
-  [{:keys [spp seed engine] :or {spp 32 seed 1 engine "PATHCPU"}} w h png]
-  [["scene.file" "scene.scn"]
-   ["renderengine.type" engine]
-   ["renderengine.seed" seed]
-   ["sampler.type" "SOBOL"]
-   ["film.width" w]
-   ["film.height" h]
-   ["film.outputs.1.type" "RGB_IMAGEPIPELINE"]
-   ["film.outputs.1.filename" png]
-   ["batch.haltspp" spp]])
+  "The render.cfg property pairs for a `w` x `h` film written to `png`.
+   The scene's :config map ({\"opencl.cpu.use\" 0 ..}) is appended verbatim,
+   so it can select devices, thread counts or an image pipeline."
+  [{:keys [spp seed engine config] :or {spp 32 seed 1 engine "PATHCPU"}} w h png]
+  (concat
+   [["scene.file" "scene.scn"]
+    ["renderengine.type" engine]
+    ["renderengine.seed" seed]
+    ["sampler.type" "SOBOL"]
+    ["film.width" w]
+    ["film.height" h]
+    ["film.outputs.1.type" "RGB_IMAGEPIPELINE"]
+    ["film.outputs.1.filename" png]
+    ["batch.haltspp" spp]]
+   (for [[k v] (sort-by (comp str key) config)]
+     [(name k) (if (boolean? v) (if v 1 0) v)])))
 
 ;; ── Promote: meshes ───────────────────────────────────────────────────────
 

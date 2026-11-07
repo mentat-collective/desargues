@@ -33,6 +33,14 @@
     (is (= 4 (cfg "batch.haltspp")))
     (is (= "/tmp/f.png" (cfg "film.outputs.1.filename")))))
 
+(deftest config-appends-render-options
+  (let [cfg (into {} (lx/config-props (assoc tiny :engine "PATHOCL"
+                                             :config {"opencl.cpu.use" false "opencl.gpu.use" 1})
+                                      64 36 "/tmp/f.png"))]
+    (is (= "PATHOCL" (cfg "renderengine.type")))
+    (is (= 0 (cfg "opencl.cpu.use")))
+    (is (= 1 (cfg "opencl.gpu.use")))))
+
 (deftest prism-is-closed
   (let [{:keys [vertices faces]} (lx/prism [[0 0] [1 0] [1 1] [0 1]] 0.0 0.1)]
     (is (= 9 (count vertices)))
