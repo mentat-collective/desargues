@@ -36,7 +36,7 @@
               (let [{:keys [exit out]} (sh/sh "sh" "-c" "command -v glslangValidator")]
                 (when (zero? exit) (str/trim out))))]
     (when-not v
-      (println "[emit-test] glslangValidator not found ($DESARGUES_GLSLANG or PATH); structural checks only"))
+      (println "[emit-test] glslangValidator not found ($DESARGUES_GLSLANG, -Ddesargues.glslang or PATH); structural checks only"))
     v))
 
 (defn- isf-preamble
