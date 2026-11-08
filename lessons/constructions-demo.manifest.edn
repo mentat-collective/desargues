@@ -18,7 +18,7 @@
            "notebook.clj" "07b69a452d54d68cdb0433422c2021a8794634076fd39a082904abc7c67bd9a1"}
   :generated-by "bb lesson:build lessons/constructions-demo.edn"
   :notebook-deps {
-                   io.github.buddhilw/emmy-viewers {:mvn/version "0.5.0-fork.1"}
+                   io.github.buddhilw/emmy-viewers {:mvn/version "0.5.1-fork.1"}
                    io.github.nextjournal/clerk {:git/sha "a67a5d1e25fc9601e9f8a6d8006aaf7eed1a7761"}
                    io.github.nextjournal/clerk.render {
                                                         :git/sha "a67a5d1e25fc9601e9f8a6d8006aaf7eed1a7761"}
