@@ -192,6 +192,10 @@
                            {:namespaces '[desargues.wallpaper.glsl]
                             :requires nil})
 
+(backend/register-backend! :wgsl
+                           {:namespaces '[desargues.wallpaper.wgsl]
+                            :requires nil})
+
 ;; ── JVM: the lowered code as a primitive fn ──────────────────────────────
 
 (defn jvm-form
