@@ -100,21 +100,24 @@
 (defn fs-main
   "fs_main of checked layer `l`: pixel -> scene point as render fits the
    view (whole view visible, centred, y up, the longer axis extended),
-   phase = fract(param(0u) / period), the field at the slots, clamped,
-   opaque."
-  [{:keys [phase period form] [vw vh] :view :as l}]
-  (let [slot (slots l)
-        args (for [p (:params form)] (if (= p phase) "desargues_phase" (slot-ref (slot p))))]
-    (str "@fragment\n"
-         "fn fs_main(@builtin(position) frag_coord: vec4f) -> @location(0) vec4f {\n"
-         "  let desargues_res: vec2f = u.resolution;\n"
-         "  let desargues_s: f32 = min(desargues_res.x / " (wgsl/literal vw) ", desargues_res.y / " (wgsl/literal vh) ");\n"
-         "  let desargues_p: vec2f = vec2f(frag_coord.x - 0.5 * desargues_res.x, 0.5 * desargues_res.y - frag_coord.y) / desargues_s;\n"
-         "  let desargues_phase: f32 = fract(" (slot-ref 0) " / " (wgsl/literal period) ");\n"
-         "  let desargues_c: vec3f = " wgsl/function-name "(desargues_p.x, desargues_p.y"
-         (apply str (map #(str ", " %) args)) ");\n"
-         "  return vec4f(clamp(desargues_c, vec3f(0.0), vec3f(1.0)), 1.0);\n"
-         "}\n")))
+   phase = fract(param(<phase-slot>u) / period), the field at the slots,
+   clamped, opaque. `phase-slot` is the slot holding loop_rate's running
+   integral: 0 for a trama node (the default), the extra slot after the
+   packed params for a fosfora layer effect (desargues.wallpaper.pfx)."
+  ([l] (fs-main l 0))
+  ([{:keys [phase period form] [vw vh] :view :as l} phase-slot]
+   (let [slot (slots l)
+         args (for [p (:params form)] (if (= p phase) "desargues_phase" (slot-ref (slot p))))]
+     (str "@fragment\n"
+          "fn fs_main(@builtin(position) frag_coord: vec4f) -> @location(0) vec4f {\n"
+          "  let desargues_res: vec2f = u.resolution;\n"
+          "  let desargues_s: f32 = min(desargues_res.x / " (wgsl/literal vw) ", desargues_res.y / " (wgsl/literal vh) ");\n"
+          "  let desargues_p: vec2f = vec2f(frag_coord.x - 0.5 * desargues_res.x, 0.5 * desargues_res.y - frag_coord.y) / desargues_s;\n"
+          "  let desargues_phase: f32 = fract(" (slot-ref phase-slot) " / " (wgsl/literal period) ");\n"
+          "  let desargues_c: vec3f = " wgsl/function-name "(desargues_p.x, desargues_p.y"
+          (apply str (map #(str ", " %) args)) ");\n"
+          "  return vec4f(clamp(desargues_c, vec3f(0.0), vec3f(1.0)), 1.0);\n"
+          "}\n"))))
 
 (defn- json-text [x]
   (json/write-str x :indent true :escape-slash false :escape-unicode false))

@@ -78,7 +78,13 @@
    [:params {:optional true} [:or [:sequential [:tuple symbol? ParamSpec]]
                               [:map-of symbol? ParamSpec]]]
    [:order {:optional true} [:sequential symbol?]]
-   [:target {:optional true} [:enum :glsl :trama]]])
+   [:category {:optional true} string?]
+   [:pfx {:optional true} [:map {:closed true}
+                           [:name {:optional true} string?]
+                           [:author {:optional true} string?]
+                           [:description {:optional true} string?]
+                           [:category {:optional true} string?]]]
+   [:target {:optional true} [:enum :glsl :trama :pfx]]])
 
 (def ^:private reserved
   "Names an input may not take: the ones the emitted main declares itself,
@@ -291,10 +297,13 @@
      <id>.330.frag  desktop GLSL 330
      <id>.json  the manifest of the plain shaders.
    :target :trama: <id>.wgsl, a fosfora trama source
-   (desargues.wallpaper.trama, doc/trama-layers.md)."
+   (desargues.wallpaper.trama, doc/trama-layers.md).
+   :target :pfx: <id>.pfx + <id>.wgsl, a fosfora layer effect
+   (desargues.wallpaper.pfx, doc/pfx-effects.md)."
   [layer]
-  (if (= :trama (:target layer))
-    ((requiring-resolve 'desargues.wallpaper.trama/layer-files) layer)
+  (case (:target layer)
+    :trama ((requiring-resolve 'desargues.wallpaper.trama/layer-files) layer)
+    :pfx ((requiring-resolve 'desargues.wallpaper.pfx/layer-files) layer)
     (r/let-ok [c (compiled layer)]
       (let [id (name (:id c))]
         (r/ok (array-map (str id ".fs") (isf c)

@@ -7,6 +7,9 @@ compiles field forms (`desargues.wallpaper.field`) straight to WGSL (the
 sources (`desargues.wallpaper.trama`), reached through
 `desargues.wallpaper.emit` with `:target :trama`. The ISF/GLSL layers
 (`doc/glsl-layers.md`) are unchanged and stay useful for other VJ hosts.
+For fosfora's effect catalog (full layer effects, `.pfx` + `.wgsl`), use
+`:target :pfx`, which shares this WGSL body but delivers the rate integral in
+an extra slot: see `doc/pfx-effects.md`.
 
 ## Emit a trama source
 
