@@ -120,7 +120,7 @@
           cospal (let [[t a b c d] args]
                    (list '+ (sub a) (list '* (sub b) (list 'Math/cos (list '* tau (list '+ (list '* (sub c) (sub t)) (sub d)))))))
           (if-let [m (math op)]
-            (cons m (map sub args))
+            (apply list m (mapv sub args)) ; eager: bindings pushed in evaluation order
             (bad (str "unknown op " op "; the vocabulary is " (sort vocabulary)) form))))
       :else (bad "not an expression" form))))
 
