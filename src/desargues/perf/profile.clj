@@ -37,6 +37,7 @@
             [desargues.manim.patches.background-cache :as bc]
             [desargues.manim.mobject-cache :as mcache]
             [desargues.manim.patches.play-setup :as ps]
+            [desargues.manim.patches.fadein-setup :as fis]
             [desargues.manim.patches.preview-aa :as paa]))
 
 ;; ============================================================================
@@ -149,6 +150,10 @@
 (defmethod patch-entry :play-setup [_]
   {:id :play-setup :rank 60 :profiles #{:fast} :exact? true
    :make ps/play-setup})
+
+(defmethod patch-entry :fadein-setup [_]
+  {:id :fadein-setup :rank 70 :profiles #{:fast} :exact? true
+   :make fis/fadein-setup})
 
 (defmethod patch-entry :preview-aa [_]
   {:id :preview-aa :rank 90 :profiles #{:preview} :exact? false

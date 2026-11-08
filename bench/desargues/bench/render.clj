@@ -385,18 +385,20 @@
            opts)))
 
 (defn fadein-setup-arm
-  "Warm EDIT with the mobject cache on in both variants: the bench layout
+  "Warm EDIT with the mobject cache on in every variant: the bench layout
    rendered once, then each sample changes one cell (the same cell sequence
-   for both) and renders frames-only with svg-copy + glyph-cache through a
-   Manim backend with a desargues.manim.mobject-cache LRU (one per variant),
-   stock FadeIn vs desargues.manim.patches.fadein-setup. Each sample records
-   :ttff-ms (edit to first frame), :begin-ms (Scene.begin_animations, i.e.
-   FadeIn.begin) and :frames-sha256 over every frame, which must match the
-   other variant's for the same edit."
+   for all) and renders frames-only through a Manim backend with a
+   desargues.manim.mobject-cache LRU (one per variant), under the :fast perf
+   profile (desargues.perf.profile) with FadeIn handled three ways:
+   stock-fadein (:fast without fadein-setup), fadein-lean
+   (fadein-setup {:zero? false}: lean copies) and fadein-zero (:fast as
+   shipped: the zero path). Each sample records :ttff-ms (edit to first
+   frame), :begin-ms (Scene.begin_animations, i.e. FadeIn.begin) and
+   :frames-sha256 over every frame, which must match the other variants' for
+   the same edit."
   [opts]
-  (let [svg     @(requiring-resolve 'desargues.manim.patches/svg-path-shared-copy)
-        glyph   ((requiring-resolve 'desargues.manim.patches/glyph-cache))
-        fadein  ((requiring-resolve 'desargues.manim.patches.fadein-setup/fadein-setup))
+  (let [fadein  (requiring-resolve 'desargues.manim.patches.fadein-setup/fadein-setup)
+        perf!   (requiring-resolve 'desargues.perf.profile/install!)
         install (requiring-resolve 'desargues.manim.patches/install!)
         remove  (requiring-resolve 'desargues.manim.patches/uninstall!)
         backend (requiring-resolve 'desargues.scene.manim/manim-backend)
@@ -444,22 +446,26 @@ def _bench_timer_take():
                                                 :ttff-ms (some-> first-ns (- t0) (/ 1e6))
                                                 :begin-ms (/ (call "_bench_timer_take") 1e6)
                                                 :frames-sha256 (apply str (map #(format "%02x" %) (.digest md)))))})))
-        variant (fn [nm patched?]
+        variant (fn [nm mode]
                   (let [b (delay (backend {:mobject-cache (lru)})) n (atom 0)]
                     {:name nm
                      :setup (fn [_]
-                              (set-cfg! "write_to_movie" false) (install svg) (install glyph)
-                              (if patched? (install fadein) (remove fadein))
+                              (set-cfg! "write_to_movie" false)
+                              (perf! :fast)
+                              (case mode
+                                :stock (remove (fadein))
+                                :lean  (do (remove (fadein)) (install (fadein {:zero? false})))
+                                :zero  nil)
                               (when (zero? @n) (render! @b (reference/layout-tree 16))))
                      :run (fn [_] (render! @b (edited (mod (dec (swap! n inc)) 16))))
-                     :teardown (fn [_] (remove fadein) (set-cfg! "write_to_movie" true))}))]
+                     :teardown (fn [_] (set-cfg! "write_to_movie" true))}))]
     (merge (warm-render-arm {})
-           {:id "fadein setup, edit one cell, mobject cache 480p15 frames-only"
+           {:id "fadein setup, edit one cell, :fast profile + mobject cache 480p15 frames-only"
             :setup (fn []
                      ((:setup (warm-render-arm {})))
                      (call "_bench_timer_install"))
-            :variants [(variant "stock-fadein" false) (variant "fadein-setup" true)]
-            :teardown (fn [] (remove fadein) (remove glyph) (remove svg) (call "_bench_timer_uninstall"))
+            :variants [(variant "stock-fadein" :stock) (variant "fadein-lean" :lean) (variant "fadein-zero" :zero)]
+            :teardown (fn [] (perf! :stock) (call "_bench_timer_uninstall"))
             :rounds 16 :warmup 2}
            opts)))
 
