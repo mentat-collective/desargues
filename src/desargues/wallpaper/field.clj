@@ -14,7 +14,9 @@
    Vocabulary (closed):
      + - * /  sin cos tan exp log sqrt pow atan2 abs floor min max
      fract mix clamp  let
-   Number literals become doubles. `bind` fixes the params for one frame:
+     frac wave osc  (the loop helpers of desargues.wallpaper.loop)
+     smoothstep cospal  (GLSL's smoothstep; a cosine palette channel)
+   and the constants pi and tau. Number literals become doubles. `bind` fixes the params for one frame:
    (bind form u k) is a BOUND field, what a loop spec's :field may return in
    place of a closure.
 
@@ -32,8 +34,19 @@
 (set! *warn-on-reflection* true)
 
 (def vocabulary
-  "The symbols a field body may apply, besides let."
-  '#{+ - * / sin cos tan exp log sqrt pow atan2 abs floor min max fract mix clamp})
+  "The symbols a field body may apply, besides let. The loop helpers
+   (wave u) (osc u lo hi) (frac x) mirror desargues.wallpaper.loop;
+   (smoothstep e0 e1 x) is GLSL's; (cospal t a b c d) is a cosine palette
+   channel a + b cos 2π(c t + d). All derived ops lower to the primitive ones."
+  '#{+ - * / sin cos tan exp log sqrt pow atan2 abs floor min max fract mix clamp
+     frac wave osc smoothstep cospal})
+
+(def constants
+  "Named constants a field body may use: pi and tau (2π), unless a param or
+   let shadows them."
+  {'pi Math/PI 'tau (* 2.0 Math/PI)})
+
+(def ^:private tau (* 2.0 Math/PI))
 
 (def ^:private math
   '{sin Math/sin cos Math/cos tan Math/tan exp Math/exp log Math/log sqrt Math/sqrt
@@ -41,7 +54,7 @@
 
 (def ^:private arity
   '{sin 1 cos 1 tan 1 exp 1 log 1 sqrt 1 abs 1 floor 1 pow 2 atan2 2 min 2 max 2
-    fract 1 mix 3 clamp 3})
+    fract 1 frac 1 mix 3 clamp 3 wave 1 osc 3 smoothstep 3 cospal 5})
 
 (defn- bad [msg form]
   (throw (ex-info (str "Field form: " msg ": " (pr-str form)) {:reason :bad-field :form form})))
@@ -66,17 +79,18 @@
      (first body)]))
 
 (defn- lower-expr
-  "Lower expression `form` under `env` (source symbol -> lowered symbol),
-   pushing the bindings it introduces onto volatile `out`; returns the
-   lowered expression."
+  "Lower expression `form` under `env` (source symbol -> lowered symbol or
+   constant), pushing the bindings it introduces onto volatile `out`;
+   returns the lowered expression."
   [env out form]
   (let [sub (fn [e] (lower-expr env out e))
         share (fn [e] (if (trivial? e) e
                           (let [s (symbol (str "v" (count @out)))] (vswap! out conj [s e]) s)))
-        fold (fn [op args] (reduce (fn [a b] (list op a (sub b))) (sub (first args)) (rest args)))]
+        fold (fn [op args] (reduce (fn [a b] (list op a (sub b))) (sub (first args)) (rest args)))
+        wave (fn [u] (list '* 0.5 (list '+ 1.0 (list 'Math/cos (list '* tau u)))))]
     (cond
       (number? form) (double form)
-      (symbol? form) (or (env form) (bad "unbound symbol" form))
+      (symbol? form) (let [v (env form)] (if (nil? v) (bad "unbound symbol" form) v))
       (and (seq? form) (seq form))
       (let [[op & args] form
             n (count args)]
@@ -88,11 +102,19 @@
           * (if (zero? n) 1.0 (fold '* args))
           - (case n 0 (bad "- takes at least one argument" form) 1 (list '- (sub (first args))) (fold '- args))
           / (case n 0 (bad "/ takes at least one argument" form) 1 (list '/ 1.0 (sub (first args))) (fold '/ args))
-          fract (let [t (share (sub (first args)))] (list '- t (list 'Math/floor t)))
+          (fract frac) (let [t (share (sub (first args)))] (list '- t (list 'Math/floor t)))
           mix (let [[a b t] args, a (share (sub a))]
                 (list '+ a (list '* (list '- (sub b) a) (sub t))))
           clamp (let [[v lo hi] args]
                   (list 'Math/min (list 'Math/max (sub v) (sub lo)) (sub hi)))
+          wave (wave (sub (first args)))
+          osc (let [[u lo hi] args, lo (share (sub lo))]
+                (list '+ lo (list '* (list '- (sub hi) lo) (list '- 1.0 (wave (sub u))))))
+          smoothstep (let [[e0 e1 v] args, e0 (share (sub e0))
+                           t (share (list 'Math/min (list 'Math/max (list '/ (list '- (sub v) e0) (list '- (sub e1) e0)) 0.0) 1.0))]
+                       (list '* t (list '* t (list '- 3.0 (list '* 2.0 t)))))
+          cospal (let [[t a b c d] args]
+                   (list '+ (sub a) (list '* (sub b) (list 'Math/cos (list '* tau (list '+ (list '* (sub c) (sub t)) (sub d)))))))
           (if-let [m (math op)]
             (cons m (map sub args))
             (bad (str "unknown op " op "; the vocabulary is " (sort vocabulary)) form))))
@@ -116,7 +138,8 @@
   (when-not (and (map? form) (contains? form :body))
     (bad "a field form is {:params [..] :body ..}" form))
   (let [params (vec params)
-        env (into {'x 'fx 'y 'fy} (map-indexed (fn [i p] [p (symbol (str "p" i))])) params)
+        env (into (merge constants {'x 'fx 'y 'fy})
+                  (map-indexed (fn [i p] [p (symbol (str "p" i))])) params)
         out (volatile! [])
         rgb (lower-tail env out (:body form))]
     {:params params :bindings @out :rgb rgb}))
