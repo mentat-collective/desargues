@@ -29,7 +29,8 @@
    (desargues.infrastructure.raster-field) emit raster kernels from it.
 
    Channels quantise the same way everywhere: (quantize v) =
-   floor(255 clamp(v, 0, 1) + 0.5).")
+   floor(255 clamp(v, 0, 1) + 0.5)."
+  (:require [desargues.backend :as backend]))
 
 (set! *warn-on-reflection* true)
 
@@ -170,6 +171,23 @@
   "True for a bound field (see bind)."
   [x]
   (and (map? x) (contains? x :field/form)))
+
+;; ── Port: field form -> shader source text ────────────────────────────────
+
+(defmulti source
+  "Field form `form` as shader source for `target` (a backend key, open:
+   :glsl is desargues.wallpaper.glsl), at target-specific `opts`. Returns a
+   hive-dsl Result: (ok compiled) or (err {:error :field/unsupported ..})
+   naming the construct the target cannot express; never drops one. The
+   :default loads the target's provider through desargues.backend."
+  (fn [target _form _opts] target))
+
+(defmethod source :default [k form opts]
+  (backend/dispatch-default source "field source compiler" k [form opts]))
+
+(backend/register-backend! :glsl
+                           {:namespaces '[desargues.wallpaper.glsl]
+                            :requires nil})
 
 ;; ── JVM: the lowered code as a primitive fn ──────────────────────────────
 
