@@ -1,0 +1,45 @@
+{
+  "ISFVSN": "2",
+  "DESCRIPTION": "7-fold quasicrystal [blend: screen; loops every 12 s at rate 1]",
+  "CREDIT": "desargues (github.com/mentat-collective/desargues)",
+  "CATEGORIES": [
+    "Generator"
+  ],
+  "INPUTS": [
+    {
+      "NAME": "u",
+      "TYPE": "float",
+      "DEFAULT": 0.0,
+      "MIN": 0.0,
+      "MAX": 1.0,
+      "LABEL": "Phase (added to the clock)"
+    },
+    {
+      "NAME": "rate",
+      "TYPE": "float",
+      "DEFAULT": 1.0,
+      "MIN": 0.0,
+      "MAX": 4.0,
+      "LABEL": "Loops per period (0: phase only)"
+    },
+    {
+      "NAME": "scale",
+      "TYPE": "float",
+      "DEFAULT": 3.0,
+      "MIN": 1.0,
+      "MAX": 8.0,
+      "LABEL": "Wave number"
+    }
+  ],
+  "DESARGUES": {
+    "id": "quasicrystal",
+    "blend": "screen",
+    "phase": "u",
+    "period": 12.0,
+    "view": [
+      14.222222222222221,
+      8.0
+    ],
+    "generator": "desargues.wallpaper.emit"
+  }
+}
