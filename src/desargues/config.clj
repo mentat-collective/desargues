@@ -42,6 +42,23 @@
   (when-let [p (conda-prefix)]
     (first-existing (map #(str p "/lib/python" % "/site-packages") python-abis))))
 
+(def ^:private preload-candidates
+  "Conda libs a manim extension NEEDs but cannot find from an embedding host:
+   pathops' RPATH ($ORIGIN/../../lib) misses the env lib dir."
+  ["libskia.so"])
+
+(defn- conda-preload-libs
+  "Colon-separated absolute paths of the preload candidates present in the
+   conda lib dir; \"\" when none (an empty field is valid config)."
+  []
+  (or (when-let [p (conda-prefix)]
+        (->> preload-candidates
+             (map #(str p "/lib/" %))
+             (filter #(.exists (io/file %)))
+             seq
+             (str/join ":")))
+      ""))
+
 (defn- detect-project-root
   "Repo root, derived from where this namespace was loaded from
    (<root>/src/desargues/config.clj). Resolves under a source checkout and
@@ -69,7 +86,31 @@
                       :type :string)
   :quality       (env "DESARGUES_QUALITY"
                       :default "medium_quality"
-                      :type :string))
+                      :type :string)
+  :preload-libs  (env "DESARGUES_MANIM_PRELOAD"
+                      :default (conda-preload-libs)
+                      :type :string)
+  ;; desargues.manim.encoder profile: "final" (x264 medium, Manim's own) or
+  ;; "preview" (x264 ultrafast; bigger files, far less encoder CPU).
+  :encoder       (env "DESARGUES_ENCODER"
+                      :default "final"
+                      :type :string)
+  ;; desargues.manim.core/import-plan: "lean" (single-thread OpenBLAS, graph
+  ;; and code-highlight deps deferred to first use) or "eager" (plain import).
+  :import-mode   (env "DESARGUES_IMPORT_MODE"
+                      :default "lean"
+                      :type :string)
+  ;; desargues.manim.patches/path-builder: "manim" (Camera.set_cairo_context_path
+  ;; as shipped), "native" (one Zig call per VMobject path) or "native-display"
+  ;; (also fill and stroke, one Zig call per batch); build with `bb native:path`,
+  ;; falls back to "manim" when the library is absent.
+  :path-builder  (env "DESARGUES_PATH_BUILDER"
+                      :default "manim"
+                      :type :string)
+  ;; The native path library; "" = <project-root>/native/zigpath/zig-out/lib.
+  :native-path-lib (env "DESARGUES_NATIVE_PATH_LIB"
+                        :default ""
+                        :type :string))
 
 (defn manim-config
   "Resolve the manim configuration to a typed map, throwing on invalid config."

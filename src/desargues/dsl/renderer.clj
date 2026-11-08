@@ -438,7 +438,7 @@
 (defn add-updater!
   "Add an updater function to a mobject."
   [mobject updater-fn]
-  (py/call-attr mobject "add_updater" updater-fn))
+  (py/call-attr mobject "add_updater" (manim/->py-updater updater-fn)))
 
 ;; =============================================================================
 ;; Physics Rendering

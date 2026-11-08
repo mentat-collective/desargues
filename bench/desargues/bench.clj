@@ -27,7 +27,8 @@
             [desargues.scene.data :as rec]
             [desargues.physics :as phys]
             [emmy.env :as e]
-            [desargues.bench.check :as check])
+            [desargues.bench.check :as check]
+            [desargues.bench.reference :as ref])
   (:gen-class))
 
 ;; ── sampler ─────────────────────────────────────────────────────────────────
@@ -45,20 +46,9 @@
    ["x⁵ + 3x³ − 2x"  (fn [x] (e/+ (e/expt x 5) (e/* 3 (e/expt x 3)) (e/* -2 x) 1))]
    ["sin(x² cos x)"  (fn [x] (e/sin (e/* (e/square x) (e/cos x))))]])
 
-(defn layout-tree
-  "A title over a 4-column grid of `n` bordered cells (text and math alternating)."
-  [n]
-  (let [cols 4
-        rows (max 1 (quot n cols))]
-    (apply l/column {:width :fill :height :fill :padding 0.5 :spacing 0.2 :align :center-x}
-           (l/text "Benchmark" {:font-size 36})
-           (for [r (range rows)]
-             (apply l/row {:width :fill :spacing 0.2}
-                    (for [c (range cols)]
-                      (l/box {:width [:portion 1] :border :white}
-                        (if (even? (+ r c))
-                          (l/text (str "cell " r "," c))
-                          (l/math "\\alpha_{ij}")))))))))
+(def layout-tree
+  "A title over a 4-column grid of `n` bordered cells (desargues.bench.reference)."
+  ref/layout-tree)
 
 (def frame {:x 0 :y 0 :w 13.222222 :h 7.0})
 
@@ -209,24 +199,28 @@
 (defn -main
   "bb bench: run, write latest.edn and the charts. --check: also compare
    against baseline.edn and exit 1 on a regression. --save-baseline: write the
-   run as the new baseline.edn. --charts-only: reuse latest.edn."
+   run as the new baseline.edn. --charts-only: reuse latest.edn.
+   `render ARGS...` runs the interleaved render A/B arms instead
+   (desargues.bench.render -> bench/results/render.edn)."
   [& args]
-  (let [{:keys [out manim? charts-only? only check? save-baseline? tolerance]} (parse-args args)
-        results-file  (io/file out "results" "latest.edn")
-        baseline-file (io/file out "results" "baseline.edn")
-        rep (if charts-only?
-              (edn/read-string (slurp results-file))
-              (doto (report (cond-> {:manim? manim?} only (assoc :only only)))
-                (->> (write-edn! results-file))))
-        verdict (when check?
-                  (check/compare-reports (edn/read-string (slurp baseline-file)) rep
-                                         (cond-> {} tolerance (assoc :tolerance tolerance))))]
-    (print-table rep)
-    (say "results: " results-file)
-    (say "charts:  doc/bench/" (chart/write-all! rep "doc/bench"))
-    (when save-baseline?
-      (write-edn! baseline-file rep)
-      (say "baseline: " baseline-file))
-    (when verdict (run! say (check/summary-lines verdict)))
-    (shutdown-agents)
-    (System/exit (if (and verdict (not (:ok? verdict))) 1 0))))
+  (if (= "render" (first args))
+    (apply (requiring-resolve 'desargues.bench.render/-main) (rest args))
+    (let [{:keys [out manim? charts-only? only check? save-baseline? tolerance]} (parse-args args)
+          results-file  (io/file out "results" "latest.edn")
+          baseline-file (io/file out "results" "baseline.edn")
+          rep (if charts-only?
+                (edn/read-string (slurp results-file))
+                (doto (report (cond-> {:manim? manim?} only (assoc :only only)))
+                  (->> (write-edn! results-file))))
+          verdict (when check?
+                    (check/compare-reports (edn/read-string (slurp baseline-file)) rep
+                                           (cond-> {} tolerance (assoc :tolerance tolerance))))]
+      (print-table rep)
+      (say "results: " results-file)
+      (say "charts:  doc/bench/" (chart/write-all! rep "doc/bench"))
+      (when save-baseline?
+        (write-edn! baseline-file rep)
+        (say "baseline: " baseline-file))
+      (when verdict (run! say (check/summary-lines verdict)))
+      (shutdown-agents)
+      (System/exit (if (and verdict (not (:ok? verdict))) 1 0)))))

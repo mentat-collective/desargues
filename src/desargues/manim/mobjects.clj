@@ -1015,7 +1015,7 @@
    
    updater-fn - function taking the mobject (and optionally dt)"
   [mobject updater-fn]
-  (py/call-attr mobject "add_updater" updater-fn)
+  (py/call-attr mobject "add_updater" (core/->py-updater updater-fn))
   mobject)
 
 (defn remove-updater
