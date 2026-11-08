@@ -73,7 +73,9 @@
   #{"rate" "phase" "TIME" "TIMEDELTA" "RENDERSIZE" "PASSINDEX" "DATE" "FRAMEINDEX"
     "fx" "fy" "px" "p" "s" "c" "main" "fragColor" "isf_FragNormCoord"
     "in" "out" "inout" "uniform" "float" "int" "bool" "vec2" "vec3" "vec4" "return"
-    "if" "else" "for" "while" "do" "discard" "const" "struct" "true" "false" "highp" "precision"})
+    "if" "else" "for" "while" "do" "discard" "const" "struct" "true" "false" "highp" "precision"
+    "sin" "cos" "tan" "exp" "log" "sqrt" "abs" "floor" "atan" "pow" "min" "max" "mod"
+    "fract" "mix" "clamp" "smoothstep" "d_pow"})
 
 (defn glsl-name
   "Param symbol `s` as a GLSL identifier (- becomes _), or nil when it is not one."
