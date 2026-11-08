@@ -138,8 +138,8 @@
       (try
         (let [fast (perf/install! :fast)]
           (is (= :fast (:profile fast)))
-          (is (= (:patches (perf/profile :fast))
-                 (into (:installed fast) (:unavailable fast)))
+          (is (= (set (:patches (perf/profile :fast)))
+                 (into (set (:installed fast)) (:unavailable fast)))
               "every patch is either installed or reported unavailable")
           (is (every? #{:native-cairo-path :native-display} (:unavailable fast))
               "only the native patches can be missing (no Zig library)")

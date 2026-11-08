@@ -125,38 +125,44 @@
 ;; ── render arms ───────────────────────────────────────────────────────────
 
 (defn render-arm
-  "Interleaved :stock vs :fast for render arm `arm`. Each variant keeps one
-   backend (so :fast's mobject cache stays warm across edits, as in an
-   editing session) and installs its profile before every sample."
-  [arm {:keys [rounds warmup] :or {rounds 12 warmup 2}}]
+  "Interleaved perf profiles (:variants, default [:stock :fast]) for render
+   arm `arm`. Each variant keeps one backend (so a mobject cache stays warm
+   across edits, as in an editing session) and installs its profile before
+   every sample."
+  [arm {:keys [rounds warmup variants] :or {rounds 12 warmup 2 variants [:stock :fast]}}]
   (let [render (scene-thunk arm)
         variant (fn [k]
                   (let [b (delay (backend k)) n (atom 0)]
                     {:name (name k)
                      :setup (fn [_] (perf/install! (:perf-profile @b)) nil)
                      :run (fn [_] (let [i (swap! n inc)] (timed #(render @b i))))}))]
-    {:id (str arm " 480p15 frames-only, stock vs fast")
+    {:id (str arm " frames-only, " (clojure.string/join " vs " (map name variants)))
      :rounds rounds :warmup warmup :alternate? true
      :setup ready!
      :teardown #(perf/install! :stock)
-     :variants [(variant :stock) (variant :fast)]}))
+     :variants (mapv variant variants)}))
 
 ;; ── live arm ──────────────────────────────────────────────────────────────
 
 (defn live-arm
-  "Interleaved :stock vs :fast through play-live! into `host`, unpaced."
-  [host extras {:keys [rounds warmup] :or {rounds 15 warmup 2}}]
+  "Interleaved perf profiles (:variants, default [:stock :fast]) through
+   play-live! into `host`, unpaced; :live-opts go to every run (e.g.
+   {:quality \"high_quality\" :frame-rate 15})."
+  [host extras {:keys [rounds warmup variants live-opts]
+                :or {rounds 15 warmup 2 variants [:stock :fast]}}]
   (let [M (mc/manim) i (atom 0)
         variant (fn [k]
                   {:name (name k)
                    :setup (fn [_] (perf/install! :stock) nil)
                    :run (fn [_]
-                          (let [r (lr/live-run! M host (swap! i inc) {:profile k :paced? false})]
+                          (let [r (lr/live-run! M host (swap! i inc)
+                                                (merge live-opts {:profile k :paced? false}))]
                             (swap! extras update (name k) (fnil conj []) r)
                             r))})]
-    {:id "live 480p15 unpaced, stock vs fast"
+    {:id (str "live " (:quality live-opts "low_quality") " unpaced, "
+              (clojure.string/join " vs " (map name variants)))
      :rounds rounds :warmup warmup :alternate? true
-     :variants [(variant :stock) (variant :fast)]}))
+     :variants (mapv variant variants)}))
 
 ;; ── SHA-256 identity ──────────────────────────────────────────────────────
 
@@ -196,6 +202,53 @@
          (for [i [7 8]]
            (let [a (live-hashes :stock i) f (live-hashes :fast i)]
              [(str "live-" i) {:frames (count a) :identical? (= a f)}])))))
+
+;; ── lossy profiles: PSNR against the exact render ──────────────────────────
+
+(defn psnr
+  "[PSNR-dB max-abs] of frame `b` against reference frame `a` (equal-size
+   RGBA byte arrays), over the colour channels; 99.0 for identical frames."
+  [^bytes a ^bytes b]
+  (let [n (alength a)]
+    (loop [i 0 se 0.0 k 0 mx 0]
+      (if (< i n)
+        (if (= 3 (mod i 4))
+          (recur (inc i) se k mx)
+          (let [d (Math/abs (- (bit-and (aget a i) 0xff) (bit-and (aget b i) 0xff)))]
+            (recur (inc i) (+ se (* d d)) (inc k) (max mx d))))
+        (let [mse (/ se k)]
+          [(if (zero? mse) 99.0 (* 10 (Math/log10 (/ (* 255.0 255.0) mse)))) mx])))))
+
+(defrecord KeepingSink [frames n every]
+  fp/IFrameSink
+  (-frame! [_ rgba _ _ _]
+    (when (zero? (mod (swap! n inc) every))
+      (swap! frames conj (dt/->byte-array rgba)))))
+
+(defn render-frames
+  "Every `every`-th frame (bytes) of render arm `arm`, edit `i`, under `profile`."
+  [arm profile i every]
+  (let [b (backend profile) sink (->KeepingSink (atom []) (atom -1) every)]
+    (perf/install! profile)
+    (try (with-sink sink #((scene-thunk arm) b i)) (finally (perf/install! :stock)))
+    @(:frames sink)))
+
+(defn quality-check
+  "{arm {:frames n :psnr-min :psnr-mean :max-abs}}: `profile`'s frames against
+   `reference`'s (default :fast, the exact render) on the render arms."
+  ([profile] (quality-check profile {}))
+  ([profile {:keys [reference arms every] :or {reference :fast every 1
+                                               arms ["layout" "anim-heavy"]}}]
+   (ready!)
+   (into {}
+         (for [arm arms]
+           (let [rs (mapv psnr (render-frames arm reference 3 every)
+                          (render-frames arm profile 3 every))
+                 ps (map first rs)]
+             [arm {:frames (count rs)
+                   :psnr-min (apply min ps)
+                   :psnr-mean (/ (reduce + ps) (count ps))
+                   :max-abs (apply max (map second rs))}])))))
 
 ;; ── report ────────────────────────────────────────────────────────────────
 
