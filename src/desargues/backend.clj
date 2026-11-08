@@ -34,6 +34,19 @@
   (swap! loaded disj k)
   k)
 
+(defn provide!
+  "Add provider namespaces `nss` to registered backend `k`: a port that
+   lives outside this namespace (e.g. desargues.wallpaper.render) attaches
+   its own provider of k, so k's other users never load it. Idempotent; a
+   backend already loaded loads the new namespaces on its next use.
+   Returns k."
+  [k & nss]
+  (when-not (get @registry k)
+    (throw (ex-info (str "Unknown backend " (pr-str k)) {:backend k :reason :unknown})))
+  (swap! registry update-in [k :namespaces] #(vec (distinct (concat % nss))))
+  (swap! loaded disj k)
+  k)
+
 (defn backends
   "The registered backend keys."
   []

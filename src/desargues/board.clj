@@ -32,7 +32,8 @@
             [desargues.board.construction]
             [desargues.board.euclid]
             [desargues.board.projective]
-            [desargues.board.symmetry]))
+            [desargues.board.symmetry]
+            [desargues.board.jvm]))
 
 (defn- conform!
   "The spec with its kind's defaults (kernel/defaults), or an ex-info naming
@@ -89,6 +90,22 @@
     (io/make-parents file)
     (with-open [o (io/output-stream file)] (.write o module))
     file))
+
+(defn sample-board
+  "Conform `board-spec`, plan it and sample its kernel on this host at the
+   params' :init values, writing nothing. Returns the Board value with
+   :board/kernel nil (no module exists). opts: :backend (default :jvm, which
+   needs no raster: desargues.board.jvm) or :compiler, as for
+   compile-board!."
+  ([board-spec] (sample-board board-spec {}))
+  ([board-spec opts]
+   (let [spec* (conform! board-spec)
+         plan (kernel/plan spec*)
+         spec* (assoc spec* :params (vec (or (:params plan) (:params spec*))))
+         kname (symbol (str (name (:id spec*)) "-kernel!"))
+         kc (or (:compiler opts) (compiler/kernel-compiler (:backend opts :jvm)))
+         kvar (compiler/define-kernel kc kname ((:form plan) kname))]
+     (board-value spec* plan nil (sample-frame @kvar spec* (:outputs plan))))))
 
 (defn compile-board!
   "Compile `board-spec` and write its kernel; return the Board.

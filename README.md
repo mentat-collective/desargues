@@ -199,6 +199,7 @@ Videos land under `media/videos/<quality>/`.
 | Benchmarks | `bb bench` · `clojure -M:bench:dynamics` | add `--manim` for render timings |
 | Landing page | `bb site` | plato deck → `dist/site` |
 | Showcase images | `bb showcase` · `clojure -M:showcase` | headless renders → `doc/showcase/`, needs ffmpeg |
+| Lesson bundle | `bb lesson:build lessons/area-under-curve.edn` · `bb lesson:verify dist/lessons/area-under-curve` | see [lesson-format.md](doc/lesson-format.md) |
 | Demos | `clojure -M:run [intro\|step N\|quickstart\|derivative]` | needs the Manim env |
 | Dev REPL | `clojure -A:dev` | `dev/` sources, orchestra, the checker |
 
@@ -341,6 +342,7 @@ A new engine registers a key and adds methods in its own namespace:
 ## Documentation
 
 - [showcase.md](doc/showcase.md): every gallery image and the entry that renders it
+- [lesson-format.md](doc/lesson-format.md): lesson bundles (slides of data blocks), how to author, build and verify them; example: [lessons/area-under-curve.edn](lessons/area-under-curve.edn)
 - [ARCHITECTURE.md](doc/ARCHITECTURE.md) — SOLID/DDD design and the layer contracts
 - [BOUNDED_CONTEXTS.md](doc/BOUNDED_CONTEXTS.md) — the domain / rendering / devx contexts
 - [ADR_CODE_QUALITY.md](doc/ADR_CODE_QUALITY.md) — code quality standards

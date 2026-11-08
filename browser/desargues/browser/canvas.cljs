@@ -197,7 +197,11 @@
       (let [[cx cy] (center vp s)]
         (overlay {:id (:id s) :html html :x cx :y cy :px (font-px vp s)
                   :color (or (stroke-color s) "transparent")
-                  :alpha (.-globalAlpha ctx)}))
+                  :alpha (.-globalAlpha ctx)
+                  :start? (= "start" (get-in s [:opts :anchor]))
+                  :write (if (get-in s [:opts :write])
+                           (max 0 (min 1 (:draw s 1.0)))
+                           1)}))
       (paint-text! ctx vp s (str (:tex s))))))
 
 (defn- dash-px
@@ -234,7 +238,7 @@
 (defn- overlay-fn
   "An overlay callback writing into `layer`, recording ids it touched in `seen`."
   [layer cache seen]
-  (fn [{:keys [id html x y px color alpha]}]
+  (fn [{:keys [id html x y px color alpha start? write]}]
     (vswap! seen conj id)
     (let [el (or (get @cache id)
                  (let [el (.createElement js/document "div")]
@@ -253,7 +257,11 @@
       (set! (.. el -style -top) (str y "px"))
       (set! (.. el -style -fontSize) (str px "px"))
       (set! (.. el -style -color) color)
-      (set! (.. el -style -opacity) (str alpha)))))
+      (set! (.. el -style -opacity) (str alpha))
+      ;; :anchor "start" pins the left edge; :write clips left to right
+      (set! (.. el -style -transform) (if start? "translate(0,-50%)" "translate(-50%,-50%)"))
+      (set! (.. el -style -clipPath)
+            (if (and write (< write 1)) (str "inset(-20% " (* 100 (- 1 write)) "% -20% 0)") "none")))))
 
 ;; ── Frames ────────────────────────────────────────────────────────────────
 

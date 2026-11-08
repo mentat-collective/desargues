@@ -81,17 +81,32 @@
              :bindings {:unknown 'I})]
       (m/plus-c (F x)))}))
 
+;; Table rule with a log: ln|u| ----------------------------------------------
+(defn ln-abs
+  "ln|u|: the antiderivative of 1/u on every interval of its domain, not
+   only where u > 0. The table rules build it, so the absolute value is in
+   the answer itself (verify differentiates it on each branch), not added
+   when the answer is rendered."
+  [u]
+  (e/log (e/abs u)))
+
+(def reciprocal-rule
+  "Table entry: ∫ du/u = ln|u| + C."
+  (m/eq (m/integral (e// 1 u) u) (m/plus-c (ln-abs u))))
+
 ;; 4. Partial fractions: ∫ dx / (x² − 1) ------------------------------------
 (def partial-fractions
   (let [f     (fn [x] (e// 1 (e/- (e/square x) 1)))
-        F     (fn [x] (e/* (e// 1 2) (e/- (e/log (e/- x 1)) (e/log (e/+ x 1)))))
+        F     (fn [x] (e/* (e// 1 2) (e/- (ln-abs (e/- x 1)) (ln-abs (e/+ x 1)))))
         prob  (m/problem {:id :recip :kind :integral :integrand f})
         split (m/op :- (m/op :* (e// 1 2) (m/integral (e// 1 (e/- x 1)) x))
                     (m/op :* (e// 1 2) (m/integral (e// 1 (e/+ x 1)) x)))
         finish [(step :integral/linearity :split (m/integral (f x) x) split)
-                (step :integral/table :table nil (m/plus-c (F x)))]]
+                (step :integral/table :apply-formula nil (m/plus-c (F x))
+                      :bindings {:formula reciprocal-rule})]]
     {:id :recip :title "Partial fractions" :section "Integration of rational functions"
-     :f f :F F :points [1.5 2.0 3.7]
+     ;; one point on each interval of the domain: x < −1, −1 < x < 1, x > 1
+     :f f :F F :points [1.5 2.0 3.7 0.3 -0.5 -2.5]
      :figure {:a 1.5 :b 4}
      :derivation
      (m/derivation
@@ -130,12 +145,12 @@
        (m/derivation
         prob
         [(step :integral/table :apply-formula (m/integral (f x) x)
-               (m/plus-c (e/* (e// 1 2) (e/log (e// (e/- x 1) (e/+ x 1)))))
+               (m/plus-c (e/* (e// 1 2) (ln-abs (e// (e/- x 1) (e/+ x 1)))))
                :bindings {:formula (m/eq (m/integral (e// 1 (e/- (e/square x) (e/square 'a))) x)
                                          (m/plus-c (e/* (e// 1 (e/* 2 'a))
-                                                        (e/log (e// (e/- x 'a) (e/+ x 'a))))))})
+                                                        (ln-abs (e// (e/- x 'a) (e/+ x 'a))))))})
          (step :integral/note :hence nil (m/plus-c (F x))
-               :text "The same answer: ln((x − 1)/(x + 1)) = ln(x − 1) − ln(x + 1).")]
+               :text "The same answer: ln|(x − 1)/(x + 1)| = ln|x − 1| − ln|x + 1|.")]
         (m/plus-c (F x)))}]}))
 
 ;; 5. A definite integral and its area: ∫₀^π sin x dx ------------------------

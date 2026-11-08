@@ -1,7 +1,8 @@
 {:paths ["src"]
  :tasks
  {:requires ([babashka.fs :as fs]
-             [babashka.process :refer [shell]])
+             [babashka.process :refer [shell]]
+             [clojure.string :as str])
 
   doctor        {:doc "Check the JVM, the Manim env, LaTeX and ffmpeg"
                  :task (shell "clojure -M:doctor")}
@@ -26,5 +27,52 @@
                            (fs/copy-tree "doc/bench" "dist/site/assets/bench" {:replace-existing true}))}
   showcase      {:doc "README gallery -> doc/showcase/*.png, *.gif (headless host, needs ffmpeg). Args: --only id,id --list"
                  :task (apply shell "clojure -M:showcase" *command-line-args*)}
+  lesson:build  {:doc "Lesson bundle -> lesson.edn, lesson.json, notebook.clj, media, manifest.edn. Args: <lesson.edn> [out-dir, default dist/lessons/<id>]"
+                 :task (apply shell "clojure -M -m desargues.lesson.export build" *command-line-args*)}
+  lesson:verify {:doc "Rebuild a lesson bundle dir in a temp dir and compare sha256s with its manifest; exits 1 on a mismatch. Args: <dir>"
+                 :task (apply shell "clojure -M -m desargues.lesson.export verify" *command-line-args*)}
+  lesson:e2e    {:doc "Build a lesson, statically build its notebook (viewer bundle compiled by shadow-cljs, needs npm + network), then check it in headless Chromium (dev/e2e/lesson_render.mjs); exits 1 on a failed check. Screenshot: dist/lesson-e2e-<id>.png. Args: [lesson.edn, default lessons/area-under-curve.edn]"
+                 :task (let [lesson (or (first *command-line-args*) "lessons/area-under-curve.edn")
+                             id     (second (re-find (re-pattern ":lesson/id\\s+:([^\\s}]+)") (slurp lesson)))
+                             dir    (str "dist/lessons/" id)
+                             ;; outside the bundle dir: lesson:build prunes and
+                             ;; lesson:verify flags files its manifest does not list
+                             static (str "dist/lesson-e2e/" id)]
+                         (shell "clojure -M -m desargues.lesson.export build" lesson)
+                         (shell "clojure -M:notebooks:lesson-e2e -m desargues.lesson.static-build"
+                                (str dir "/notebook.clj") static)
+                         (when-not (fs/exists? "dev/e2e/node_modules/playwright-core")
+                           (shell {:dir "dev/e2e"} "npm install --no-package-lock --no-audit --no-fund"))
+                         (shell "node dev/e2e/lesson_render.mjs" lesson static))}
+  devaot:build  {:doc "Prebuild the dev classpath's libraries -> target/devaot.jar (+ target/pyaot). Rebuild after a dependency change"
+                 :task (do (shell "clojure -M:dev:bench:devaot-build")
+                           (shell "clojure -M:pyaot-build"))}
+  devaot:run    {:doc "Run on target/devaot.jar with the JDK AOT cache target/devaot.aot (the first run records it at exit, later runs use it). Args: [main-ns args...], default a REPL. Aliases: DEVAOT_ALIASES (default :dev:devaot)"
+                 :task (let [aliases (or (System/getenv "DEVAOT_ALIASES") ":dev:devaot")
+                             cp      (str/trim (:out (shell {:out :string} (str "clojure -Spath -M" aliases))))
+                             entries (remove str/blank? (str/split cp (re-pattern ":")))
+                             jar?    (fn [e] (str/ends-with? e ".jar"))
+                             cache   "target/devaot.aot"
+                             [main & args] (or (seq *command-line-args*) ["clojure.main"])]
+                         (when-not (fs/exists? "target/devaot.jar")
+                           (throw (ex-info "target/devaot.jar missing: run bb devaot:build" {})))
+                         (apply shell "java"
+                                (str (if (fs/exists? cache) "-XX:AOTCache=" "-XX:AOTCacheOutput=") cache)
+                                "-Xlog:aot=off" "-Xlog:cds=off" "--enable-native-access=ALL-UNNAMED"
+                                "-cp" (str/join ":" (filter jar? entries))
+                                (str "-Ddesargues.devaot.dirs=" (str/join ":" (remove jar? entries)))
+                                "clojure.main" "-m" "desargues.devaot.launch" main args))}
   serve         {:doc "Serve dist/site on http://localhost:8087"
-                 :task (shell "python3 -m http.server 8087 --directory dist/site")}}}
+                 :task (shell "python3 -m http.server 8087 --directory dist/site")}
+  native:path {:doc "Build the Zig Cairo path builder and batch displayer -> native/zigpath/zig-out/lib/libdesargues_path.so (needs zig 0.16 and the conda Manim env: DESARGUES_CONDA_PREFIX or CONDA_PREFIX). Opt in with DESARGUES_PATH_BUILDER=native or native-display"
+               :task (let [prefix (or (System/getenv "DESARGUES_CONDA_PREFIX") (System/getenv "CONDA_PREFIX")
+                                      (throw (ex-info "set DESARGUES_CONDA_PREFIX to the Manim conda env" {})))
+                           lib    (str prefix "/lib")]
+                       (fs/create-dirs "native/zigpath/zig-out/lib")
+                       (shell {:dir "native/zigpath"}
+                              "zig" "build-lib" "-dynamic" "-O" "ReleaseFast" "-fPIC" "src/lib.zig"
+                              (str "-L" lib) "-lcairo" "-lc" "-rpath" lib
+                              "--name" "desargues_path"
+                              "-femit-bin=zig-out/lib/libdesargues_path.so"
+                              "--cache-dir" ".zig-cache" "--global-cache-dir" ".zig-cache")
+                       (println "built native/zigpath/zig-out/lib/libdesargues_path.so"))}}}

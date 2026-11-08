@@ -1,55 +1,34 @@
 (ns desargues.steps.render
-  "RENDER stratum: math forms and phrase parts to TeX and plain text.
+  "RENDER stratum: a thin call into Emmy.
 
-   `tex` is one method per math-form type (OCP): Emmy expressions go through
-   emmy's ->TeX, the model's Integral / Eq / Plus-C records compose their
-   pieces. `parts->tex` lays a step's phrase parts (desargues.steps.phrase)
-   out as one TeX line, text in \\text{...}. Renderers for other surfaces
-   (the blackboard, plain text) take the same parts."
+   Every math form a step holds is an Emmy expression (integrals, + C and
+   equation chains included, see desargues.steps.model), so `tex` is Emmy's
+   ->TeX extended with the solution notation (desargues.steps.notation) and
+   `infix` is Emmy's ->infix extended the same way. `parts->tex` lays a
+   step's phrase parts (desargues.steps.phrase) out as one TeX line, text
+   runs in \\text{...}; `parts->md` as prose with inline math. Renderers for
+   other surfaces (the blackboard, plain text) take the same parts."
   (:require [clojure.string :as str]
-            [desargues.steps.model :as model]
-            [emmy.env :as e]))
+            [desargues.steps.notation :as notation]))
 
-(defmulti tex
-  "TeX of a math form."
-  (fn [form] (cond (model/form? form)              (model/form-kind form)
-                   (keyword? form)                 :keyword
-                   (string? form)                  :string
-                   :else                           :expr)))
+(defn tex
+  "TeX of a math form: Emmy's ->TeX with the solution notation."
+  [form]
+  (cond (string? form)  (notation/tex-text form)
+        (keyword? form) (notation/tex-text (name form))
+        :else           (notation/->TeX form)))
 
-(defmethod tex :expr [x] (e/->TeX x))
-
-(defmethod tex :string [s] (str "\\text{" s "}"))
-
-(defmethod tex :keyword [k] (str "\\text{" (name k) "}"))
-
-(defmethod tex :integral [{:keys [integrand var bounds]}]
-  (str "\\int" (when-let [[a b] bounds] (str "_{" (tex a) "}^{" (tex b) "}"))
-       " " (tex integrand) " \\, d" (tex var)))
-
-(defmethod tex :eq [{:keys [sides]}]
-  (apply str (interpose " = " (map tex sides))))
-
-(defmethod tex :plus-c [{:keys [expr]}]
-  (str (tex expr) " + C"))
-
-(defmethod tex :op [{:keys [op args]}]
-  (let [sep  ({:+ " + " :- " - " :* " \\cdot "} op)
-        wrap (fn [a] (if (and (model/form? a) (= :op (model/form-kind a))) (str "\\left(" (tex a) "\\right)") (tex a)))]
-    (apply str (interpose sep (map wrap args)))))
-
-(defn- escape-text [s]
-  (-> s (str/replace "\\" "\\backslash ") (str/replace "{" "\\{")
-      (str/replace "}" "\\}") (str/replace "%" "\\%")))
+(defn infix
+  "Infix text of a math form: Emmy's ->infix with the solution notation."
+  [form]
+  (cond (string? form)  form
+        (keyword? form) (name form)
+        :else           (notation/->infix form)))
 
 (defn parts->tex
   "One TeX line for phrase parts [[:text s] [:math e] ...]."
   [parts]
-  (apply str (map (fn [[kind v]]
-                    (case kind
-                      :text (str "\\text{" (escape-text v) "}")
-                      :math (tex v)))
-                  parts)))
+  (apply str (map (fn [[kind v]] (case kind :text (notation/tex-text v) :math (tex v))) parts)))
 
 (defn parts->md
   "Markdown for phrase parts: text as prose, math inline ($...$), so a long
@@ -64,8 +43,4 @@
 (defn parts->text
   "Plain text for phrase parts, math as Emmy's infix."
   [parts]
-  (apply str (map (fn [[kind v]]
-                    (case kind
-                      :text v
-                      :math (if (record? v) (pr-str v) (str (e/->infix v)))))
-                  parts)))
+  (apply str (map (fn [[kind v]] (case kind :text v :math (infix v))) parts)))

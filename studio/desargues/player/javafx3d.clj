@@ -27,7 +27,8 @@
   (:require [desargues.player.frame :as frame]
             [desargues.player.javafx :as fx]
             [desargues.player.protocols :as p]
-            [desargues.player.space :as space])
+            [desargues.player.space :as space]
+            [desargues.player.space-extras :as sx])
   (:import [javafx.application Platform]
            [javafx.geometry Point3D]
            [javafx.scene AmbientLight Group Node PerspectiveCamera PointLight
@@ -97,13 +98,28 @@
   [k s]
   (max 1.0 (* (double (or (get-in s [:stroke :width]) 4)) (/ (double k) 135.0))))
 
+(def line-lift
+  "Scene units a :curve3 is pulled toward the camera: the depth buffer's
+   counterpart of the flattened view's line bias (space/->2d sorts lines 0.3
+   nearer). Without it a curve drawn on a :surface3 lies inside the surface
+   and its cylinders are mostly hidden by the faces."
+  0.06)
+
+(defn lift
+  "World point `p` moved `d` scene units toward the eye of basis `b`."
+  [b d p]
+  (let [p (mapv double p)]
+    (space/v+ p (space/v* d (space/unit (space/v- (:eye b) p))))))
+
 ;; ── 3D nodes: one method per kind (OCP) ───────────────────────────────────
 
 (defmulti node!
   "JavaFX nodes for 3D shape `s` under basis `b`, `k` pixels per unit."
   (fn [_b _k s] (:node s)))
 
-(defmethod node! :default [_ _ _] [])
+(defmethod node! :default [b k s]
+  ;; a composite kind (desargues.player.space-extras) is drawn as its expansion
+  (mapcat #(node! b k %) (sx/expand s)))
 
 (defn- triangle-mesh ^TriangleMesh [b k {:keys [vertices faces]}]
   (let [mesh (TriangleMesh.)
@@ -132,7 +148,7 @@
 (defmethod node! :curve3 [b k s]
   (let [pts (:points s)
         n   (long (Math/ceil (* (double (:draw s 1.0)) (count pts))))]
-    (polyline-nodes (map #(fx-point b k %) (take n pts))
+    (polyline-nodes (map #(fx-point b k (lift b line-lift %)) (take n pts))
                     (/ (stroke-px k s) 2.0)
                     (material (get-in s [:stroke :color] :white) (:opacity s 1.0)))))
 
@@ -165,7 +181,12 @@
 ;; ── The host ──────────────────────────────────────────────────────────────
 
 (defn- install-subscene!
-  "Put a depth-buffered SubScene under the 2D host's canvas, sized with it."
+  "Put a depth-buffered SubScene under the 2D host's canvas, sized with it.
+   The layering is explicit, not left to child order: the SubScene gets a
+   higher viewOrder (drawn first, underneath) and the canvas a lower one
+   (drawn last, on top), so the 2D overlay (titles, readouts, labels) is
+   never covered by the 3D surface, whatever order a re-layout or a later
+   child insertion leaves the pane in."
   [state ^Canvas canvas]
   (let [^Pane pane (.getParent canvas)
         root  (Group.)
@@ -174,10 +195,13 @@
                 (.setFarClip 1e6))
         sub   (doto (SubScene. root 10.0 10.0 true SceneAntialiasing/BALANCED)
                 (.setCamera cam)
-                (.setMouseTransparent true))]
+                (.setMouseTransparent true)
+                (.setViewOrder 1.0))]
     (.bind (.widthProperty sub) (.widthProperty pane))
     (.bind (.heightProperty sub) (.heightProperty pane))
     (.add (.getChildren pane) 0 sub)
+    (.setViewOrder canvas -1.0)
+    (.toFront canvas)
     (swap! state assoc :sub sub :root root :camera cam)))
 
 (defn- show-space!

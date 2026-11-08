@@ -22,7 +22,11 @@
             [desargues.infrastructure.manim-adapter :as adapter]
             [desargues.domain.protocols :as p]
             [libpython-clj2.python :as py]
-            [clojure.string :as str]))
+            [clojure.string :as str]
+            [desargues.manim.mobject-cache :as mcache]
+            [desargues.layout.mobject-key :as mk]))
+
+(declare walk-realize!)
 
 ;; ============================================================================
 ;; >>> BACKEND: live frame + coordinate conversion
@@ -88,19 +92,46 @@
         (mob/svg-mobject content)
         (mob/image-mobject content)))))
 
+(defn- build-leaf
+  "A leaf's natural-size build as {:mobject m :meta {:w :h}}."
+  [node style]
+  (let [m (create-leaf-mob node style)]
+    {:mobject m
+     :meta {:w (double (py/->jvm (py/get-attr m "width")))
+            :h (double (py/->jvm (py/get-attr m "height")))}}))
+
+(defn build-stamp
+  "The Manim settings a mobject build reads beyond its description (pixel
+   size, renderer, text and TeX settings), as a value for cache keys."
+  []
+  (let [cfg (py/get-attr (mc/manim) "config")
+        g   (fn [k] (str (py/get-item cfg k)))]
+    (mapv g ["pixel_width" "pixel_height" "renderer" "text_dir" "tex_dir"
+             "tex_template" "tex_template_file"])))
+
 (defn make-measure
   "Build the injected measure-fn : [node path] -> [w h]. Creates each leaf
    mobject ONCE and caches it by tree PATH (so duplicate identical child maps —
-   e.g. five identical coins — each get their own mobject)."
-  [styles cache]
-  (fn [node path]
-    (if-let [c (get @cache path)]
-      [(:w c) (:h c)]
-      (let [m (create-leaf-mob node (get styles path {}))
-            w (double (py/->jvm (py/get-attr m "width")))
-            h (double (py/->jvm (py/get-attr m "height")))]
-        (swap! cache assoc path {:mob m :w w :h h})
-        [w h]))))
+   e.g. five identical coins — each get their own mobject). With an active
+   `mcache` (IMobjectCache) a leaf whose natural-size build is kept under its
+   key (desargues.layout.mobject-key/leaf-key, `stamp` the backend settings)
+   is measured from the kept size alone; pass 3 fetches its mobject only if
+   it needs one."
+  ([styles cache] (make-measure styles cache (mcache/null-cache) nil))
+  ([styles cache mcache stamp]
+   (fn [node path]
+     (if-let [c (get @cache path)]
+       [(:w c) (:h c)]
+       (let [style (get styles path {})
+             k     (when (mcache/active? mcache) (mk/leaf-key node style stamp))]
+         (if-let [{:keys [w h]} (some->> k (mcache/kept-meta mcache))]
+           (do (swap! cache assoc path {:w w :h h :key k :style style}) [w h])
+           (let [{m :mobject {:keys [w h]} :meta}
+                 (if k
+                   (mcache/fetch! mcache k #(build-leaf node style))
+                   (build-leaf node style))]
+             (swap! cache assoc path {:mob m :w w :h h :key k :style style})
+             [w h])))))))
 
 ;; ============================================================================
 ;; >>> BACKEND: bg / border rectangle
@@ -141,10 +172,13 @@
     (min (/ w mw) (/ h mh))))              ; :contain (default)
 
 (defn- realize-leaf!
-  "Fit a cached leaf mobject into its ::box and move it into place."
-  [node path box cache fw fh margin]
+  "Fit a cached leaf mobject into its ::box and move it into place. A leaf
+   measured from a kept size only (no :mob) is fetched from `mcache` first."
+  [node path box cache fw fh margin mcache]
   (let [c   (get @cache path)
-        m   (:mob c)
+        m   (or (:mob c)
+                (:mobject (mcache/fetch! mcache (:key c)
+                                         #(build-leaf node (:style c)))))
         fit (or (:fit (:attrs node)) :contain)
         mw  (double (py/->jvm (py/get-attr m "width")))
         mh  (double (py/->jvm (py/get-attr m "height")))
@@ -159,10 +193,10 @@
     (mob/move-to m (->manim-center box fw fh margin))
     m))
 
-(defn- walk-realize!
-  "Build a VGroup mirroring the subtree: bg/border rect first (behind), then the
-   leaf mobject or child VGroups. Registers any node carrying {:id k} into `reg`."
-  [node path fw fh margin cache reg]
+(defn- walk-node!
+  "Build one node's VGroup: bg/border rect first (behind), then the leaf
+   mobject or child VGroups. Registers any node carrying {:id k} into `reg`."
+  [node path {:keys [fw fh margin cache reg mcache] :as ctx}]
   (let [attrs (:attrs node)
         box   (get node core/box-key)
         vg    (mob/vgroup)
@@ -171,13 +205,24 @@
     (when (or (:bg attrs) (:border attrs))
       (add (mob/move-to (make-rect node box) (->manim-center box fw fh margin))))
     (case (:type node)
-      (:text :math :image) (add (realize-leaf! node path box cache fw fh margin))
+      (:text :math :image) (add (realize-leaf! node path box cache fw fh margin mcache))
       :spacer              nil
       (doseq [[i c] (map-indexed vector (:children node))]
-        (add (walk-realize! c (conj path i) fw fh margin cache reg))))
+        (add (walk-realize! c (conj path i) ctx))))
     (when-let [id (:id attrs)]
       (swap! reg assoc id vg))
     vg))
+
+(defn- walk-realize!
+  "Build a VGroup mirroring the subtree (walk-node!). With an active `mcache`
+   a non-root subtree whose key (desargues.layout.mobject-key/subtree-key) is
+   kept is a copy of the kept build instead. The root is never kept: it
+   changes on every edit, and keeping it would copy the whole scene."
+  [node path {:keys [fw fh margin styles stamp mcache] :as ctx}]
+  (if-let [k (when (and (seq path) (mcache/active? mcache))
+               (mk/subtree-key node (get styles path {}) [fw fh margin] stamp))]
+    (:mobject (mcache/fetch! mcache k (fn [] {:mobject (walk-node! node path ctx)})))
+    (walk-node! node path ctx)))
 
 ;; ============================================================================
 ;; Render bridge — LayoutMobject (double-wrap so render-scene-impl's
@@ -197,18 +242,26 @@
 
 (defn realize
   "Realize a pure layout `tree` into a LayoutMobject placed & bounded in the frame.
-   opts: {:margin 0.5 :frame [fw fh]}. Requires python/manim initialized."
+   opts: {:margin 0.5 :frame [fw fh] :mobject-cache c}. `c` is an
+   IMobjectCache (desargues.manim.mobject-cache) reused across calls: leaf
+   builds and placed subtrees whose description did not change are copies of
+   kept builds. Default: a NullCache, every mobject built anew. Requires
+   python/manim initialized."
   ([tree] (realize tree {}))
-  ([tree {:keys [margin frame] :or {margin 0.5}}]
+  ([tree {:keys [margin frame mobject-cache] :or {margin 0.5}}]
    (mc/manim)                                      ; ensure manim is live
    (let [[fw fh] (or frame (read-frame))
+         mcache  (or mobject-cache (mcache/null-cache))
+         stamp   (when (mcache/active? mcache) (build-stamp))
          root    {:x 0 :y 0 :w (- fw (* 2 margin)) :h (- fh (* 2 margin))}
-         cache   (atom {})                          ; path -> {:mob :w :h}
+         cache   (atom {})                          ; path -> {:mob :w :h :key}
          styles  (core/collect-styles tree)
-         measure (make-measure styles cache)
+         measure (make-measure styles cache mcache stamp)
          placed  (core/resolve-layout tree root measure)   ; PURE pass 1+2
          reg     (atom {})
-         vg      (walk-realize! placed [] fw fh margin cache reg)]  ; pass 3
+         vg      (walk-realize! placed [] {:fw fw :fh fh :margin margin :cache cache
+                                           :reg reg :styles styles :stamp stamp
+                                           :mcache mcache})]  ; pass 3
      (->LayoutMobject vg (adapter/->ManimMobject vg :VGroup {}) @reg placed))))
 
 (defn by-id

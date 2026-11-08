@@ -1,0 +1,252 @@
+;; Area under a curve, then the shell method: the first desargues lesson bundle.
+;;
+;; Data only (desargues.lesson.schema). Build and verify it with
+;;   bb lesson:build lessons/area-under-curve.edn
+;;   bb lesson:verify dist/lessons/area-under-curve
+;; See doc/lesson-format.md. The :riemann-scene recording was made by
+;; dev/desargues/lesson/area_under_curve.clj (print-scene) and pasted here.
+{:lesson/id :area-under-curve
+ :lesson/title "Area under a curve, and the shell method"
+ :lesson/version "1.0.0"
+ :lesson/slides
+ [{:slide/id :question
+   :slide/title "The question"
+   :slide/blocks
+   [{:block/id :intro :block/kind :prose
+     :md "How much area lies between the parabola y = x^2, the x-axis, and the vertical lines x = 0 and x = 1?\n\nThe region is curved on top, so no formula from geometry applies directly. The *definite integral* is the tool that answers exactly this kind of question. We write the area as"}
+    {:block/id :integral :block/kind :tex
+     :expr (integral (expt x 2) x 0 1)}
+    {:block/id :reading :block/kind :prose
+     :md "Read it as: integrate f(x) = x^2 with respect to x, from x = 0 to x = 1. The rest of this lesson is about what that symbol *means* (a limit of sums of thin rectangles) and how to *compute* it (an antiderivative)."}]}
+
+  {:slide/id :picture
+   :slide/title "The picture"
+   :slide/blocks
+   [{:block/id :area-intro :block/kind :prose
+     :md "Below, the shaded region sweeps in from x = 0 to x = 1. Its area at every moment is the integral of x^2 from 0 to where the sweep has reached."}
+    {:block/id :area-fig :block/kind :figure
+     :figure {:title "area under y = x^2 on [0, 1]"
+              :view {:view :plane :x-range [-0.5 1.5] :y-range [-0.5 1.5]
+                     :x-length 8.0 :y-length 6.0 :center [0.0 0.0]}
+              :params {:f :parabola :a 0.0 :b 1.0 :sweep 1.0}
+              :animate {:param :sweep :from 0.0 :to 1.0 :duration 4.0}
+              :objects [{:kind :area-under :id "area" :f {:calc/param :f}
+                         :a {:calc/param :a} :b {:calc/param :b}
+                         :upto {:calc/param :sweep} :color :teal}
+                        {:kind :graph :id "graph" :f {:calc/param :f}
+                         :a -0.5 :b 1.5 :color :blue}]}}
+    {:block/id :area-png :block/kind :media :from :area-fig :format :png}
+    {:block/id :explore :block/kind :prose
+     :md "Try it yourself: drag the point along the curve. Its height is f(x) = x^2, the height of the region's top edge at that x. Near x = 0 the region is very thin; near x = 1 it is as tall as it gets."}
+    {:block/id :mafs :block/kind :viewer
+     :fragment (reagent.core/with-let [!p (reagent.core/atom [0.5 0.25])]
+                 [mafs.core/Mafs {:view-box {:x [-0.5 1.5] :y [-0.5 1.5]}}
+                  [mafs.coordinates/Cartesian {}]
+                  [mafs.plot/OfX {:y (fn [x] (* x x)) :color :blue}]
+                  [mafs.core/Point {:x 1 :y 1}]
+                  [mafs.core/MovablePoint {:atom !p :constrain (fn [[x _]] [x (* x x)])}]])}]}
+
+  {:slide/id :riemann
+   :slide/title "Rectangles: the Riemann sum"
+   :slide/blocks
+   [{:block/id :riemann-intro :block/kind :prose
+     :md "Cut [0, 1] into n strips of width 1/n and stand a rectangle on each strip, as tall as the curve at the strip's right edge. Rectangles we can measure: the k-th one has area (1/n) * (k/n)^2.\n\nWith n = 8 the rectangles overshoot the curve a little, and their total is 204/512 = 0.3984. As n grows the overshoot shrinks to nothing, and the sums close in on a single number: that limit *is* the definite integral."}
+    {:block/id :riemann-scene :block/kind :scene
+     :scene {
+        :node-count 15
+        :nodes {
+                 1 {
+                     :at [0 3.4]
+                     :id 1
+                     :node :text
+                     :opts {:color :white, :font-size 28}
+                     :text "Riemann sum of x^2 on [0, 1], n = 8"}
+                 2 {
+                     :from [-4.6 -2.5]
+                     :id 2
+                     :node :line
+                     :opts {:color :white, :width 2}
+                     :to [2.6 -2.5]}
+                 3 {
+                     :from [-4.0 -2.725]
+                     :id 3
+                     :node :line
+                     :opts {:color :white, :width 2}
+                     :to [-4.0 2.45]}
+                 4 {
+                     :id 4
+                     :node :path
+                     :opts {:color :blue, :width 4}
+                     :points [
+                               [-4.0 -2.5]
+                               [-3.85 -2.4972]
+                               [-3.7 -2.4887]
+                               [-3.55 -2.4747]
+                               [-3.4 -2.455]
+                               [-3.25 -2.4297]
+                               [-3.1 -2.3987]
+                               [-2.95 -2.3622]
+                               [-2.8 -2.32]
+                               [-2.65 -2.2722]
+                               [-2.5 -2.2187]
+                               [-2.35 -2.1597]
+                               [-2.2 -2.095]
+                               [-2.05 -2.0247]
+                               [-1.9 -1.9487]
+                               [-1.75 -1.8672]
+                               [-1.6 -1.78]
+                               [-1.45 -1.6872]
+                               [-1.3 -1.5887]
+                               [-1.15 -1.4847]
+                               [-1.0 -1.375]
+                               [-0.85 -1.2597]
+                               [-0.7 -1.1387]
+                               [-0.55 -1.0122]
+                               [-0.4 -0.88]
+                               [-0.25 -0.7422]
+                               [-0.1 -0.5987]
+                               [0.05 -0.4497]
+                               [0.2 -0.295]
+                               [0.35 -0.1347]
+                               [0.5 0.0313]
+                               [0.65 0.2028]
+                               [0.8 0.38]
+                               [0.95 0.5628]
+                               [1.1 0.7512]
+                               [1.25 0.9453]
+                               [1.4 1.145]
+                               [1.55 1.3503]
+                               [1.7 1.5613]
+                               [1.85 1.7778]
+                               [2.0 2.0]]}
+                 5 {
+                     :at [-3.625 -2.4648]
+                     :fill {:color :teal, :opacity 0.5}
+                     :id 5
+                     :node :rectangle
+                     :opts {:color :teal, :height 0.0703, :width 0.75}}
+                 6 {
+                     :at [-2.875 -2.3594]
+                     :fill {:color :teal, :opacity 0.5}
+                     :id 6
+                     :node :rectangle
+                     :opts {:color :teal, :height 0.2813, :width 0.75}}
+                 7 {
+                     :at [-2.125 -2.1836]
+                     :fill {:color :teal, :opacity 0.5}
+                     :id 7
+                     :node :rectangle
+                     :opts {:color :teal, :height 0.6328, :width 0.75}}
+                 8 {
+                     :at [-1.375 -1.9375]
+                     :fill {:color :teal, :opacity 0.5}
+                     :id 8
+                     :node :rectangle
+                     :opts {:color :teal, :height 1.125, :width 0.75}}
+                 9 {
+                     :at [-0.625 -1.6211]
+                     :fill {:color :teal, :opacity 0.5}
+                     :id 9
+                     :node :rectangle
+                     :opts {:color :teal, :height 1.7578, :width 0.75}}
+                 10 {
+                      :at [0.125 -1.2344]
+                      :fill {:color :teal, :opacity 0.5}
+                      :id 10
+                      :node :rectangle
+                      :opts {:color :teal, :height 2.5313, :width 0.75}}
+                 11 {
+                      :at [0.875 -0.7773]
+                      :fill {:color :teal, :opacity 0.5}
+                      :id 11
+                      :node :rectangle
+                      :opts {:color :teal, :height 3.4453, :width 0.75}}
+                 12 {
+                      :at [1.625 -0.25]
+                      :fill {:color :teal, :opacity 0.5}
+                      :id 12
+                      :node :rectangle
+                      :opts {:color :teal, :height 4.5, :width 0.75}}
+                 13 {
+                      :at [3.4 0.6]
+                      :id 13
+                      :node :text
+                      :opts {:color :white, :font-size 30}
+                      :text "right sum ="}
+                 14 {
+                      :at [5.6 0.6]
+                      :id 14
+                      :node :decimal
+                      :opts {:color :gold, :num-decimal-places 4}
+                      :value 0}
+                 15 {
+                      :at [4.2 -0.4]
+                      :id 15
+                      :node :text
+                      :opts {:color :gold, :font-size 26}
+                      :text "exact area: 1/3"}}
+        :scene "riemann-sum"
+        :steps [
+                 {
+                   :anims [
+                            {:anim :appear, :opts nil, :target 1}
+                            {:anim :draw, :opts nil, :target 2}
+                            {:anim :draw, :opts nil, :target 3}]
+                   :step :play}
+                 {:anims [{:anim :draw, :opts nil, :target 4}], :step :play}
+                 {
+                   :anims [
+                            {
+                              :anim :stagger
+                              :children [
+                                          {:anim :appear, :opts nil, :target 5}
+                                          {:anim :appear, :opts nil, :target 6}
+                                          {:anim :appear, :opts nil, :target 7}
+                                          {:anim :appear, :opts nil, :target 8}
+                                          {:anim :appear, :opts nil, :target 9}
+                                          {:anim :appear, :opts nil, :target 10}
+                                          {:anim :appear, :opts nil, :target 11}
+                                          {:anim :appear, :opts nil, :target 12}]
+                              :opts nil}
+                            {:anim :appear, :opts nil, :target 13}
+                            {:anim :appear, :opts nil, :target 14}]
+                   :step :play}
+                 {:anims [{:anim :count-to, :opts nil, :target 14, :value 0.3984}], :step :play}
+                 {:anims [{:anim :appear, :opts nil, :target 15}], :step :play}
+                 {:seconds 1.5, :step :hold}]}}
+    {:block/id :riemann-gif :block/kind :media :from :riemann-scene :format :gif}]}
+
+  {:slide/id :ftc
+   :slide/title "Computing it: the fundamental theorem"
+   :slide/blocks
+   [{:block/id :ftc-text :block/kind :prose
+     :md "Taking the limit of Riemann sums by hand is laborious. The fundamental theorem of calculus gives a shortcut: if F'(x) = f(x), then the integral of f from a to b is F(b) - F(a).\n\nFor f(x) = x^2 an antiderivative is F(x) = x^3 / 3, so the area is 1/3 - 0 = 1/3, which matches what the right sums (0.3984 at n = 8) were approaching from above."}
+    {:block/id :ftc-tex :block/kind :tex
+     :expr (= (integral (expt x 2) x 0 1) (- (/ (expt 1 3) 3) (/ (expt 0 3) 3)) (/ 1 3))}]}
+
+  {:slide/id :shell
+   :slide/title "Turning area into volume: the shell method"
+   :slide/blocks
+   [{:block/id :shell-intro :block/kind :prose
+     :md "Now take the region under y = x^2 on [0, 2] and spin it about the y-axis. It sweeps out a solid. To find its volume, slice the region into thin vertical strips again, but spin each strip instead of measuring it: a strip at distance x from the axis, of height f(x) and width dx, becomes a thin cylindrical *shell* of radius x.\n\nUnrolled, a shell is nearly a flat slab of area 2 pi x times f(x) and thickness dx. Adding the shells up is again an integral:"}
+    {:block/id :shell-tex :block/kind :tex
+     :expr (= V (* 2 pi (integral (* x (expt x 2)) x 0 2)) (* 2 pi (/ (expt 2 4) 4)) (* 8 pi))}
+    {:block/id :shell-fig :block/kind :figure
+     :figure {:title "shell method: y = x^2 on [0, 2] turned about the y-axis"
+              :view {:view :space :range [[-0.5 2.6] [-2.4 2.4] [-2.4 4.6]]
+                     :camera {:target [1.0 0.0 0.2] :distance 12.0 :yaw -1.2 :pitch 0.42
+                              :projection :perspective :zoom 1.6}}
+              :params {:f :parabola :a 0.0 :b 2.0 :method :shell :n 6.0 :sweep 0.75}
+              :objects [{:kind :revolution :id "solid" :color :blue
+                         :f {:calc/param :f} :a {:calc/param :a} :b {:calc/param :b}
+                         :method {:calc/param :method} :n {:calc/param :n}
+                         :sweep {:calc/param :sweep}}]}}
+    {:block/id :shell-png :block/kind :media :from :shell-fig :format :png}
+    {:block/id :shell-note :block/kind :prose
+     :md "The figure shows six shells, three quarters of the way round, so you can see inside. With more and thinner shells the stack fills the solid exactly, and the volume is 8 pi."}]}
+
+  {:slide/id :recap
+   :slide/title "Recap"
+   :slide/blocks
+   [{:block/id :recap-text :block/kind :prose
+     :md "- The definite integral of f from a to b is the signed area under its graph.\n- It is defined as the limit of Riemann sums: thin rectangles whose total area converges.\n- The fundamental theorem computes it from an antiderivative: F(b) - F(a).\n- The same idea, summing thin pieces, gives volumes: spinning strips about the y-axis gives shells of volume 2 pi x f(x) dx.\n\nExercise: use shells to find the volume when y = x on [0, 1] is turned about the y-axis. (Answer: 2 pi / 3.)"}]}]}

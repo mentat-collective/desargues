@@ -74,6 +74,43 @@
           (is (= 0.5 (:damping (player/params pl)))))
         (finally (player/close! pl))))))
 
+(defn- eventually
+  "Poll (pred) for up to `ms`; its last value."
+  [ms pred]
+  (let [deadline (+ (System/currentTimeMillis) ms)]
+    (loop []
+      (let [v (pred)]
+        (if (or v (> (System/currentTimeMillis) deadline)) v (do (Thread/sleep 20) (recur)))))))
+
+(deftest native-input-reaches-the-player-through-serve
+  (if-not (native/available?)
+    (is true "desargues-native not built; skipped")
+    (let [h  (native/host {:offscreen? true})
+          pl (player/open! h (pendulum-fn)
+                           {:title "native input" :w 640 :h 360 :autoplay? false
+                            :scene-name "Damped pendulum"})]
+      (try
+        (is (every? #(satisfies? % h) [p/IPointer p/IKeyboard]))
+        (testing "a wheel notch over the stage zooms the 2D view about the pointer"
+          (native/feed! h {:type :wheel :px [320.0 180.0] :lines 1.0 :mods []})
+          (is (eventually 5000 #(> (:zoom (player/view pl)) 1.0))))
+        (testing "the 0 key resets the view"
+          (native/feed! h {:type :key :key "0" :text "0" :mods []})
+          (is (eventually 5000 #(nil? (:view (player/view pl))))))
+        (testing "a shift drag on the stage pans it; a press over the slider panel does not reach the player"
+          (doseq [e [{:type :down :px [300.0 180.0] :button :primary :mods [:shift] :ms 0.0}
+                     {:type :move :px [380.0 180.0] :mods [:shift]}
+                     {:type :up :px [380.0 180.0] :button :primary :mods [:shift] :ms 90.0}]]
+            (native/feed! h e))
+          (is (eventually 5000 #(some-> (player/view pl) :view :center first neg?))))
+        (testing "a double click resets"
+          (doseq [ms [1000.0 1100.0]]
+            (native/feed! h {:type :down :px [100.0 100.0] :button :primary :mods [] :ms ms})
+            (native/feed! h {:type :up :px [100.0 100.0] :button :primary :mods [] :ms (+ ms 20)}))
+          (is (eventually 5000 #(nil? (:view (player/view pl))))))
+        (is (nil? (:pointer-error @(:state h))))
+        (finally (player/close! pl))))))
+
 (defn- raster-on-classpath? []
   (try (some? (requiring-resolve 'desargues.infrastructure.raster-adapter/raster-solver))
        (catch Throwable _ false)))

@@ -16,6 +16,8 @@
      :opts :size (SVG text), sits on its baseline, otherwise is centred;
    - :dash is a seq of lengths or an SVG dasharray string, in scene units;
    - the Frame's :background fills first (default black);
+   - :tex :opts :anchor \"start\" puts the left edge at :at (centred by
+     default); :opts :write clips it to its :draw fraction, left to right;
    - :tex goes through JLaTeXMath when it is on the classpath (reflective,
      plain-text fallback).
 
@@ -273,13 +275,27 @@
   []
   (some? (tex-icon "x" 12.0 Color/WHITE)))
 
+(defn write-fraction
+  "How much of a :tex shape is written, 0..1: its :draw when it carries
+   :opts :write (chalk written left to right), else 1 (all of it)."
+  ^double [s]
+  (if (get-in s [:opts :write])
+    (max 0.0 (min 1.0 (double (:draw s 1.0))))
+    1.0))
+
 (defmethod paint! :tex [^Graphics2D g vp s]
   (let [[cx cy] (center vp s)
         px (Math/rint (font-px vp s))]
     (if-let [^javax.swing.Icon icon (tex-icon (str (:tex s)) px (stroke-color s))]
-      (.paintIcon icon nil g
-                  (int (Math/round (- cx (/ (.getIconWidth icon) 2.0))))
-                  (int (Math/round (- cy (/ (.getIconHeight icon) 2.0)))))
+      (let [w  (.getIconWidth icon)
+            h  (.getIconHeight icon)
+            x  (int (Math/round (if (= "start" (get-in s [:opts :anchor])) cx (- cx (/ w 2.0)))))
+            y  (int (Math/round (- cy (/ h 2.0))))
+            wf (write-fraction s)
+            clip (.getClip g)]
+        (when (< wf 1.0) (.clipRect g x (- y 2) (int (Math/ceil (* wf w))) (+ h 4)))
+        (.paintIcon icon nil g x y)
+        (.setClip g clip))
       (paint-text! g vp s (str (:tex s))))))
 
 (defn- svg-shape
