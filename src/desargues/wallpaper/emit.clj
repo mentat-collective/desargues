@@ -31,7 +31,9 @@
                against the form's, as a Result.
      Promote   `inputs`: the bindable inputs; `glsl/source`: the field body.
      Pipeline  `isf`, `frag`, `manifest`: text and data, pure.
-     Boundary  `emit!`: writes <id>.fs (ISF v2), <id>.frag + <id>.json.
+     Boundary  `emit!`: writes <id>.fs (ISF v2), <id>.frag + <id>.json;
+               with :target :trama, <id>.wgsl (desargues.wallpaper.trama,
+               doc/trama-layers.md).
    Each pure stage returns a hive-dsl Result; a field construct GLSL cannot
    express is an err naming it (desargues.wallpaper.glsl), never dropped."
   (:require [clojure.data.json :as json]

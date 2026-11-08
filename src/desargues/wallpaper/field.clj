@@ -29,7 +29,9 @@
    (desargues.infrastructure.raster-field) emit raster kernels from it, and
    `source` (an open port keyed by target) prints shader text from it:
    :glsl is desargues.wallpaper.glsl, packaged as ISF / .frag layers by
-   desargues.wallpaper.emit (doc/glsl-layers.md).
+   desargues.wallpaper.emit (doc/glsl-layers.md); :wgsl is
+   desargues.wallpaper.wgsl, packaged as fosfora trama sources by emit's
+   :target :trama (desargues.wallpaper.trama, doc/trama-layers.md).
 
    Channels quantise the same way everywhere: (quantize v) =
    floor(255 clamp(v, 0, 1) + 0.5)."
