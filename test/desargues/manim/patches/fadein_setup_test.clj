@@ -17,7 +17,9 @@
 
 (deftest the-patch-record-needs-no-manim
   (is (= :fadein-setup (pp/-patch-id (fs/fadein-setup))))
-  (is (= (fs/fadein-setup) (fs/->FadeInSetup)) "a value"))
+  (is (= (fs/fadein-setup) (fs/->FadeInSetup true)) "a value; the zero path is on by default")
+  (is (= (fs/->FadeInSetup false) (fs/fadein-setup {:zero? false})))
+  (is (thrown? clojure.lang.ExceptionInfo (fs/fadein-setup {:zero? :yes}))))
 
 ;; ---------------------------------------------------------------------------
 ;; Against Manim (needs the Manim env)
@@ -82,11 +84,17 @@ def desargues_fs_compare(src, cp):
                 (let [sq (k "Square" :fill_opacity 0.6 :color "#33AAFF")
                       g  (py/call-attr M "VGroup" sq (py/call-attr M "Text" "fade")
                                        (k "Circle" :radius 0.5 :color "#FFD700"))]
+                  ;; plain, lag_ratio, shift+scale, target_position, then the
+                  ;; plain one again over a scene that already holds it
                   (core/play! self (py/call-attr M "FadeIn" g))
+                  (core/play! self (py/call-attr-kw M "FadeIn" [(py/call-attr M "VGroup" (py/call-attr M "Text" "lag")
+                                                                              (k "Star" :fill_opacity 1.0))]
+                                                    {:lag_ratio 0.5}))
                   (core/play! self (py/call-attr-kw M "FadeIn" [(py/call-attr M "Dot")]
                                                     {:shift up :scale 1.5}))
                   (core/play! self (py/call-attr-kw M "FadeIn" [(py/call-attr M "Triangle")]
                                                     {:target_position sq :lag_ratio 0.3}))
+                  (core/play! self (py/call-attr M "FadeIn" g))
                   (core/wait! self 0.2))))
           frames (fn [patches]
                    (let [out (atom [])]
@@ -94,14 +102,88 @@ def desargues_fs_compare(src, cp):
                        #(fr/render-live! (fn [] (Sc))
                                          (fn [t _ _ _] (swap! out conj (digest (dt/->byte-array t))))))
                      @out))
-          p      (fs/fadein-setup)
           stock  (frames [])
-          before (:lean (fs/stats))
-          lean   (frames [p])]
+          s0     (fs/stats)
+          lean   (frames [(fs/fadein-setup {:zero? false})])
+          s1     (fs/stats)
+          zero   (frames [(fs/fadein-setup)])
+          s2     (fs/stats)]
       (is (pos? (count stock)))
-      (is (= stock lean) "every frame byte for byte")
-      (is (= 3 (- (:lean (fs/stats)) before)) "the three FadeIns took the lean path")
-      (is (not (mp/installed? p)) "with-patches* uninstalled it"))))
+      (is (= stock lean) "lean path: every frame byte for byte")
+      (is (= stock zero) "zero path: every frame byte for byte")
+      (is (= {:lean 5 :zero 0} (select-keys (merge-with - s1 s0) [:lean :zero]))
+          "with :zero? false the five FadeIns took the lean path")
+      (is (= {:lean 0 :zero 5} (select-keys (merge-with - s2 s1) [:lean :zero]))
+          "plain, lag, shift+scale and target_position all take the zero path")
+      (is (not (mp/installed? (fs/fadein-setup))) "with-patches* uninstalled it"))))
+
+(def ^:private zero-probe-src
+  "import numpy as np, hashlib
+from manim import VGroup, Square, Circle, Text, FadeIn, UP
+def _arrays(m):
+    return {k: v for k, v in m.__dict__.items() if isinstance(v, np.ndarray)}
+def _digest(mob):
+    h = hashlib.sha256()
+    for m in mob.get_family():
+        for k, v in sorted(_arrays(m).items()):
+            h.update(k.encode()); h.update(np.ascontiguousarray(v).tobytes())
+    return h.hexdigest()
+def desargues_fs_zero_probe(updater):
+    g = VGroup(Square(fill_opacity=0.5), VGroup(Circle(color='#FFD700'), Text('ab')))
+    if updater:
+        g.add_updater(lambda m: m)
+    before = [{k: v.copy() for k, v in _arrays(m).items()} for m in g.get_family()]
+    a = FadeIn(g, lag_ratio=0.2)
+    a.begin()
+    fam, tgt, start = g.get_family(), a.target_copy.get_family(), a.starting_mobject.get_family()
+    out = {'target-values': all(np.array_equal(v, b[k]) for m, b in zip(tgt, before) for k, v in _arrays(m).items()),
+           'start-colours-own': all(not np.shares_memory(v, w) for m, s in zip(fam, start)
+                                     for k, v in _arrays(m).items() if k != 'points' and v.size
+                                     for w in [s.__dict__[k]])}
+    steps = []
+    for t in np.linspace(0, 1, 7):
+        a.interpolate(t)
+        steps.append(_digest(g))
+    a.finish()
+    steps.append(_digest(g))
+    out['steps'] = steps
+    # mutating the displayed mobject in place, on every member (with points
+    # or not), reaches neither the target snapshot nor the start state
+    tsnap = [{k: v.copy() for k, v in _arrays(m).items()} for m in tgt]
+    ssnap = [{k: v.copy() for k, v in _arrays(m).items()} for m in start]
+    for m in g.get_family():
+        if len(m.points):
+            m.points += 1.0
+        m.fill_rgbas[:, 3] = 0.25
+    g.set_stroke(opacity=0.3)
+    g.set_background_stroke(opacity=0.2)
+    out['target-untouched'] = all(np.array_equal(v, s[k]) for m, s in zip(tgt, tsnap) for k, v in _arrays(m).items())
+    out['start-untouched'] = all(np.array_equal(v, s[k]) for m, s in zip(start, ssnap) for k, v in _arrays(m).items())
+    return out
+")
+
+(deftest zero-path-sharing-is-safe-for-the-animation-and-after
+  (if-not @manim-env?
+    (println "skip: no Manim env")
+    (do
+      (core/init!)
+      (let [g     (:globals (py/run-simple-string zero-probe-src))
+            probe (get g "desargues_fs_zero_probe")
+            run   (fn [patches updater?]
+                    (let [s0  (fs/stats)
+                          out (mp/with-patches* patches #(py/->jvm (probe updater?)))]
+                      [out (select-keys (merge-with - (fs/stats) s0) [:lean :zero])]))
+            [stock _]  (run [] false)
+            [zero d]   (run [(fs/fadein-setup)] false)
+            [stock2 _] (run [] true)
+            [lean d2]  (run [(fs/fadein-setup)] true)
+            ok {"target-values" true "start-colours-own" true "target-untouched" true "start-untouched" true}]
+        (is (= ok (dissoc zero "steps")) "zero path: snapshot values, fresh start colours, independence after finish")
+        (is (= (get stock "steps") (get zero "steps")) "every interpolated state and the finish are stock's")
+        (is (= {:lean 0 :zero 1} d))
+        (is (= ok (dissoc lean "steps")))
+        (is (= (get stock2 "steps") (get lean "steps")))
+        (is (= {:lean 1 :zero 0} d2) "a family with updaters is outside the zero guards")))))
 
 (deftest install-is-idempotent-and-uninstall-restores
   (if-not @manim-env?
