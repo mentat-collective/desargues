@@ -10,9 +10,13 @@
       :period 12                            ; seconds per loop when the phase is unbound
       :view   [14.22 8.0]                   ; scene window fitted to the output, centred
       :blend  :screen                       ; hint for the host's layer stack
-      :params {scale {:default 3.0 :min 1.0 :max 8.0 :label \"Wave number\"}}
+      :params [[scale {:default 3.0 :min 1.0 :max 8.0 :label \"Wave number\"}]]
       :description \"..\" :categories [\"Generator\"]}
 
+   :params is an ORDERED vector of [sym spec] pairs: its order is the
+   input (slot) order, so add new params at the end only (append-only;
+   host bindings and presets refer to slots). A {sym spec} map is accepted
+   only with :order [sym ..], else err :layer/unordered-params.
    Every non-phase param of the form needs a :default; :min :max :label
    are optional. The phase u is an input too: the shader runs at
      phase = fract(u + rate * TIME / period)
@@ -27,7 +31,9 @@
                against the form's, as a Result.
      Promote   `inputs`: the bindable inputs; `glsl/source`: the field body.
      Pipeline  `isf`, `frag`, `manifest`: text and data, pure.
-     Boundary  `emit!`: writes <id>.fs (ISF v2), <id>.frag + <id>.json.
+     Boundary  `emit!`: writes <id>.fs (ISF v2), <id>.frag + <id>.json;
+               with :target :trama, <id>.wgsl (desargues.wallpaper.trama,
+               doc/trama-layers.md).
    Each pure stage returns a hive-dsl Result; a field construct GLSL cannot
    express is an err naming it (desargues.wallpaper.glsl), never dropped."
   (:require [clojure.data.json :as json]
@@ -55,6 +61,10 @@
    [:label {:optional true} string?]])
 
 (def LayerSpec
+  "A layer spec. :params is canonically an ORDERED vector of [sym ParamSpec]
+   pairs: declaration order is slot order (append-only). The legacy map
+   shape {sym ParamSpec} is accepted only with :order [sym ..] naming
+   every key once, since map iteration order is not stable."
   [:map
    [:id [:or keyword? string?]]
    [:form [:map [:params [:sequential symbol?]] [:body any?]]]
@@ -65,7 +75,10 @@
    [:period {:optional true} [:and number? pos?]]
    [:view {:optional true} [:tuple [:and number? pos?] [:and number? pos?]]]
    [:blend {:optional true} (into [:enum] blend-modes)]
-   [:params {:optional true} [:map-of symbol? ParamSpec]]])
+   [:params {:optional true} [:or [:sequential [:tuple symbol? ParamSpec]]
+                              [:map-of symbol? ParamSpec]]]
+   [:order {:optional true} [:sequential symbol?]]
+   [:target {:optional true} [:enum :glsl :trama]]])
 
 (def ^:private reserved
   "Names an input may not take: the ones the emitted main declares itself,
@@ -89,43 +102,74 @@
 (defn- layer-err [msg data]
   (r/err :layer/invalid (assoc data :message msg)))
 
+(defn ordered-params
+  "The layer's :params as an ordered vector of [sym spec] pairs, as a
+   Result. A vector is taken as is (its order is the slot order); a map
+   needs :order naming each of its keys exactly once, else
+   err :layer/unordered-params (map iteration order is not stable, and
+   slot order is what saved host bindings refer to)."
+  [{:keys [params order]}]
+  (cond
+    (nil? params) (r/ok [])
+    (map? params)
+    (cond
+      (nil? order)
+      (r/err :layer/unordered-params
+             {:message "a :params map needs an explicit :order [sym ..]; prefer the ordered vector [[sym spec] ..]"
+              :params (vec (sort (keys params)))})
+      (not (and (= (count order) (count (distinct order))) (= (set order) (set (keys params)))))
+      (r/err :layer/unordered-params
+             {:message ":order must name every key of :params exactly once"
+              :order (vec order) :params (vec (sort (keys params)))})
+      :else (r/ok (mapv (fn [s] [s (params s)]) order)))
+    :else
+    (let [ss (map first params)]
+      (if (= (count ss) (count (distinct ss)))
+        (r/ok (mapv vec params))
+        (r/err :layer/invalid {:message "a param is declared twice" :params (vec ss)})))))
+
 (defn check
   "Layer spec `layer` with its defaults filled ({:phase u :period 10
-   :view default-view :blend :normal}), as a Result: err :layer/invalid when
-   it fails LayerSpec, names a phase the form lacks, leaves a non-phase
-   param without a :default, binds a param the form lacks, or has a param
-   whose name is no usable GLSL identifier."
+   :view default-view :blend :normal}) and its :params normalised to the
+   ordered vector [[sym spec] ..] (see `ordered-params`), as a Result:
+   err :layer/invalid when it fails LayerSpec, names a phase the form
+   lacks, leaves a non-phase param without a :default, binds a param the
+   form lacks, or has a param whose name is no usable GLSL identifier;
+   err :layer/unordered-params for a :params map without a valid :order."
   [layer]
   (if-let [ex (m/explain LayerSpec layer)]
     (layer-err "the layer spec does not match LayerSpec" {:explain (me/humanize ex)})
-    (let [l (merge {:phase 'u :period 10 :view default-view :blend :normal :params {}} layer)
-          ps (vec (get-in l [:form :params]))
-          free (remove #{(:phase l)} ps)]
-      (cond
-        (not (some #{(:phase l)} ps))
-        (layer-err (str "the form has no phase param " (:phase l)) {:params ps})
-        (seq (remove (set free) (keys (:params l))))
-        (layer-err "the spec binds params the form lacks" {:unknown (vec (remove (set free) (keys (:params l))))})
-        (seq (remove (:params l) free))
-        (layer-err "every non-phase param needs a :default" {:missing (vec (remove (:params l) free))})
-        (some (complement glsl-name) free)
-        (layer-err "param names must be GLSL identifiers, not reserved" {:bad (vec (remove glsl-name free))})
-        (not= (count free) (count (distinct (map glsl-name free))))
-        (layer-err "two params map to one GLSL name" {:params (vec free)})
-        :else (r/ok l)))))
+    (r/let-ok [ordered (ordered-params layer)]
+      (let [l (-> (merge {:phase 'u :period 10 :view default-view :blend :normal} layer)
+                  (assoc :params ordered) (dissoc :order))
+            ps (vec (get-in l [:form :params]))
+            free (remove #{(:phase l)} ps)
+            declared (map first ordered)]
+        (cond
+          (not (some #{(:phase l)} ps))
+          (layer-err (str "the form has no phase param " (:phase l)) {:params ps})
+          (seq (remove (set free) declared))
+          (layer-err "the spec binds params the form lacks" {:unknown (vec (remove (set free) declared))})
+          (seq (remove (set declared) free))
+          (layer-err "every non-phase param needs a :default" {:missing (vec (remove (set declared) free))})
+          (some (complement glsl-name) free)
+          (layer-err "param names must be GLSL identifiers, not reserved" {:bad (vec (remove glsl-name free))})
+          (not= (count free) (count (distinct (map glsl-name free))))
+          (layer-err "two params map to one GLSL name" {:params (vec free)})
+          :else (r/ok l))))))
 
 ;; ── Promote: the bindable inputs ───────────────────────────────────────────
 
 (defn inputs
   "The checked layer's inputs, in order: the phase, the loop rate, then
-   the form's other params. Each {:name :role :default :min? :max? :label}."
-  [{:keys [phase params form]}]
+   the params in their DECLARED order (the ordered :params vector, never
+   the form's or a map's order). Each {:name :role :default :min? :max? :label}."
+  [{:keys [phase params]}]
   (into [{:name (glsl-name phase) :role :phase :default 0.0 :min 0.0 :max 1.0
           :label "Phase (added to the clock)"}
          {:name "rate" :role :rate :default 1.0 :min 0.0 :max 4.0
           :label "Loops per period (0: phase only)"}]
-        (for [p (:params form) :when (not= p phase)
-              :let [{:keys [default min max label]} (params p)]]
+        (for [[p {:keys [default min max label]}] params]
           (cond-> {:name (glsl-name p) :role :param :default (double default)
                    :label (or label (name p))}
             min (assoc :min (double min))
@@ -240,18 +284,23 @@
              "desargues" (meta-block c)))
 
 (defn layer-files
-  "File name -> text of layer spec `layer`, as a Result:
+  "File name -> text of layer spec `layer`, as a Result. :target :glsl
+   (the default):
      <id>.fs    ISF v2
      <id>.frag  GLSL ES 3.00 (WebGL2 / GLES)
      <id>.330.frag  desktop GLSL 330
-     <id>.json  the manifest of the plain shaders."
+     <id>.json  the manifest of the plain shaders.
+   :target :trama: <id>.wgsl, a fosfora trama source
+   (desargues.wallpaper.trama, doc/trama-layers.md)."
   [layer]
-  (r/let-ok [c (compiled layer)]
-    (let [id (name (:id c))]
-      (r/ok (array-map (str id ".fs") (isf c)
-                       (str id ".frag") (frag c :es300)
-                       (str id ".330.frag") (frag c :330)
-                       (str id ".json") (str (json-text (manifest c)) "\n"))))))
+  (if (= :trama (:target layer))
+    ((requiring-resolve 'desargues.wallpaper.trama/layer-files) layer)
+    (r/let-ok [c (compiled layer)]
+      (let [id (name (:id c))]
+        (r/ok (array-map (str id ".fs") (isf c)
+                         (str id ".frag") (frag c :es300)
+                         (str id ".330.frag") (frag c :330)
+                         (str id ".json") (str (json-text (manifest c)) "\n")))))))
 
 ;; ── Boundary ───────────────────────────────────────────────────────────────
 

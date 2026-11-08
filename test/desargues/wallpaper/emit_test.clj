@@ -18,15 +18,16 @@
            (java.nio.file.attribute FileAttribute)))
 
 (def layers
-  "One layer per test form of glsl-test."
+  "One layer per test form of glsl-test, :params as the canonical ordered
+   vector of [sym spec] pairs."
   [{:id :quasicrystal :title "7-fold quasicrystal" :form fld/quasicrystal :period 12 :blend :screen
-    :params {'scale {:default 3.0 :min 1.0 :max 8.0 :label "Wave number"}}}
+    :params [['scale {:default 3.0 :min 1.0 :max 8.0 :label "Wave number"}]]}
    {:id :lieb-fermi :form gt/lieb :period 18 :blend :add :view [8.0 4.5]
-    :params {'k {:default 3.8 :min 1.0 :max 8.0}}}
+    :params [['k {:default 3.8 :min 1.0 :max 8.0}]]}
    {:id :graphene-bands :form gt/graphene :blend :screen :categories ["Generator" "Physics"]
-    :params {'a {:default (/ (* 4.0 Math/PI) 3.0) :min 1.0 :max 6.0 :label "Lattice constant"}
-             'bands {:default 2.0 :min 1.0 :max 6.0}}}
-   {:id :rings :form gt/rings :params {'k {:default 2.0}}}])
+    :params [['a {:default (/ (* 4.0 Math/PI) 3.0) :min 1.0 :max 6.0 :label "Lattice constant"}]
+             ['bands {:default 2.0 :min 1.0 :max 6.0}]]}
+   {:id :rings :form gt/rings :params [['k {:default 2.0}]]}])
 
 (defn- files [layer] (:ok (emit/layer-files layer)))
 
@@ -119,12 +120,13 @@
 
 (deftest bad-layers-are-refused-and-nothing-is-written
   (let [q (first layers)]
-    (doseq [[label l] {"no default for a param" (assoc q :params {})
-                       "a param the form lacks" (assoc-in q [:params 'zoom] {:default 1})
+    (doseq [[label l] {"no default for a param" (assoc q :params [])
+                       "a param the form lacks" (update q :params conj ['zoom {:default 1}])
+                       "a param declared twice" (update q :params conj ['scale {:default 1}])
                        "no such phase" (assoc q :phase 't)
                        "an unknown blend" (assoc q :blend :glitter)
                        "a reserved name" (assoc q :form (assoc fld/quasicrystal :params '[u rate])
-                                                  :params {'rate {:default 1}})}]
+                                                  :params [['rate {:default 1}]])}]
       (testing label
         (is (= :layer/invalid (:error (emit/layer-files l)))))))
   (testing "a form GLSL cannot express: the compiler's err, no files"
@@ -132,6 +134,21 @@
           res (emit/emit! {:id :bad :form {:params '[u] :body [(/ 1.0 0.0) 0 0]}} dir)]
       (is (= :field/unsupported (:error res)))
       (is (empty? (.list (io/file dir)))))))
+
+(deftest params-keep-their-declared-order
+  (let [g (nth layers 2)
+        names #(mapv (fn [i] (get i "NAME")) (get (header-of (get (files %) "graphene-bands.fs")) "INPUTS"))]
+    (testing "the vector's order is the input order, whatever the form's order"
+      (is (= ["u" "rate" "bands" "a"] (names (update g :params (comp vec reverse))))))
+    (testing "a legacy :params map is refused without :order (map order is not stable)"
+      (let [res (emit/layer-files (assoc g :params (into {} (:params g))))]
+        (is (= :layer/unordered-params (:error res)))
+        (is (str/includes? (:message res) ":order"))))
+    (testing "a legacy map with :order follows it"
+      (is (= ["u" "rate" "bands" "a"] (names (assoc g :params (into {} (:params g)) :order '[bands a])))))
+    (testing ":order must name every key exactly once"
+      (is (= :layer/unordered-params
+             (:error (emit/layer-files (assoc g :params (into {} (:params g)) :order '[a]))))))))
 
 (deftest emit-writes-the-layer-files
   (let [dir (str (Files/createTempDirectory "layers" (make-array FileAttribute 0)))

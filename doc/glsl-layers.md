@@ -25,7 +25,7 @@ of these:
              :period 12                      ; seconds per loop on the host clock
              :blend :screen                  ; hint for the host's layer stack
              :view [14.22 8.0]               ; scene window, as in a loop spec
-             :params {'scale {:default 3.0 :min 1.0 :max 8.0 :label "Wave number"}}}
+             :params [['scale {:default 3.0 :min 1.0 :max 8.0 :label "Wave number"}]]}
             "out/layers")
 ;; => {:ok ["out/layers/quasicrystal.fs" ...]}
 ;;    or {:error :layer/invalid ...} / {:error :field/unsupported ...}; nothing is written
@@ -34,6 +34,13 @@ of these:
 `emit/layer-files` returns the same files as a map of name to text and touches
 no disk. `emit/emit-all!` emits a list of layers. The compiler on its own is
 `(fld/source :glsl form {})`, which returns `{:ok {:function :helpers :params :ir}}`.
+
+`:params` is an ordered vector of `[symbol spec]` pairs, and its order is the
+input order. Add new params at the end only (append-only), because host
+bindings and presets refer to input positions. The older map shape
+`{'scale spec}` is accepted only together with `:order ['scale ..]` naming every
+key once; without it the emitter returns `{:error :layer/unordered-params}`,
+because map iteration order is not stable.
 
 Every non-phase param of the form needs a `:default`. `:min`, `:max` and
 `:label` are optional. Param names must be GLSL identifiers (`-` becomes `_`)

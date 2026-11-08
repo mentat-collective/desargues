@@ -29,7 +29,9 @@
    (desargues.infrastructure.raster-field) emit raster kernels from it, and
    `source` (an open port keyed by target) prints shader text from it:
    :glsl is desargues.wallpaper.glsl, packaged as ISF / .frag layers by
-   desargues.wallpaper.emit (doc/glsl-layers.md).
+   desargues.wallpaper.emit (doc/glsl-layers.md); :wgsl is
+   desargues.wallpaper.wgsl, packaged as fosfora trama sources by emit's
+   :target :trama (desargues.wallpaper.trama, doc/trama-layers.md).
 
    Channels quantise the same way everywhere: (quantize v) =
    floor(255 clamp(v, 0, 1) + 0.5)."
@@ -120,7 +122,7 @@
           cospal (let [[t a b c d] args]
                    (list '+ (sub a) (list '* (sub b) (list 'Math/cos (list '* tau (list '+ (list '* (sub c) (sub t)) (sub d)))))))
           (if-let [m (math op)]
-            (cons m (map sub args))
+            (apply list m (mapv sub args)) ; eager: bindings pushed in evaluation order
             (bad (str "unknown op " op "; the vocabulary is " (sort vocabulary)) form))))
       :else (bad "not an expression" form))))
 
@@ -190,6 +192,10 @@
 
 (backend/register-backend! :glsl
                            {:namespaces '[desargues.wallpaper.glsl]
+                            :requires nil})
+
+(backend/register-backend! :wgsl
+                           {:namespaces '[desargues.wallpaper.wgsl]
                             :requires nil})
 
 ;; ── JVM: the lowered code as a primitive fn ──────────────────────────────
