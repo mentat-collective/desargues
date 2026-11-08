@@ -75,7 +75,8 @@
    [:blend {:optional true} (into [:enum] blend-modes)]
    [:params {:optional true} [:or [:sequential [:tuple symbol? ParamSpec]]
                               [:map-of symbol? ParamSpec]]]
-   [:order {:optional true} [:sequential symbol?]]])
+   [:order {:optional true} [:sequential symbol?]]
+   [:target {:optional true} [:enum :glsl :trama]]])
 
 (def ^:private reserved
   "Names an input may not take: the ones the emitted main declares itself,
@@ -281,18 +282,23 @@
              "desargues" (meta-block c)))
 
 (defn layer-files
-  "File name -> text of layer spec `layer`, as a Result:
+  "File name -> text of layer spec `layer`, as a Result. :target :glsl
+   (the default):
      <id>.fs    ISF v2
      <id>.frag  GLSL ES 3.00 (WebGL2 / GLES)
      <id>.330.frag  desktop GLSL 330
-     <id>.json  the manifest of the plain shaders."
+     <id>.json  the manifest of the plain shaders.
+   :target :trama: <id>.wgsl, a fosfora trama source
+   (desargues.wallpaper.trama, doc/trama-layers.md)."
   [layer]
-  (r/let-ok [c (compiled layer)]
-    (let [id (name (:id c))]
-      (r/ok (array-map (str id ".fs") (isf c)
-                       (str id ".frag") (frag c :es300)
-                       (str id ".330.frag") (frag c :330)
-                       (str id ".json") (str (json-text (manifest c)) "\n"))))))
+  (if (= :trama (:target layer))
+    ((requiring-resolve 'desargues.wallpaper.trama/layer-files) layer)
+    (r/let-ok [c (compiled layer)]
+      (let [id (name (:id c))]
+        (r/ok (array-map (str id ".fs") (isf c)
+                         (str id ".frag") (frag c :es300)
+                         (str id ".330.frag") (frag c :330)
+                         (str id ".json") (str (json-text (manifest c)) "\n")))))))
 
 ;; ── Boundary ───────────────────────────────────────────────────────────────
 
