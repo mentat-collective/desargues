@@ -83,6 +83,51 @@
           :else (unsupported op e "no GLSL op of this name and arity"))))
     :else (unsupported e e "not an expression")))
 
+(defn test-ir
+  "Lowered :until condition `t` as a condition tree, its expressions
+   through `expr-ir`, as a Result:
+     [:cmp \"<\" a b] | [:and c d] | [:or c d] | [:not c]"
+  [expr-ir t]
+  (case (first t)
+    (< > <= >=) (r/let-ok [as (ir-all expr-ir (rest t))]
+                  (r/ok (into [:cmp (name (first t))] as)))
+    (and or) (r/let-ok [cs (ir-all #(test-ir expr-ir %) (rest t))]
+               (r/ok (into [(keyword (name (first t)))] cs)))
+    not (r/map-ok (test-ir expr-ir (second t)) (fn [c] [:not c]))))
+
+(defn bindings-ir
+  "Lowered `bindings` (fld/lower) as tree bindings, expressions through
+   `expr-ir` (the target's), as a Result. A pair becomes [\"v0\" tree]; a
+   loop node becomes
+     {:loop \"v0\" :n N :state [[\"v1\" tree] ..]
+      :until {:bindings [..] :test cond} | nil
+      :bindings [..] :next [tree ..]}
+   kept as one structured node, never unrolled."
+  [expr-ir bindings]
+  (ir-all (fn [b]
+            (if-not (fld/loop-node? b)
+              (let [[s e] b] (r/map-ok (expr-ir e) (fn [t] [(name s) t])))
+              (let [{:loop/keys [i n state until bindings next]} b]
+                (r/let-ok [st (ir-all (fn [[s e]] (r/map-ok (expr-ir e) (fn [t] [(name s) t]))) state)
+                           ub (if until (bindings-ir expr-ir (:bindings until)) (r/ok nil))
+                           ut (if until (test-ir expr-ir (:test until)) (r/ok nil))
+                           bs (bindings-ir expr-ir bindings)
+                           nx (ir-all expr-ir next)]
+                  (r/ok {:loop (name i) :n n :state st
+                         :until (when until {:bindings ub :test ut})
+                         :bindings bs :next nx})))))
+          bindings))
+
+(defn trees
+  "Every expression and condition tree of tree `bindings`, loops included."
+  [bindings]
+  (mapcat (fn [b]
+            (if (map? b)
+              (concat (map second (:state b)) (trees (:bindings (:until b)))
+                      (some-> (:test (:until b)) vector) (trees (:bindings b)) (:next b))
+              [(second b)]))
+          bindings))
+
 (defn ir
   "Field form `form` as {:params [sym ..] :bindings [[\"v0\" tree] ..]
    :rgb [tree tree tree]}, as a Result: (err {:error :field/bad ..}) when
@@ -93,7 +138,7 @@
                      (catch clojure.lang.ExceptionInfo e
                        (r/err :field/bad {:target :glsl :message (ex-message e) :form (:form (ex-data e))})))]
     (r/let-ok [{:keys [params bindings rgb]} lowered
-               bs (ir-all (fn [[s e]] (r/map-ok (expr-ir e) (fn [t] [(name s) t]))) bindings)
+               bs (bindings-ir expr-ir bindings)
                cs (ir-all expr-ir rgb)]
       (r/ok {:params params :bindings bs :rgb cs}))))
 
@@ -123,17 +168,64 @@
     (into (if (= :call (first t)) #{(second t)} #{}) (mapcat called (rest t)))
     #{}))
 
+(defn test-text
+  "Text of condition tree `c` (see `test-ir`), expressions through `expr-text`."
+  [expr-text c]
+  (case (first c)
+    :cmp (let [[_ op a b] c] (str "(" (expr-text a) " " op " " (expr-text b) ")"))
+    :and (str "(" (test-text expr-text (nth c 1)) " && " (test-text expr-text (nth c 2)) ")")
+    :or (str "(" (test-text expr-text (nth c 1)) " || " (test-text expr-text (nth c 2)) ")")
+    :not (str "(!" (test-text expr-text (nth c 1)) ")")))
+
+(def dialect
+  "How GLSL spells the statements of `statements-text`."
+  {:let (fn [s e] (str "float " s " = " e ";"))
+   :var (fn [s e] (str "float " s " = " e ";"))
+   :set (fn [s e] (str s " = " e ";"))
+   :for (fn [i n] (str "for (int " i "_i = 0; " i "_i < " n "; " i "_i++) {"))
+   :index (fn [i] (str "float " i " = float(" i "_i);"))})
+
+(defn statements-text
+  "Tree `bindings` (see `bindings-ir`) as statements, one per line at
+   `indent`, in dialect `d` (see `dialect`) with expressions through
+   `expr-text`. A loop node becomes its state variables then
+     for (i_i = 0; i_i < N; i_i++) {
+       i = float(i_i);  <until bindings>  if (cond) { break; }
+       <body bindings>  s_next = ..;  s = s_next;
+     }
+   the next state computed into temporaries first, so every state
+   updates at once, as on the JVM."
+  [d expr-text indent bindings]
+  (let [ind (fn [k] (apply str (repeat k "  ")))]
+    (apply str
+           (for [b bindings]
+             (if-not (map? b)
+               (str (ind indent) ((:let d) (first b) (expr-text (second b))) "\n")
+               (let [{:keys [loop n state until next] :as node} b
+                     in (inc indent)]
+                 (str (apply str (for [[s t] state] (str (ind indent) ((:var d) s (expr-text t)) "\n")))
+                      (ind indent) ((:for d) loop n) "\n"
+                      (ind in) ((:index d) loop) "\n"
+                      (when until
+                        (str (statements-text d expr-text in (:bindings until))
+                             (ind in) "if " (test-text expr-text (:test until)) " { break; }\n"))
+                      (statements-text d expr-text in (:bindings node))
+                      (apply str (for [[[s] t] (map vector state next)]
+                                   (str (ind in) ((:let d) (str s "_next") (expr-text t)) "\n")))
+                      (apply str (for [[s] state] (str (ind in) ((:set d) s (str s "_next")) "\n")))
+                      (ind indent) "}\n")))))))
+
 (defn function-text
   "{:helpers text :function text} of tree `tree` (see `ir`): the helper
    functions it calls, and
      vec3 desargues_field(float fx, float fy, float p0, ..) { .. }
    returning [r g b] (unclamped; the caller clamps)."
   [{:keys [params bindings rgb]}]
-  (let [used (into (called (into [:x] rgb)) (mapcat (comp called second)) bindings)
+  (let [used (into (called (into [:x] rgb)) (mapcat called) (trees bindings))
         args (into ["float fx" "float fy"] (map #(str "float p" %) (range (count params))))]
     {:helpers (str/join "\n" (keep helpers (sort used)))
      :function (str "vec3 " function-name "(" (str/join ", " args) ") {\n"
-                    (apply str (for [[s t] bindings] (str "  float " s " = " (expr-text t) ";\n")))
+                    (statements-text dialect expr-text 1 bindings)
                     "  return vec3(" (str/join ", " (map expr-text rgb)) ");\n"
                     "}\n")}))
 
@@ -154,6 +246,38 @@
    "floor" #(Math/floor %) "atan" #(Math/atan2 %1 %2) "d_pow" d-pow
    "min" #(Math/min (double %1) (double %2)) "max" #(Math/max (double %1) (double %2))})
 
+(defn run-bindings
+  "Env `env` (name -> double) after tree `bindings` (see `bindings-ir`),
+   each expression read by (ev env tree), loops run as the emitted code
+   runs them: the index as a float of the counter, the :until check
+   first, every next state computed from the old one and then assigned."
+  [ev env bindings]
+  (let [holds? (fn holds? [env c]
+                 (case (first c)
+                   :cmp (let [[_ op a b] c, a (double (ev env a)), b (double (ev env b))]
+                          (case op "<" (< a b) ">" (> a b) "<=" (<= a b) ">=" (>= a b)))
+                   :and (and (holds? env (nth c 1)) (holds? env (nth c 2)))
+                   :or (or (holds? env (nth c 1)) (holds? env (nth c 2)))
+                   :not (not (holds? env (nth c 1)))))]
+    (reduce
+     (fn [env b]
+       (if-not (map? b)
+         (assoc env (first b) (ev env (second b)))
+         (let [{idx :loop :keys [n state until next] :as node} b
+               names (mapv first state)]
+           (loop [k 0
+                  env (reduce (fn [e [s t]] (assoc e s (ev env t))) env state)]
+             (if (>= k (long n))
+               env
+               (let [e (assoc env idx (ev env (double k)))
+                     e (if until (run-bindings ev e (:bindings until)) e)]
+                 (if (and until (holds? e (:test until)))
+                   env
+                   (let [e (run-bindings ev e (:bindings node))
+                         nx (mapv #(ev e %) next)]
+                     (recur (inc k) (into env (map vector names nx)))))))))))
+     env bindings)))
+
 (defn interpret
   "[r g b] of tree `tree` (see `ir`) at scene point (`x`, `y`) with param
    values `args`, read the way the emitted GLSL reads it. `round` is applied
@@ -173,7 +297,7 @@
                          :bin (let [[_ op a b] t, a (ev env a), b (ev env b)]
                                 (case op "+" (+ a b) "-" (- a b) "*" (* a b) "/" (/ a b)))
                          :call (let [[_ f & as] t] (apply (glsl-fns f) (map #(ev env %) as)))))))
-         env (reduce (fn [env [s t]] (assoc env s (ev env t))) env0 bindings)]
+         env (run-bindings ev env0 bindings)]
      (mapv #(ev env %) rgb))))
 
 (defmethod fld/source :glsl [_ form _opts]
