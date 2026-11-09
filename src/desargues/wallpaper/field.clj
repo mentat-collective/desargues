@@ -439,3 +439,26 @@
      :body (list 'let ['s (list '/ (cons '+ waves) 7.0)
                        't (list 'fract (list '+ (list '* 0.5 's) 0.5))]
                  [(channel 0.0) (channel 0.33) (channel 0.67)])}))
+
+(def mandelbrot
+  "Escape-time Mandelbrot set, the loop-n exemplar: z <- z^2 + c with
+   c = (cx + x/zoom, cy + y/zoom), at most 96 iterations, stopping once
+   |z| > 2; the escape count k, smoothed by log2 log|z|, runs through a
+   cosine palette whose phase advances with u (so it loops). The interior
+   (k = 96) is black. Params [u zoom cx cy]."
+  {:params '[u zoom cx cy]
+   :body '(let [ca (+ cx (/ x zoom))
+                cb (+ cy (/ y zoom))
+                [za zb k] (loop-n [i 96] [za 0 zb 0 k 0]
+                            [(+ (- (* za za) (* zb zb)) ca)
+                             (+ (* 2 za zb) cb)
+                             (+ k 1)]
+                            :until (> (+ (* za za) (* zb zb)) 4))
+                r2 (max (+ (* za za) (* zb zb)) 4)
+                s (- (+ k 1) (/ (log (* 0.5 (log r2))) (log 2)))
+                t (+ (* 0.035 s) u)
+                in (floor (/ k 96))
+                out (- 1 in)]
+            [(* out (cospal t 0.5 0.5 1.0 0.0))
+             (* out (cospal t 0.5 0.5 1.0 0.1))
+             (* out (cospal t 0.5 0.5 1.0 0.2))])})
