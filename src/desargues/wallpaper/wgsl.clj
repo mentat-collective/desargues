@@ -13,7 +13,9 @@
               rejects a fold that overflows or leaves the domain (1.0 / 0.0,
               sqrt(-1.0)), so none reaches the text. A construct WGSL cannot
               express is an (err {:error :field/unsupported :target :wgsl
-              :construct ..}) naming it, never dropped.
+              :construct ..}) naming it, never dropped. A loop-n node stays
+              one node (glsl/bindings-ir) and prints as
+              for (var v0_i: i32 = 0; v0_i < N; v0_i++) { .. break; .. }
      Pipeline `function-text`:
                 fn desargues_field(fx: f32, fy: f32, p0: f32, ..) -> vec3f
               plus the helpers it calls, all prefixed desargues_.

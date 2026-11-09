@@ -13,20 +13,44 @@
    any number of lets, in [r g b], each channel a double in [0, 1].
    Vocabulary (closed):
      + - * /  sin cos tan exp log sqrt pow atan2 abs floor min max
-     fract mix clamp  let
+     fract mix clamp  let  loop-n
      frac wave osc  (the loop helpers of desargues.wallpaper.loop)
      smoothstep cospal  (GLSL's smoothstep; a cosine palette channel)
-   and the constants pi and tau. Number literals become doubles. `bind` fixes the params for one frame:
+   and the constants pi and tau. Number literals become doubles.
+
+   loop-n is the one bounded loop:
+     (let [[zx zy k] (loop-n [i 64] [zx 0 zy 0 k 0]
+                       [(+ (- (* zx zx) (* zy zy)) x) (+ (* 2 zx zy) y) (+ k 1)]
+                       :until (> (+ (* zx zx) (* zy zy)) 4))]
+       ..)
+   [i N] names the index (0.0, 1.0, .. N-1, a double) and the bound, a
+   literal integer in [1, 256]; [s0 init0 ..] the state, doubles; the body
+   (through lets) ends in a vector of the next state, all assigned at once.
+   The optional :until condition (< > <= >= of expressions, and/or/not of
+   conditions) is checked at the top of each iteration, the state as it
+   stands; once it holds the loop stops with that state. The value is the
+   final state: bound by a let, [s0 s1 ..] for several, s for one (a one-state
+   loop may also stand as an expression). A loop inside a loop body holds one
+   state. `mandelbrot` is the exemplar. `bind` fixes the params for one frame:
    (bind form u k) is a BOUND field, what a loop spec's :field may return in
    place of a closure.
 
-   `lower` normalises a form to straight-line code, the one shape every
-   backend generates from: {:params [..] :bindings [[sym expr] ..] :rgb [r g b]},
-   lets flattened and renamed apart (v0 v1 ..), params renamed p0 p1 .., x y
+   `lower` normalises a form to the one shape every backend generates from:
+   {:params [..] :bindings [[sym expr] | loop ..] :rgb [r g b]}, lets
+   flattened and renamed apart (v0 v1 ..), params renamed p0 p1 .., x y
    renamed fx fy, the derived ops (fract mix clamp) expanded, every op binary
-   (or unary -) and spelled as its java.lang.Math method. `jvm-shader` evals
-   the lowered code once per form into a primitive fn; the raster backends
-   (desargues.infrastructure.raster-field) emit raster kernels from it, and
+   (or unary -) and spelled as its java.lang.Math method. A form without
+   loop-n lowers to straight-line [sym expr] pairs, exactly as before loop-n.
+   Each loop-n stays ONE structured node, never unrolled:
+     {:loop/i v0 :loop/n N :loop/state [[v1 init] ..]
+      :loop/until {:bindings [..] :test cond} | nil
+      :loop/bindings [..] :loop/next [expr ..]}
+   after which its state symbols (v1 ..) hold the final state. The backends
+   compile it as a loop: `jvm-shader` a primitive loop/recur (`let-form`);
+   the raster kernels the same loop bound by value (`value-bindings`); GLSL
+   and WGSL `for (i = 0; i < N; i++) { .. if (cond) { break; } .. }`.
+   `jvm-shader` evals the lowered code once per form into a primitive fn; the
+   raster backends (desargues.infrastructure.raster-field) emit raster kernels from it, and
    `source` (an open port keyed by target) prints shader text from it:
    :glsl is desargues.wallpaper.glsl, packaged as ISF / .frag layers by
    desargues.wallpaper.emit (doc/glsl-layers.md); :wgsl is
@@ -40,7 +64,8 @@
 (set! *warn-on-reflection* true)
 
 (def vocabulary
-  "The symbols a field body may apply, besides let. The loop helpers
+  "The symbols a field body may apply, besides the special forms let and
+   loop-n (`forms`; loop-n's :until conditions use `conditions`). The loop helpers
    (wave u) (osc u lo hi) (frac x) mirror desargues.wallpaper.loop;
    (smoothstep e0 e1 x) is GLSL's; (cospal t a b c d) is a cosine palette
    channel a + b cos 2π(c t + d). All derived ops lower to the primitive ones."
@@ -242,8 +267,9 @@
     :else (bad "the body must end in [r g b]" form)))
 
 (defn lower
-  "Field form {:params [sym ..] :body form} as straight-line code
-   {:params [sym ..] :bindings [[sym expr] ..] :rgb [r g b]} (see ns doc).
+  "Field form {:params [sym ..] :body form} as lowered code
+   {:params [sym ..] :bindings [[sym expr] | loop-node ..] :rgb [r g b]}
+   (see ns doc): straight-line pairs, plus one structured node per loop-n.
    Throws ex-info {:reason :bad-field} naming the offending form."
   [{:keys [params] :as form}]
   (when-not (and (map? form) (contains? form :body))

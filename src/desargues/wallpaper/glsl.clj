@@ -10,7 +10,9 @@
                 number | \"name\" | [:neg a] | [:bin \"+\" a b] | [:call \"sin\" a ..]
               Every lowered op maps to a GLSL op, or the whole compile is an
               (err {:error :field/unsupported :construct ..}) naming it. A
-              construct is never dropped.
+              construct is never dropped. A loop-n node stays one node
+              (`bindings-ir`) and prints as a for loop with break
+              (`statements-text`), never unrolled.
      Pipeline `function-text`: the tree printed as
                 vec3 desargues_field(float fx, float fy, float p0, ..)
               plus the helpers it calls.

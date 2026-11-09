@@ -152,6 +152,22 @@
           (is (java.util.Arrays/equals (pixels (r/field-raster :jvm (r/image 96 54) bf opts))
                                        (pixels (r/field-raster :raster (r/image 96 54) bf opts)))))))))
 
+(deftest gpu-kernel-matches-jvm
+  (if-not (and raster? (backend/available? :gpu)
+               ((requiring-resolve 'desargues.infrastructure.gpu-solver/device-available?)))
+    (is true "no OpenCL device; skipped")
+    (try
+      (let [bf (fld/bind fld/mandelbrot 0.3 0.9 -0.6 0.0)
+            opts {:view [3.6 2.0]}
+            a (pixels (r/field-raster :jvm (r/image 96 54) bf opts))
+            b (pixels (r/field-raster :gpu (r/image 96 54) bf opts))]
+        ;; the GPU's log/cos round differently: within one level, as raster-field-test holds
+        (is (every? true? (map (fn [p q] (every? #(<= (Math/abs (- (bit-and (bit-shift-right p %) 255)
+                                                                   (bit-and (bit-shift-right q %) 255))) 1)
+                                                 [16 8 0]))
+                               a b))))
+      (finally ((requiring-resolve 'desargues.infrastructure.raster-field/close-gpu!))))))
+
 (def ^:private mandel-layer
   {:id :mandelbrot :title "Mandelbrot (loop-n)" :form fld/mandelbrot :period 20 :blend :screen
    :target :trama :view [3.6 2.0]

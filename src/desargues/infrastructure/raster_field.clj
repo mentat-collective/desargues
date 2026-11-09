@@ -38,7 +38,9 @@
 (defn pixel-body
   "The form writing pixel `i`'s packed colour into out, for lowered field
    `lowered` (fld/lower): its k x k samples, each through the lowered
-   bindings and quantised, averaged per channel and rounded."
+   bindings and quantised, averaged per channel and rounded. A loop-n node
+   becomes a primitive loop/recur bound by value (fld/value-bindings), a
+   shape raster compiles to a JVM loop and to an OpenCL while loop alike."
   [{:keys [params bindings rgb]} i]
   (let [[r g b] rgb]
     (list 'let (vec (concat ['py (list 'quot i 'w) 'px (list '- i (list '* 'py 'w))
