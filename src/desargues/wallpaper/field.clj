@@ -307,16 +307,32 @@
                   step)
                 tail))))
 
+(defn- symbols-of [x]
+  (cond (symbol? x) #{x}
+        (map? x) (into #{} (mapcat symbols-of) (vals x))
+        (coll? x) (into #{} (mapcat symbols-of) x)
+        :else #{}))
+
 (defn value-bindings
-  "Lowered `bindings` as one Clojure let vector, each (one-state) loop node
-   bound as [s (loop-form node s)]: the shape inside a loop body, where the
-   tail recurs and so cannot sit inside a nested loop. `lower` admits only
-   one-state loops there."
-  [bindings]
-  (into [] (mapcat (fn [b] (if (loop-node? b)
-                             (let [s (ffirst (:loop/state b))] [s (loop-form b s)])
-                             b)))
-        bindings))
+  "Lowered `bindings` as one Clojure let vector for code whose tail recurs
+   (and so cannot sit in a nested loop's exit): each loop node bound by
+   value, [s (loop-form node s)] for each state s the rest of the code
+   (`tail`, any forms) references, a loop of N iterations per such state.
+   `lower` admits only one-state loops inside a loop; the raster kernels
+   bind every loop this way."
+  ([bindings] (value-bindings bindings nil))
+  ([bindings tail]
+   (let [bs (vec bindings)]
+     (into []
+           (mapcat (fn [k]
+                     (let [b (bs k)]
+                       (if-not (loop-node? b)
+                         b
+                         (let [ss (mapv first (:loop/state b))
+                               used (if (= 1 (count ss)) (set ss)
+                                        (symbols-of [(subvec bs (inc k)) tail]))]
+                           (into [] (mapcat (fn [s] (when (used s) [s (loop-form b s)]))) ss))))))
+           (range (count bs))))))
 
 (defn let-form
   "Lowered `bindings` then `tail`, as Clojure: the pairs as one let, each

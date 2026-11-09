@@ -51,7 +51,7 @@
                       (list 'let (vec (concat '[sy (Math/floor (/ s kd)) sx (- s (* sy kd))
                                                 fx (* inv (- (+ fpx (/ (+ sx 0.5) kd)) cx))
                                                 fy (* inv (- cy (+ fpy (/ (+ sy 0.5) kd))))]
-                                              (mapcat identity bindings)))
+                                              (fld/value-bindings bindings rgb)))
                             (list 'recur '(+ s 1.0)
                                   (list '+ 'ar (level r)) (list '+ 'ag (level g)) (list '+ 'ab (level b))))
                       (list 'aset 'out i

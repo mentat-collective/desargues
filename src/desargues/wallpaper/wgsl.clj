@@ -123,7 +123,7 @@
                      (catch clojure.lang.ExceptionInfo e
                        (r/err :field/bad {:target :wgsl :message (ex-message e) :form (:form (ex-data e))})))]
     (r/let-ok [{:keys [params bindings rgb]} lowered
-               bs (ir-all (fn [[s e]] (r/map-ok (expr-ir e) (fn [t] [(name s) t]))) bindings)
+               bs (glsl/bindings-ir expr-ir bindings)
                cs (ir-all expr-ir rgb)]
       (r/ok {:params params :bindings bs :rgb cs}))))
 
@@ -152,17 +152,27 @@
     (into (if (= :call (first t)) #{(second t)} #{}) (mapcat called (rest t)))
     #{}))
 
+(def dialect
+  "How WGSL spells the statements of glsl/statements-text: a loop-n is
+     for (var v0_i: i32 = 0; v0_i < N; v0_i++) { .. if (c) { break; } .. }
+   its state in vars, everything else a let."
+  {:let (fn [s e] (str "let " s ": f32 = " e ";"))
+   :var (fn [s e] (str "var " s ": f32 = " e ";"))
+   :set (fn [s e] (str s " = " e ";"))
+   :for (fn [i n] (str "for (var " i "_i: i32 = 0; " i "_i < " n "; " i "_i++) {"))
+   :index (fn [i] (str "let " i ": f32 = f32(" i "_i);"))})
+
 (defn function-text
   "{:helpers text :function text} of tree `tree` (see `ir`): the helper
    functions it calls, and
      fn desargues_field(fx: f32, fy: f32, p0: f32, ..) -> vec3f { .. }
    returning the unclamped channels (the caller clamps)."
   [{:keys [params bindings rgb]}]
-  (let [used (into (called (into [:x] rgb)) (mapcat (comp called second)) bindings)
+  (let [used (into (called (into [:x] rgb)) (mapcat called) (glsl/trees bindings))
         args (into ["fx: f32" "fy: f32"] (map #(str "p" % ": f32") (range (count params))))]
     {:helpers (str/join "\n" (keep helpers (sort used)))
      :function (str "fn " function-name "(" (str/join ", " args) ") -> vec3f {\n"
-                    (apply str (for [[s t] bindings] (str "  let " s ": f32 = " (expr-text t) ";\n")))
+                    (glsl/statements-text dialect expr-text 1 bindings)
                     "  return vec3f(" (str/join ", " (map expr-text rgb)) ");\n"
                     "}\n")}))
 
@@ -183,7 +193,7 @@
                  :else (apply-op (into [(first t)]
                                        (map-indexed (fn [i a] (if (and (not= :neg (first t)) (zero? i)) a (ev env a))))
                                        (rest t))))))
-         env (reduce (fn [env [s t]] (assoc env s (ev env t))) env0 bindings)]
+         env (glsl/run-bindings ev env0 bindings)]
      (mapv #(ev env %) rgb))))
 
 (defmethod fld/source :wgsl [_ form _opts]
