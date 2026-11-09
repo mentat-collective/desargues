@@ -13,20 +13,44 @@
    any number of lets, in [r g b], each channel a double in [0, 1].
    Vocabulary (closed):
      + - * /  sin cos tan exp log sqrt pow atan2 abs floor min max
-     fract mix clamp  let
+     fract mix clamp  let  loop-n
      frac wave osc  (the loop helpers of desargues.wallpaper.loop)
      smoothstep cospal  (GLSL's smoothstep; a cosine palette channel)
-   and the constants pi and tau. Number literals become doubles. `bind` fixes the params for one frame:
+   and the constants pi and tau. Number literals become doubles.
+
+   loop-n is the one bounded loop:
+     (let [[zx zy k] (loop-n [i 64] [zx 0 zy 0 k 0]
+                       [(+ (- (* zx zx) (* zy zy)) x) (+ (* 2 zx zy) y) (+ k 1)]
+                       :until (> (+ (* zx zx) (* zy zy)) 4))]
+       ..)
+   [i N] names the index (0.0, 1.0, .. N-1, a double) and the bound, a
+   literal integer in [1, 256]; [s0 init0 ..] the state, doubles; the body
+   (through lets) ends in a vector of the next state, all assigned at once.
+   The optional :until condition (< > <= >= of expressions, and/or/not of
+   conditions) is checked at the top of each iteration, the state as it
+   stands; once it holds the loop stops with that state. The value is the
+   final state: bound by a let, [s0 s1 ..] for several, s for one (a one-state
+   loop may also stand as an expression). A loop inside a loop body holds one
+   state. `mandelbrot` is the exemplar. `bind` fixes the params for one frame:
    (bind form u k) is a BOUND field, what a loop spec's :field may return in
    place of a closure.
 
-   `lower` normalises a form to straight-line code, the one shape every
-   backend generates from: {:params [..] :bindings [[sym expr] ..] :rgb [r g b]},
-   lets flattened and renamed apart (v0 v1 ..), params renamed p0 p1 .., x y
+   `lower` normalises a form to the one shape every backend generates from:
+   {:params [..] :bindings [[sym expr] | loop ..] :rgb [r g b]}, lets
+   flattened and renamed apart (v0 v1 ..), params renamed p0 p1 .., x y
    renamed fx fy, the derived ops (fract mix clamp) expanded, every op binary
-   (or unary -) and spelled as its java.lang.Math method. `jvm-shader` evals
-   the lowered code once per form into a primitive fn; the raster backends
-   (desargues.infrastructure.raster-field) emit raster kernels from it, and
+   (or unary -) and spelled as its java.lang.Math method. A form without
+   loop-n lowers to straight-line [sym expr] pairs, exactly as before loop-n.
+   Each loop-n stays ONE structured node, never unrolled:
+     {:loop/i v0 :loop/n N :loop/state [[v1 init] ..]
+      :loop/until {:bindings [..] :test cond} | nil
+      :loop/bindings [..] :loop/next [expr ..]}
+   after which its state symbols (v1 ..) hold the final state. The backends
+   compile it as a loop: `jvm-shader` a primitive loop/recur (`let-form`);
+   the raster kernels the same loop bound by value (`value-bindings`); GLSL
+   and WGSL `for (i = 0; i < N; i++) { .. if (cond) { break; } .. }`.
+   `jvm-shader` evals the lowered code once per form into a primitive fn; the
+   raster backends (desargues.infrastructure.raster-field) emit raster kernels from it, and
    `source` (an open port keyed by target) prints shader text from it:
    :glsl is desargues.wallpaper.glsl, packaged as ISF / .frag layers by
    desargues.wallpaper.emit (doc/glsl-layers.md); :wgsl is
@@ -40,12 +64,27 @@
 (set! *warn-on-reflection* true)
 
 (def vocabulary
-  "The symbols a field body may apply, besides let. The loop helpers
+  "The symbols a field body may apply, besides the special forms let and
+   loop-n (`forms`; loop-n's :until conditions use `conditions`). The loop helpers
    (wave u) (osc u lo hi) (frac x) mirror desargues.wallpaper.loop;
    (smoothstep e0 e1 x) is GLSL's; (cospal t a b c d) is a cosine palette
    channel a + b cos 2π(c t + d). All derived ops lower to the primitive ones."
   '#{+ - * / sin cos tan exp log sqrt pow atan2 abs floor min max fract mix clamp
      frac wave osc smoothstep cospal})
+
+(def forms
+  "The special forms a field body may use besides the vocabulary: let, and
+   the bounded loop loop-n (see `lower`)."
+  '#{let loop-n})
+
+(def max-loop-n
+  "The largest literal bound a loop-n may take."
+  256)
+
+(def conditions
+  "The symbols a loop-n :until condition may apply: comparisons of two
+   expressions, and and/or/not of conditions."
+  '#{< > <= >= and or not})
 
 (def constants
   "Named constants a field body may use: pi and tau (2π), unless a param or
@@ -67,22 +106,110 @@
 
 (defn- trivial? [e] (or (symbol? e) (number? e)))
 
-(declare lower-expr)
+(def ^:private ^:dynamic *names*
+  "Volatile counter of the vN names the running `lower` has handed out."
+  nil)
+
+(defn- fresh
+  "The next lowered name: v0 v1 .., in the order bindings are pushed."
+  []
+  (let [n (long @*names*)] (vswap! *names* inc) (symbol (str "v" n))))
+
+(defn- loop-n? [form] (and (seq? form) (= 'loop-n (first form))))
+
+(declare lower-expr lower-loop)
 
 (defn- lower-let
   "Lower let `form`'s bindings under `env` into `out`; returns
-   [env' body-form]."
+   [env' body-form]. A binding [s0 s1 ..] (loop-n ..) binds a loop's final
+   state, one symbol per state; s (loop-n ..) a one-state loop's."
   [env out form]
   (let [[_ bv & body] form]
     (when-not (and (vector? bv) (even? (count bv)) (= 1 (count body)))
       (bad "let takes [sym expr ..] and one body" form))
     [(reduce (fn [e [s v]]
-               (when-not (simple-symbol? s) (bad "let binds plain symbols" form))
-               (let [l (lower-expr e out v) g (symbol (str "v" (count @out)))]
-                 (vswap! out conj [g l])
-                 (assoc e s g)))
+               (cond
+                 (loop-n? v)
+                 (let [ss (if (vector? s) s [s])]
+                   (when-not (every? simple-symbol? ss) (bad "let binds plain symbols" form))
+                   (let [outs (lower-loop e out v)]
+                     (when-not (= (count ss) (count outs))
+                       (bad (str "loop-n has " (count outs) " state(s), bound to " (count ss) " symbol(s)") form))
+                     (into e (map vector ss outs))))
+
+                 (simple-symbol? s)
+                 (let [l (lower-expr e out v) g (fresh)]
+                   (vswap! out conj [g l])
+                   (assoc e s g))
+
+                 :else (bad "let binds plain symbols (a vector of them only for loop-n)" form)))
              env (partition 2 bv))
      (first body)]))
+
+(defn- lower-test
+  "Lower :until condition `form` under `env`, pushing the bindings it
+   introduces onto `out`; returns the lowered condition: (< a b) (> a b)
+   (<= a b) (>= a b) over lowered expressions, (and c d) (or c d) (not c)."
+  [env out form]
+  (when-not (and (seq? form) (seq form))
+    (bad "an :until condition is a comparison (< > <= >=), or and/or/not of conditions" form))
+  (let [[op & args] form
+        n (count args)]
+    (case op
+      (< > <= >=) (do (when-not (= 2 n) (bad (str op " takes 2 arguments") form))
+                      (let [a (lower-expr env out (first args))]
+                        (list op a (lower-expr env out (second args)))))
+      (and or) (do (when (zero? n) (bad (str op " takes at least one condition") form))
+                   (reduce (fn [a b] (list op a (lower-test env out b)))
+                           (lower-test env out (first args)) (rest args)))
+      not (do (when-not (= 1 n) (bad "not takes 1 condition" form))
+              (list 'not (lower-test env out (first args))))
+      let (let [[env' body] (lower-let env out form)] (lower-test env' out body))
+      (bad (str "unknown condition op " op "; conditions use " (sort conditions)) form))))
+
+(defn- lower-next
+  "Lower loop body `form` (lets ending in a vector of `k` expressions)
+   under `env` into `out`; returns the lowered next-state expressions."
+  [env out form k]
+  (cond
+    (and (seq? form) (= 'let (first form)))
+    (let [[env' body] (lower-let env out form)] (lower-next env' out body k))
+
+    (and (vector? form) (= k (count form)))
+    (mapv #(lower-expr env out %) form)
+
+    :else (bad (str "a loop-n body must end in a vector of its " k " next state(s)") form)))
+
+(defn- lower-loop
+  "Lower (loop-n [i N] [s0 init0 ..] body :until cond) under `env`: pushes
+   one loop node onto `out` and returns the lowered state symbols, which
+   hold the final state after it (see `lower`)."
+  [env out form]
+  (let [[_ iv sv body & opts] form
+        [isym n] (when (vector? iv) iv)]
+    (when-not (and (vector? iv) (= 2 (count iv)) (simple-symbol? isym)
+                   (integer? n) (<= 1 n max-loop-n))
+      (bad (str "loop-n takes [i N], N a literal integer in [1, " max-loop-n "]") form))
+    (when-not (and (vector? sv) (seq sv) (even? (count sv)) (every? simple-symbol? (take-nth 2 sv)))
+      (bad "loop-n takes a state vector [s0 init0 s1 init1 ..] of plain symbols" form))
+    (when-not (or (empty? opts) (and (= 2 (count opts)) (= :until (first opts))))
+      (bad "loop-n takes [i N] [state ..] body, then optionally :until cond" form))
+    (let [pairs (partition 2 sv)
+          inits (mapv #(lower-expr env out (second %)) pairs)
+          fi (fresh)
+          ss (mapv (fn [_] (fresh)) pairs)
+          benv (into (assoc env isym fi) (map vector (map first pairs) ss))
+          until (when (seq opts)
+                  (let [cout (volatile! [])
+                        t (lower-test benv cout (second opts))]
+                    {:bindings @cout :test t}))
+          bout (volatile! [])
+          nexts (lower-next benv bout body (count pairs))]
+      (when (some #(and (map? %) (< 1 (count (:loop/state %)))) (concat (:bindings until) @bout))
+        (bad "a loop-n nested in a loop-n body or :until holds one state" form))
+      (vswap! out conj {:loop/i fi :loop/n (long n) :loop/state (mapv vector ss inits)
+                        :loop/until until :loop/bindings @bout :loop/next nexts})
+      ss)))
 
 (defn- lower-expr
   "Lower expression `form` under `env` (source symbol -> lowered symbol or
@@ -91,7 +218,7 @@
   [env out form]
   (let [sub (fn [e] (lower-expr env out e))
         share (fn [e] (if (trivial? e) e
-                          (let [s (symbol (str "v" (count @out)))] (vswap! out conj [s e]) s)))
+                          (let [s (fresh)] (vswap! out conj [s e]) s)))
         fold (fn [op args] (reduce (fn [a b] (list op a (sub b))) (sub (first args)) (rest args)))
         wave (fn [u] (list '* 0.5 (list '+ 1.0 (list 'Math/cos (list '* tau u)))))]
     (cond
@@ -104,6 +231,9 @@
           (when-not (= k n) (bad (str op " takes " k " argument(s)") form)))
         (case op
           let (let [[env' body] (lower-let env out form)] (lower-expr env' out body))
+          loop-n (let [ss (lower-loop env out form)]
+                   (if (= 1 (count ss)) (first ss)
+                       (bad (str "a loop-n with " (count ss) " states is bound with (let [[s0 s1 ..] (loop-n ..)] ..)") form)))
           + (if (zero? n) 0.0 (fold '+ args))
           * (if (zero? n) 1.0 (fold '* args))
           - (case n 0 (bad "- takes at least one argument" form) 1 (list '- (sub (first args))) (fold '- args))
@@ -137,8 +267,9 @@
     :else (bad "the body must end in [r g b]" form)))
 
 (defn lower
-  "Field form {:params [sym ..] :body form} as straight-line code
-   {:params [sym ..] :bindings [[sym expr] ..] :rgb [r g b]} (see ns doc).
+  "Field form {:params [sym ..] :body form} as lowered code
+   {:params [sym ..] :bindings [[sym expr] | loop-node ..] :rgb [r g b]}
+   (see ns doc): straight-line pairs, plus one structured node per loop-n.
    Throws ex-info {:reason :bad-field} naming the offending form."
   [{:keys [params] :as form}]
   (when-not (and (map? form) (contains? form :body))
@@ -147,8 +278,97 @@
         env (into (merge constants {'x 'fx 'y 'fy})
                   (map-indexed (fn [i p] [p (symbol (str "p" i))])) params)
         out (volatile! [])
-        rgb (lower-tail env out (:body form))]
+        rgb (binding [*names* (volatile! 0)] (lower-tail env out (:body form)))]
     {:params params :bindings @out :rgb rgb}))
+
+(defn loop-node?
+  "True for a loop node of lowered :bindings (see `lower`); every other
+   entry is a [sym expr] pair."
+  [b]
+  (map? b))
+
+(defn bound-names
+  "The symbols lowered binding `b` defines: [sym] for a pair, the loop's
+   state symbols for a loop node (its index and body bindings are local
+   to it)."
+  [b]
+  (if (loop-node? b) (mapv first (:loop/state b)) [(first b)]))
+
+(defn test-form
+  "Lowered :until condition `t` as Clojure built from comparisons and if
+   alone (and/or/not expanded), the shape the raster kernels compile too."
+  [t]
+  (case (first t)
+    (< > <= >=) t
+    and (list 'if (test-form (nth t 1)) (test-form (nth t 2)) false)
+    or (list 'if (test-form (nth t 1)) true (test-form (nth t 2)))
+    not (list 'if (test-form (nth t 1)) false true)))
+
+(declare value-bindings)
+
+(defn loop-form
+  "Lowered loop node `node` as one primitive Clojure loop over doubles that
+   evaluates `tail` (a form over the state symbols, the rest of the code)
+   once it stops:
+     (loop [i 0.0 s0 init0 ..]
+       (if (< i N)
+         (let [<until bindings>]
+           (if test
+             (recur N s0 ..)                        ; break: state kept
+             (let [<body bindings>] (recur (+ i 1.0) next0 ..))))
+         tail))
+   One exit, no allocation, nothing but loop/recur/let/if: the JVM shader
+   and the raster kernels compile the same form. The index counts 0.0,
+   1.0, .. exactly."
+  [node tail]
+  (let [{:loop/keys [i n state until bindings next]} node
+        inner (fn [bs t] (list 'let (value-bindings bs) t))
+        step (inner bindings (list* 'recur (list '+ i 1.0) next))]
+    (list 'loop (into [i 0.0] cat state)
+          (list 'if (list '< i (double n))
+                (if until
+                  (inner (:bindings until)
+                         (list* 'if (test-form (:test until))
+                                [(list* 'recur (double n) (map first state)) step]))
+                  step)
+                tail))))
+
+(defn- symbols-of [x]
+  (cond (symbol? x) #{x}
+        (map? x) (into #{} (mapcat symbols-of) (vals x))
+        (coll? x) (into #{} (mapcat symbols-of) x)
+        :else #{}))
+
+(defn value-bindings
+  "Lowered `bindings` as one Clojure let vector for code whose tail recurs
+   (and so cannot sit in a nested loop's exit): each loop node bound by
+   value, [s (loop-form node s)] for each state s the rest of the code
+   (`tail`, any forms) references, a loop of N iterations per such state.
+   `lower` admits only one-state loops inside a loop; the raster kernels
+   bind every loop this way."
+  ([bindings] (value-bindings bindings nil))
+  ([bindings tail]
+   (let [bs (vec bindings)]
+     (into []
+           (mapcat (fn [k]
+                     (let [b (bs k)]
+                       (if-not (loop-node? b)
+                         b
+                         (let [ss (mapv first (:loop/state b))
+                               used (if (= 1 (count ss)) (set ss)
+                                        (symbols-of [(subvec bs (inc k)) tail]))]
+                           (into [] (mapcat (fn [s] (when (used s) [s (loop-form b s)]))) ss))))))
+           (range (count bs))))))
+
+(defn let-form
+  "Lowered `bindings` then `tail`, as Clojure: the pairs as one let, each
+   loop node as a loop-form whose exit is the rest of the bindings and
+   `tail` (which must not recur). Without loop nodes this is exactly
+   (let [s e ..] tail)."
+  [bindings tail]
+  (let [[pairs [node & more]] (split-with (complement loop-node?) bindings)]
+    (list 'let (into [] cat pairs)
+          (if node (loop-form node (let-form more tail)) tail))))
 
 (defn quantize
   "Channel `v` (clamped to [0, 1]) as a level 0..255, as a double."
@@ -212,8 +432,7 @@
     (list 'fn [ps]
           (list 'let (vec (mapcat (fn [i] [(symbol (str "p" i)) (list 'aget ps i)]) (range (count params))))
                 (list 'fn 'shade sig
-                      (list 'let (vec (mapcat identity bindings))
-                            (cons `pack rgb)))))))
+                      (let-form bindings (cons `pack rgb)))))))
 
 (def ^:private compiled
   "Field form -> its evaluated jvm-form."
@@ -246,3 +465,26 @@
      :body (list 'let ['s (list '/ (cons '+ waves) 7.0)
                        't (list 'fract (list '+ (list '* 0.5 's) 0.5))]
                  [(channel 0.0) (channel 0.33) (channel 0.67)])}))
+
+(def mandelbrot
+  "Escape-time Mandelbrot set, the loop-n exemplar: z <- z^2 + c with
+   c = (cx + x/zoom, cy + y/zoom), at most 96 iterations, stopping once
+   |z| > 2; the escape count k, smoothed by log2 log|z|, runs through a
+   cosine palette whose phase advances with u (so it loops). The interior
+   (k = 96) is black. Params [u zoom cx cy]."
+  {:params '[u zoom cx cy]
+   :body '(let [ca (+ cx (/ x zoom))
+                cb (+ cy (/ y zoom))
+                [za zb k] (loop-n [i 96] [za 0 zb 0 k 0]
+                            [(+ (- (* za za) (* zb zb)) ca)
+                             (+ (* 2 za zb) cb)
+                             (+ k 1)]
+                            :until (> (+ (* za za) (* zb zb)) 4))
+                r2 (max (+ (* za za) (* zb zb)) 4)
+                s (- (+ k 1) (/ (log (* 0.5 (log r2))) (log 2)))
+                t (+ (* 0.035 s) u)
+                in (floor (/ k 96))
+                out (- 1 in)]
+            [(* out (cospal t 0.5 0.5 1.0 0.0))
+             (* out (cospal t 0.5 0.5 1.0 0.1))
+             (* out (cospal t 0.5 0.5 1.0 0.2))])})
