@@ -41,6 +41,16 @@ It has exactly these keys, in this order:
 - `inputs` holds the same ParamDef objects as the trama `params`: `loop_rate`
   first, then the layer's `:params` in declared order. That order is
   append-only, as in `doc/trama-layers.md`.
+- **Integer controls.** The shared param spec accepts `:integer? true`, for
+  example `['bands {:default 3 :min 1 :max 8 :integer? true}]`. Defaults and
+  bounds must be integral signed 32-bit values, with the default in range.
+  The `.pfx` format has **no `integers` field** and does not promise integer UI
+  snapping: `inputs` remain Float controls, with unchanged declaration order
+  and slots. Instead, the shared WGSL reads `floor(param(slot) + 0.5)` before
+  passing a discrete control to the field (nearest integer, ties toward positive
+  infinity). This works even for fractional automation values. Continuous
+  controls and the rate integral are never rounded. Trama separately supports
+  the UI metadata; see `doc/trama-layers.md`.
 - Golden file: `test/desargues/wallpaper/golden/quasicrystal.pfx.json`.
 
 ## Rate delivery (the difference from trama)

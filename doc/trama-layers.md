@@ -74,6 +74,17 @@ the file declares none of them again.
   Float with `default`, `min` and `max`. Param names are snake_case
   (`[a-z][a-z0-9_]*`, `-` read as `_`). `:label` is not emitted, because the
   manifest has no key for it.
+- **Integer controls.** Add `:integer? true` to a param spec, for example
+  `['bands {:default 3 :min 1 :max 8 :integer? true}]`. Its snake_case name is
+  included in `"integers"`, in declaration order, so Fosfora can show an
+  integer-stepped Float slider. The Float type and its scalar slot do not change.
+  The shader also reads `floor(param(slot) + 0.5)` (nearest integer, ties toward
+  positive infinity), so automation or a host ignoring the UI hint cannot send
+  fractional values into the field. Continuous controls, phase and loop_rate
+  are not rounded. Omitted or false keeps a continuous control.
+  Defaults and bounds must be integral signed 32-bit values (e.g. `3.0` is
+  accepted), with the default in range; invalid metadata returns `:layer/invalid`.
+  Float32 precision still applies to very large integers.
 - **Pixel to scene.** This works as `desargues.wallpaper.render` does it:
   `frag_coord.xy` is centred on `u.resolution` and divided by
   `min(res.x / view_w, res.y / view_h)`, with y up. The whole `:view` stays
@@ -133,8 +144,8 @@ Every refusal is a hive-dsl err, and no file is written:
 
 Other limits:
 
-- Params are Float only. fosfora's Bool, Color and Point2D would need new
-  field types.
+- Params use Float slots, including integer-stepped controls. fosfora's Bool,
+  Color and Point2D would need new field types.
 - Only field forms are emitted. `:frame`, `:splat`, `:light`, `:post` and
   `:scene` are not.
 - Precision is f32. The tests read the WGSL tree on the CPU in double and in

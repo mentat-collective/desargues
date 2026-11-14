@@ -43,7 +43,13 @@ key once; without it the emitter returns `{:error :layer/unordered-params}`,
 because map iteration order is not stable.
 
 Every non-phase param of the form needs a `:default`. `:min`, `:max` and
-`:label` are optional. Param names must be GLSL identifiers (`-` becomes `_`)
+`:label` and `:integer?` are optional. Mark a discrete control with
+`:integer? true`, for example `['bands {:default 3 :min 1 :max 8 :integer? true}]`.
+Its default and any bounds must be integral signed 32-bit values (integral
+literals such as `3.0` are accepted), with the default inside any supplied
+bounds. Omitted or false leaves a continuous control; other keys or non-boolean
+flags are refused with `:layer/invalid`.
+Param names must be GLSL identifiers (`-` becomes `_`)
 and must not collide with ISF built-ins, GLSL keywords, or the GLSL functions
 the field calls.
 
@@ -56,7 +62,11 @@ the field calls.
 - **Inputs, in order:**
   - the phase `u`: float 0..1, default 0;
   - `rate`: float 0..4, default 1;
-  - every other param: float with its default and range.
+  - every other param: float with its default and range, or ISF `long` when
+    `:integer? true`. Integer defaults and bounds are JSON integers, and the
+    host declares an `int` uniform. Generated calls explicitly convert it
+    with `float(name)` into the field's scalar type; this is not just a UI hint.
+    Phase and rate always stay continuous.
 - **Phase.** The shader computes `phase = fract(u + rate * TIME / period)`.
   - With the defaults, the layer loops seamlessly on the host clock: at
     `TIME = period` the picture is the one at `TIME = 0`.
@@ -71,9 +81,11 @@ the field calls.
 - **Output.** The output is `vec4(clamp(field, 0, 1), 1)`. Blending is the
   host's job, which is why the blend mode is only a hint.
 - **Plain shaders.** The `.frag` files declare `uniform vec2 RENDERSIZE`,
-  `uniform float TIME` and one `uniform float` per input, and write
-  `out vec4 fragColor`. The `.json` manifest lists the uniforms with
+  `uniform float TIME` and one `uniform float` per continuous input or
+  `uniform int` per integer control, and write `out vec4 fragColor`.
+  The `.json` manifest lists the uniforms with `type` (`float` or `int`),
   `role` (`phase`, `rate` or `param`), `default`, `min`, `max` and `label`.
+  Integer arguments are explicitly cast to float before calling the field.
 
 ## What compiles
 
@@ -110,8 +122,9 @@ is a few numbers, so it needs no uniform array.
 - **Scope.** Only field forms become layers. `:frame` shapes, `:splat`,
   `:light`, `:post` effects and `:scene` (LuxCore) are not field forms and are
   not emitted. Supersampling (`:ss`) is the host's job (MSAA or render scale).
-- **Inputs.** Inputs are floats only. Colour and point inputs would need new
-  field types.
+- **Inputs.** Fields still consume float scalars. Discrete controls use integer
+  uniforms converted to float; colour and point inputs would need new field types.
+  Float32 precision still applies, so large integer values may lose unit precision.
 
 ## Validation
 

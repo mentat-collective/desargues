@@ -18,7 +18,8 @@
             [desargues.wallpaper.glsl-test :as gt]
             [desargues.wallpaper.trama :as trama]
             [desargues.wallpaper.wgsl :as wgsl]
-            [hive-dsl.result :as r])
+            [hive-dsl.result :as r]
+            [desargues.wallpaper.emit-test :as et])
   (:import (java.nio.file Files)
            (java.nio.file.attribute FileAttribute)))
 
@@ -112,6 +113,48 @@
         (is (= (conj (names g) "glow") (names g2)))))
     (testing "re-emitting the same spec is byte-identical"
       (is (= (text-of g) (text-of g) (text-of (into {} (reverse (seq g)))))))))
+
+(deftest integer-controls-snap-in-the-shader-with-stable-float-slots
+  (let [layer (assoc et/integer-layer :target :trama)
+        src (text-of layer)
+        m (manifest-of src)
+        checked (:ok (trama/check layer))
+        continuous (update layer :params (fn [ps] (mapv (fn [[s spec]] [s (dissoc spec :integer?)]) ps)))]
+    (is (= ["mode" "loop_count"] (get m "integers")))
+    (is (= ["loop_rate" "mode" "gain" "loop_count"] (mapv #(get % "name") (get m "params"))))
+    (is (every? #(= "Float" (get % "type")) (get m "params")))
+    (is (= {'mode 1 'gain 2 'loop-count 3} (trama/slots checked)))
+    (is (= (trama/slots checked) (trama/slots (:ok (trama/check continuous)))))
+    (is (= (dissoc (manifest-of (text-of continuous)) "integers") (dissoc m "integers")))
+    (is (str/includes? src "desargues_phase, floor(param(3u) + 0.5), param(2u), floor(param(1u) + 0.5))"))
+    (is (str/includes? src "fract(param(0u) / 10.0)"))
+    (testing "legacy maps use explicit order for both slots and integer names"
+      (let [legacy (assoc layer :params (into {} (:params layer)) :order '[loop-count gain mode])]
+        (is (= ["loop_count" "mode"] (get (manifest-of (text-of legacy)) "integers")))))
+    (is (= src (text-of layer)))
+    (when naga
+      (let [dir (str (Files/createTempDirectory "integer-trama" (make-array FileAttribute 0)))
+            f (io/file dir "integer-controls.wgsl")
+            pre (slurp (io/resource "desargues/wallpaper/golden/trama-stub-preamble.wgsl"))]
+        (spit f (str pre src))
+        (let [{:keys [exit out err]} (sh/sh naga (str f))]
+          (is (zero? exit) (str out err)))))))
+
+(deftest fractional-host-values-cannot-bypass-discrete-controls
+  (doseq [target [:trama :pfx]
+          :let [layer (assoc et/integer-layer :target target)
+                fs (:ok (emit/layer-files layer))
+                src (get fs "integer_controls.wgsl")
+                discrete (re-seq #"floor\(param\((\d+)u\) \+ ([0-9.]+)\)" src)]
+          round [identity (comp double float)]]
+    (testing (str target " fractional automation, including negative values and ties")
+      (is (= ["3" "1"] (mapv second discrete)))
+      (doseq [[_ _ half] discrete
+              :let [expr (:ok (wgsl/expr-ir (list 'Math/floor (list '+ 'p0 (Double/parseDouble half)))))
+                    tree {:bindings [] :rgb [expr expr expr]}]
+              [value expected] [[-2.6 -3.0] [-2.5 -2.0] [-2.4 -2.0] [-0.5 0.0]
+                                [0.49 0.0] [0.5 1.0] [2.49 2.0] [2.5 3.0] [3.0 3.0]]]
+        (is (= [expected expected expected] (wgsl/interpret tree 0 0 [value] round)))))))
 
 (deftest every-file-is-structurally-a-trama-source
   (doseq [l layers

@@ -29,6 +29,15 @@
              ['bands {:default 2.0 :min 1.0 :max 6.0}]]}
    {:id :rings :form gt/rings :params [['k {:default 2.0}]]}])
 
+(def integer-layer
+  "Mixed discrete and continuous controls, deliberately not in form order."
+  {:id :integer-controls :title "Integer controls"
+   :form {:params '[u loop-count gain mode]
+          :body '[(wave (+ (* loop-count x) u)) gain (/ mode 4)]}
+   :params [['mode {:default 2 :min 0 :max 4 :integer? true :label "Mode"}]
+            ['gain {:default 0.5 :min 0 :max 1 :integer? false}]
+            ['loop-count {:default 3.0 :min 1.0 :max 8.0 :integer? true}]]})
+
 (defn- files [layer] (:ok (emit/layer-files layer)))
 
 (def ^:private validator
@@ -42,10 +51,11 @@
 
 (defn- isf-preamble
   "What an ISF host declares before the layer's code (GLSL 1.20 path):
-   the built-ins and one uniform per input."
+   the built-ins and one correctly typed uniform per input."
   [header]
   (str "#version 120\nuniform vec2 RENDERSIZE;\nuniform float TIME;\nvarying vec2 isf_FragNormCoord;\n"
-       (apply str (for [{:strs [NAME]} (get header "INPUTS")] (str "uniform float " NAME ";\n")))))
+       (apply str (for [{:strs [NAME TYPE]} (get header "INPUTS")]
+                    (str "uniform " (if (= "long" TYPE) "int" "float") " " NAME ";\n")))))
 
 (defn- header-of
   "The parsed JSON header comment of ISF source `fs`."
@@ -109,6 +119,29 @@
       (is (= "quasicrystal.frag" (get m "frag")))
       (is (= "TIME" (get m "time"))))))
 
+(deftest integer-controls-are-typed-without-reordering-inputs
+  (let [res (emit/layer-files integer-layer)]
+    (is (r/ok? res))
+    (when-let [fs (:ok res)]
+      (let [src (get fs "integer-controls.fs")
+            ins (get (header-of src) "INPUTS")
+            uniforms (get (json/read-str (get fs "integer-controls.json")) "uniforms")]
+        (is (= ["u" "rate" "mode" "gain" "loop_count"] (mapv #(get % "NAME") ins)))
+        (is (= ["float" "float" "long" "float" "long"] (mapv #(get % "TYPE") ins)))
+        (is (= [2 0 4 "Mode"] (mapv (nth ins 2) ["DEFAULT" "MIN" "MAX" "LABEL"])))
+        (is (every? integer? (mapv (nth ins 4) ["DEFAULT" "MIN" "MAX"])))
+        (is (= ["float" "float" "int" "float" "int"] (mapv #(get % "type") uniforms)))
+        (is (= ["u" "rate" "mode" "gain" "loop_count"] (mapv #(get % "name") uniforms)))
+        (is (str/includes? src "desargues_phase, float(loop_count), gain, float(mode))"))
+        (doseq [dialect ["integer-controls.frag" "integer-controls.330.frag"]]
+          (is (str/includes? (get fs dialect) "uniform int loop_count;"))
+          (is (str/includes? (get fs dialect) "uniform float gain;")))
+        (when validator
+          (doseq [shader [(str (isf-preamble (header-of src)) src)
+                          (get fs "integer-controls.frag") (get fs "integer-controls.330.frag")]]
+            (let [{:keys [exit out err]} (validate! shader)]
+              (is (zero? exit) (str out err)))))))))
+
 (deftest an-unbound-layer-loops-on-its-clock
   (let [fs (get (files (first layers)) "quasicrystal.fs")]
     (testing "phase = fract(u + rate * TIME / period): at TIME = period it is u again"
@@ -134,6 +167,26 @@
           res (emit/emit! {:id :bad :form {:params '[u] :body [(/ 1.0 0.0) 0 0]}} dir)]
       (is (= :field/unsupported (:error res)))
       (is (empty? (.list (io/file dir)))))))
+
+(deftest invalid-integer-metadata-is-refused-before-emitting
+  (doseq [target [:glsl :trama :pfx]
+          spec [{:default 2 :min 0 :max 4 :integer? "yes"}
+                {:default 2 :min 0 :max 4 :integer true}
+                {:default 2.5 :min 0 :max 4 :integer? true}
+                {:default 2 :min 0.5 :max 4 :integer? true}
+                {:default 2 :min 0 :max 4.5 :integer? true}
+                {:default 5 :min 0 :max 4 :integer? true}
+                {:default ##NaN :integer? true}
+                {:default ##Inf :integer? true}
+                {:default 2147483648 :integer? true}]]
+    (testing (str target " " spec)
+      (is (= :layer/invalid
+             (:error (emit/layer-files (-> integer-layer (assoc :target target)
+                                           (assoc-in [:params 0 1] spec))))))))
+  (testing "unbounded integer defaults and signed 32-bit endpoints are accepted"
+    (doseq [spec [{:default 2 :integer? true}
+                  {:default -2147483648 :min -2147483648 :max 2147483647 :integer? true}]]
+      (is (r/ok? (emit/check (assoc-in integer-layer [:params 0 1] spec)))))))
 
 (deftest params-keep-their-declared-order
   (let [g (nth layers 2)

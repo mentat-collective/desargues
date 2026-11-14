@@ -13,7 +13,8 @@
             [desargues.wallpaper.pfx :as pfx]
             [desargues.wallpaper.trama-test :as tt]
             [desargues.wallpaper.wgsl :as wgsl]
-            [hive-dsl.result :as r])
+            [hive-dsl.result :as r]
+            [desargues.wallpaper.emit-test :as et])
   (:import (java.nio.file Files)
            (java.nio.file.attribute FileAttribute)))
 
@@ -63,6 +64,28 @@
       (is (not (str/includes? s "param(0u)")))))
   (testing "the trama emitter still reads the integral at slot 0"
     (is (str/includes? (val (first (:ok (emit/layer-files (second tt/layers))))) "fract(param(0u) / 16.0)"))))
+
+(deftest integer-effects-snap-without-changing-the-pfx-contract
+  (let [layer (assoc et/integer-layer :target :pfx)
+        src (shader layer)
+        m (pfx-json layer)
+        continuous (update layer :params (fn [ps] (mapv (fn [[s spec]] [s (dissoc spec :integer?)]) ps)))]
+    (testing "PFX has no integers UI metadata field: only shader-side snapping"
+      (is (= (pfx-json continuous) m))
+      (is (= ["name" "author" "description" "shader" "category" "inputs" "rates"] (vec (keys m))))
+      (is (not (contains? m "integers"))))
+    (is (= ["loop_rate" "mode" "gain" "loop_count"] (mapv #(get % "name") (get m "inputs"))))
+    (is (= 4 (pfx/rate-slot (:ok (pfx/check layer)))))
+    (is (str/includes? src "fract(param(4u) / 10.0)"))
+    (is (not (str/includes? src "param(0u)")))
+    (is (str/includes? src "desargues_phase, floor(param(3u) + 0.5), param(2u), floor(param(1u) + 0.5))"))
+    (when-let [naga @#'tt/naga]
+      (let [dir (str (Files/createTempDirectory "integer-pfx" (make-array FileAttribute 0)))
+            f (io/file dir "integer-controls.wgsl")
+            pre (slurp (io/resource "desargues/wallpaper/golden/trama-stub-preamble.wgsl"))]
+        (spit f (str pre src))
+        (let [{:keys [exit out err]} (clojure.java.shell/sh naga (str f))]
+          (is (zero? exit) (str out err)))))))
 
 (deftest the-shader-is-a-layer-effect
   (doseq [l [quasi graphene]

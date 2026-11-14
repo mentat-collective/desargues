@@ -82,7 +82,8 @@
 
 (defn manifest
   "The trama manifest of checked layer `l` (as data, keys in fosfora's
-   order and ONLY its keys: name id kind inputs params rates integers)."
+   order and ONLY its keys: name id kind inputs params rates integers).
+   Integer controls stay Float slots; integers names their discrete UI."
   [l]
   (array-map "name" (or (:title l) (:trama/id l))
              "id" (:trama/id l)
@@ -93,7 +94,7 @@
                               (array-map "type" "Float" "name" (str/replace (name s) "-" "_")
                                          "default" (double default) "min" (double min) "max" (double max))))
              "rates" ["loop_rate"]
-             "integers" []))
+             "integers" (into [] (keep (fn [[s spec]] (when (:integer? spec) (emit/glsl-name s)))) (:params l))))
 
 (defn- slot-ref [k] (str "param(" k "u)"))
 
@@ -101,13 +102,19 @@
   "fs_main of checked layer `l`: pixel -> scene point as render fits the
    view (whole view visible, centred, y up, the longer axis extended),
    phase = fract(param(<phase-slot>u) / period), the field at the slots,
-   clamped, opaque. `phase-slot` is the slot holding loop_rate's running
-   integral: 0 for a trama node (the default), the extra slot after the
-   packed params for a fosfora layer effect (desargues.wallpaper.pfx)."
+   clamped, opaque. Integer controls round with floor(value + 0.5), ties
+   toward positive infinity, even when a host ignores UI metadata.
+   `phase-slot` holds loop_rate's running integral: 0 for a trama node,
+   the extra slot after the packed params for a fosfora layer effect."
   ([l] (fs-main l 0))
-  ([{:keys [phase period form] [vw vh] :view :as l} phase-slot]
+  ([{:keys [phase period form params] [vw vh] :view :as l} phase-slot]
    (let [slot (slots l)
-         args (for [p (:params form)] (if (= p phase) "desargues_phase" (slot-ref (slot p))))]
+         specs (into {} params)
+         args (for [p (:params form)]
+                (cond
+                  (= p phase) "desargues_phase"
+                  (:integer? (specs p)) (str "floor(" (slot-ref (slot p)) " + 0.5)")
+                  :else (slot-ref (slot p))))]
      (str "@fragment\n"
           "fn fs_main(@builtin(position) frag_coord: vec4f) -> @location(0) vec4f {\n"
           "  let desargues_res: vec2f = u.resolution;\n"

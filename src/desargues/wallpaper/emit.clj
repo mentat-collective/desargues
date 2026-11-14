@@ -18,7 +18,10 @@
    host bindings and presets refer to slots). A {sym spec} map is accepted
    only with :order [sym ..], else err :layer/unordered-params.
    Every non-phase param of the form needs a :default; :min :max :label
-   are optional. The phase u is an input too: the shader runs at
+   and :integer? are optional. :integer? true marks a discrete scalar:
+   integral signed 32-bit defaults and bounds, ISF long inputs, GLSL int
+   uniforms, WGSL rounding of Float slots (see doc/trama-layers.md).
+   The phase u is an input too: the shader runs at
      phase = fract(u + rate * TIME / period)
    so with the inputs at their defaults (u 0, rate 1) the layer loops
    seamlessly on its own clock; rate 0 hands the phase to u, bound by the
@@ -58,7 +61,8 @@
    [:default number?]
    [:min {:optional true} number?]
    [:max {:optional true} number?]
-   [:label {:optional true} string?]])
+   [:label {:optional true} string?]
+   [:integer? {:optional true} boolean?]])
 
 (def LayerSpec
   "A layer spec. :params is canonically an ORDERED vector of [sym ParamSpec]
@@ -134,13 +138,21 @@
         (r/ok (mapv vec params))
         (r/err :layer/invalid {:message "a param is declared twice" :params (vec ss)})))))
 
+(defn- integer-value?
+  "An integral value representable by ISF's signed 32-bit int uniform.
+   Integral floating-point literals are accepted; NaN and infinities are not."
+  [x]
+  (and (<= Integer/MIN_VALUE x Integer/MAX_VALUE) (== x (long x))))
+
 (defn check
   "Layer spec `layer` with its defaults filled ({:phase u :period 10
    :view default-view :blend :normal}) and its :params normalised to the
    ordered vector [[sym spec] ..] (see `ordered-params`), as a Result:
    err :layer/invalid when it fails LayerSpec, names a phase the form
    lacks, leaves a non-phase param without a :default, binds a param the
-   form lacks, or has a param whose name is no usable GLSL identifier;
+   form lacks, or has a param whose name is no usable GLSL identifier.
+   :integer? true requires integral signed 32-bit defaults and bounds,
+   with the default within any supplied bounds.
    err :layer/unordered-params for a :params map without a valid :order."
   [layer]
   (if-let [ex (m/explain LayerSpec layer)]
@@ -150,7 +162,13 @@
                   (assoc :params ordered) (dissoc :order))
             ps (vec (get-in l [:form :params]))
             free (remove #{(:phase l)} ps)
-            declared (map first ordered)]
+            declared (map first ordered)
+            bad-integers (for [[p {:keys [default min max integer?] :as spec}] ordered
+                               :when (and integer?
+                                          (not (and (every? integer-value? (vals (select-keys spec [:default :min :max])))
+                                                    (or (nil? min) (<= min default))
+                                                    (or (nil? max) (<= default max)))))]
+                           p)]
         (cond
           (not (some #{(:phase l)} ps))
           (layer-err (str "the form has no phase param " (:phase l)) {:params ps})
@@ -162,6 +180,9 @@
           (layer-err "param names must be GLSL identifiers, not reserved" {:bad (vec (remove glsl-name free))})
           (not= (count free) (count (distinct (map glsl-name free))))
           (layer-err "two params map to one GLSL name" {:params (vec free)})
+          (seq bad-integers)
+          (layer-err "integer params need integral signed 32-bit defaults and bounds, with the default in range"
+                     {:bad (vec bad-integers)})
           :else (r/ok l))))))
 
 ;; ── Promote: the bindable inputs ───────────────────────────────────────────
@@ -169,24 +190,33 @@
 (defn inputs
   "The checked layer's inputs, in order: the phase, the loop rate, then
    the params in their DECLARED order (the ordered :params vector, never
-   the form's or a map's order). Each {:name :role :default :min? :max? :label}."
+   the form's or a map's order). Each {:name :role :default :min? :max? :label},
+   with :integer? true only on discrete controls. Phase and rate stay floats."
   [{:keys [phase params]}]
   (into [{:name (glsl-name phase) :role :phase :default 0.0 :min 0.0 :max 1.0
           :label "Phase (added to the clock)"}
          {:name "rate" :role :rate :default 1.0 :min 0.0 :max 4.0
           :label "Loops per period (0: phase only)"}]
-        (for [[p {:keys [default min max label]}] params]
-          (cond-> {:name (glsl-name p) :role :param :default (double default)
+        (for [[p {:keys [default min max label integer?]}] params
+              :let [numeric (if integer? long double)]]
+          (cond-> {:name (glsl-name p) :role :param :default (numeric default)
                    :label (or label (name p))}
-            min (assoc :min (double min))
-            max (assoc :max (double max))))))
+            min (assoc :min (numeric min))
+            max (assoc :max (numeric max))
+            integer? (assoc :integer? true)))))
 
 (defn- main-text
   "The main() shared by every variant: pixel -> scene point (render's
-   fit), phase from the clock, the field, clamped. `io` names the
+   fit), phase from the clock, the field, clamped. Integer uniforms are
+   explicitly converted to the field's float scalars. `io` names the
    variant's pixel coordinate, resolution, clock and output."
-  [{:keys [phase period form] [vw vh] :view :as layer} {:keys [coord res time out]}]
-  (let [args (for [p (:params form)] (if (= p phase) "desargues_phase" (glsl-name p)))]
+  [{:keys [phase period form params] [vw vh] :view} {:keys [coord res time out]}]
+  (let [specs (into {} params)
+        args (for [p (:params form)]
+               (cond
+                 (= p phase) "desargues_phase"
+                 (:integer? (specs p)) (str "float(" (glsl-name p) ")")
+                 :else (glsl-name p)))]
     (str "void main() {\n"
          "  vec2 desargues_res = " res ";\n"
          "  float desargues_s = min(desargues_res.x / " (glsl/literal vw) ", desargues_res.y / " (glsl/literal vh) ");\n"
@@ -218,8 +248,8 @@
              "period" (double period) "view" (mapv double view)
              "generator" "desargues.wallpaper.emit"))
 
-(defn- isf-input [{:keys [name default min max label]}]
-  (cond-> (array-map "NAME" name "TYPE" "float" "DEFAULT" default)
+(defn- isf-input [{:keys [name default min max label integer?]}]
+  (cond-> (array-map "NAME" name "TYPE" (if integer? "long" "float") "DEFAULT" default)
     min (assoc "MIN" min)
     max (assoc "MAX" max)
     true (assoc "LABEL" label)))
@@ -258,15 +288,16 @@
 
 (defn frag
   "Plain fragment shader of compiled layer `c` in dialect `version` (a key
-   of `versions`, default :es300): every input a float uniform, plus
-   uniform vec2 RENDERSIZE (pixels) and uniform float TIME (seconds),
-   gl_FragCoord as the pixel, out vec4 fragColor."
+   of `versions`, default :es300): inputs are float uniforms, or int for
+   :integer? true controls. RENDERSIZE is vec2 (pixels), TIME float (seconds),
+   gl_FragCoord is the pixel, and out vec4 fragColor the output."
   ([c] (frag c :es300))
   ([c version]
    (str (versions version)
         "// " (name (:id c)) ": generated by desargues.wallpaper.emit; see " (name (:id c)) ".json\n"
         "uniform vec2 RENDERSIZE;\nuniform float TIME;\n"
-        (apply str (for [{:keys [name]} (:inputs c)] (str "uniform float " name ";\n")))
+        (apply str (for [{:keys [name integer?]} (:inputs c)]
+                     (str "uniform " (if integer? "int" "float") " " name ";\n")))
         "out vec4 fragColor;\n\n"
         (when (seq (get-in c [:glsl :helpers])) (str (get-in c [:glsl :helpers]) "\n"))
         (get-in c [:glsl :function]) "\n"
@@ -274,8 +305,8 @@
 
 (defn manifest
   "The JSON manifest (as data) beside a plain .frag of compiled layer `c`:
-   its uniforms with roles, defaults and ranges, the clock and resolution
-   uniforms, and the blend hint."
+   its uniforms with GLSL types (float or int), roles, defaults and ranges,
+   the clock and resolution uniforms, and the blend hint."
   [c]
   (array-map "title" (or (:title c) (name (:id c)))
              "description" (description c)
@@ -283,8 +314,9 @@
              "dialects" ["300 es" "330 core"]
              "resolution" "RENDERSIZE"
              "time" "TIME"
-             "uniforms" (mapv (fn [{:keys [role] :as in}]
-                                (-> (isf-input in) (assoc "ROLE" (name role))
+             "uniforms" (mapv (fn [{:keys [role integer?] :as in}]
+                                (-> (cond-> (isf-input in) integer? (assoc "TYPE" "int"))
+                                    (assoc "ROLE" (name role))
                                     (update-keys str/lower-case)))
                               (:inputs c))
              "desargues" (meta-block c)))
